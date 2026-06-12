@@ -1,0 +1,33 @@
+package com.cybercat.pocketbooksender.model
+
+data class DeviceCatalog(
+    val books: List<CatalogGroup> = emptyList(),
+    val programming: List<CatalogGroup> = emptyList(),
+    val manga: List<MangaSeriesGroup> = emptyList(),
+    val scannedAtMillis: Long? = null,
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+) {
+    val isEmpty: Boolean
+        get() = books.isEmpty() && programming.isEmpty() && manga.isEmpty()
+}
+
+data class CatalogGroup(
+    val name: String,
+    val path: String,
+    val files: List<CatalogFile>,
+)
+
+data class MangaSeriesGroup(
+    val name: String,
+    val path: String,
+    val latestFile: CatalogFile?,
+    val files: List<CatalogFile>,
+)
+
+data class CatalogFile(
+    val name: String,
+    val path: String,
+    val size: Long,
+    val modifiedAtMillis: Long?,
+)
