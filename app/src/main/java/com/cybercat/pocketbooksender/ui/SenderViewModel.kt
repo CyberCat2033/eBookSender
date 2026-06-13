@@ -103,7 +103,7 @@ class SenderViewModel @Inject constructor(
                         connectedDevice = state.connectedDevice?.copy(
                             rootPath = settings.rootPath.ifBlank { "/mnt/ext1" },
                         ),
-                        queue = state.queue.map { replan(it, settings) },
+                        queue = state.queue.map { replan(it, settings) }.deduplicateQueue(),
                     )
                 }
             }
@@ -752,44 +752,87 @@ class SenderViewModel @Inject constructor(
     }
 
     fun connectTo(rawLink: String) {
-        FtpUrlParser.parse(rawLink)
-            .onSuccess { parsedDevice ->
-                val device = parsedDevice.copy(
-                    rootPath = _state.value.settings.rootPath.ifBlank { "/mnt/ext1" },
-                )
+        val parsedDevice = FtpUrlParser.parse(rawLink)
+            .getOrElse { error ->
                 _state.update {
                     it.copy(
-                        connectedDevice = device,
-                        ftpInput = device.ftpUrl,
-                        errorMessage = null,
+                        isConnecting = false,
+                        errorMessage = error.message ?: "Invalid FTP link",
                     )
                 }
-                refreshRemoteSuggestions(device)
-                refreshDeviceCatalog(device)
+                return
             }
-            .onFailure { error ->
-                _state.update { it.copy(errorMessage = error.message ?: "Invalid FTP link") }
-            }
+
+        val device = parsedDevice.copy(
+            rootPath = _state.value.settings.rootPath.ifBlank { "/mnt/ext1" },
+        )
+
+        _state.update {
+            it.copy(
+                isConnecting = true,
+                connectedDevice = null,
+                ftpInput = device.ftpUrl,
+                errorMessage = null,
+            )
+        }
+
+        viewModelScope.launch {
+            ftpGateway.checkConnection(device)
+                .onSuccess {
+                    _state.update {
+                        it.copy(
+                            isConnecting = false,
+                            connectedDevice = device,
+                            ftpInput = device.ftpUrl,
+                            errorMessage = null,
+                        )
+                    }
+                    refreshRemoteSuggestions(device)
+                    refreshDeviceCatalog(device)
+                }
+                .onFailure { error ->
+                    _state.update {
+                        it.copy(
+                            isConnecting = false,
+                            connectedDevice = null,
+                            errorMessage = error.toFtpConnectionMessage(device),
+                        )
+                    }
+                }
+        }
     }
 
     fun disconnect() {
-        _state.update { it.copy(connectedDevice = null) }
+        _state.update { it.copy(isConnecting = false, connectedDevice = null) }
     }
 
     fun addUris(uris: List<Uri>) {
         if (uris.isEmpty()) return
 
         val settings = _state.value.settings
-        val newItems = uris.map { uri ->
-            persistReadPermission(uri)
-            val displayName = resolveDisplayName(uri)
-                ?: uri.lastPathSegment
-                ?: "Book-${UUID.randomUUID()}"
-            createUploadItem(uri, displayName, settings)
+        val existing = _state.value.queue.queueIdentityKeys()
+        val newItems = uris
+            .distinctBy { uri -> uri.toString() }
+            .mapNotNull { uri ->
+                val uriString = uri.toString()
+                if (uriString in existing) {
+                    null
+                } else {
+                    persistReadPermission(uri)
+                    val displayName = resolveDisplayName(uri)
+                        ?: uri.lastPathSegment
+                        ?: "Book-${UUID.randomUUID()}"
+                    createUploadItem(uri, displayName, settings)
+                }
+            }
+
+        if (newItems.isEmpty()) {
+            _state.update { it.copy(errorMessage = "Selected files are already in queue") }
+            return
         }
 
         _state.update { current ->
-            current.copy(queue = current.queue + newItems, errorMessage = null)
+            current.copy(queue = (current.queue + newItems).deduplicateQueue(), errorMessage = null)
         }
 
         newItems.forEach { item ->
@@ -832,7 +875,7 @@ class SenderViewModel @Inject constructor(
                     replan(updated, state.settings)
                 }
             }
-            state.copy(queue = queue)
+            state.copy(queue = queue.deduplicateQueue())
         }
     }
 
@@ -847,7 +890,7 @@ class SenderViewModel @Inject constructor(
                 }
             }
 
-            state.copy(queue = queue)
+            state.copy(queue = queue.deduplicateQueue())
         }
     }
 
@@ -862,7 +905,7 @@ class SenderViewModel @Inject constructor(
                 }
             }
 
-            state.copy(queue = queue)
+            state.copy(queue = queue.deduplicateQueue())
         }
     }
 
@@ -879,7 +922,7 @@ class SenderViewModel @Inject constructor(
                 }
             }
 
-            state.copy(queue = queue)
+            state.copy(queue = queue.deduplicateQueue())
         }
     }
 
@@ -891,7 +934,7 @@ class SenderViewModel @Inject constructor(
                 connectedDevice = state.connectedDevice?.copy(
                     rootPath = settings.rootPath.ifBlank { "/mnt/ext1" },
                 ),
-                queue = state.queue.map { replan(it, settings) },
+                queue = state.queue.map { replan(it, settings) }.deduplicateQueue(),
             )
         }
         viewModelScope.launch {
@@ -932,7 +975,12 @@ class SenderViewModel @Inject constructor(
             return
         }
 
-        val uploadableItems = snapshot.queue.filter {
+        val normalizedQueue = snapshot.queue.deduplicateQueue()
+        if (normalizedQueue.size != snapshot.queue.size) {
+            _state.update { it.copy(queue = normalizedQueue) }
+        }
+
+        val uploadableItems = normalizedQueue.filter {
             it.status == UploadStatus.Pending ||
                 it.status == UploadStatus.Failed ||
                 it.status == UploadStatus.Skipped
@@ -963,7 +1011,7 @@ class SenderViewModel @Inject constructor(
                     } else {
                         item
                     }
-                },
+                }.deduplicateQueue(),
                 errorMessage = null,
             )
         }
@@ -996,7 +1044,7 @@ class SenderViewModel @Inject constructor(
                             } else {
                                 item
                             }
-                        },
+                        }.deduplicateQueue(),
                     )
                 }
             }
@@ -1009,7 +1057,7 @@ class SenderViewModel @Inject constructor(
                             } else {
                                 item
                             }
-                        },
+                        }.deduplicateQueue(),
                     )
                 }
             }
@@ -1022,7 +1070,7 @@ class SenderViewModel @Inject constructor(
                             } else {
                                 item
                             }
-                        },
+                        }.deduplicateQueue(),
                         errorMessage = event.message,
                     )
                 }
@@ -1151,7 +1199,9 @@ class SenderViewModel @Inject constructor(
         }
 
         _state.update { current ->
-            current.copy(queue = current.queue + newItems, errorMessage = null)
+            val existing = current.queue.queueIdentityKeys()
+            val uniqueItems = newItems.filterNot { item -> item.sourceUri in existing }
+            current.copy(queue = (current.queue + uniqueItems).deduplicateQueue(), errorMessage = null)
         }
 
         newItems.forEach { item ->
@@ -1245,16 +1295,45 @@ class SenderViewModel @Inject constructor(
                 }
             }
 
-            state.copy(queue = queue)
+            state.copy(queue = queue.deduplicateQueue())
         }
     }
 
     private fun replan(item: UploadItem, settings: AppSettings): UploadItem =
         item.copy(plannedPath = pathPlanner.plan(item, settings))
 
+    private fun List<UploadItem>.deduplicateQueue(): List<UploadItem> {
+        val seenIds = mutableSetOf<String>()
+        val seenSources = mutableSetOf<String>()
+        val seenPaths = mutableSetOf<String>()
+
+        return filter { item ->
+            val idIsUnique = item.id.isBlank() || seenIds.add(item.id)
+            val sourceIsUnique = item.sourceUri.isBlank() || seenSources.add(item.sourceUri)
+            val pathIsUnique = item.plannedPath.isBlank() || seenPaths.add(item.plannedPath)
+            idIsUnique && sourceIsUnique && pathIsUnique
+        }
+    }
+
+    private fun List<UploadItem>.queueIdentityKeys(): Set<String> =
+        flatMap { item ->
+            listOf(item.id, item.sourceUri, item.plannedPath)
+        }
+            .filter { key -> key.isNotBlank() }
+            .toSet()
+
+    private fun Throwable.toFtpConnectionMessage(device: PocketBookDevice): String {
+        val reason = message
+            ?.lineSequence()
+            ?.firstOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: "FTP is unavailable"
+        return "Cannot connect to ${device.host}:${device.port}: $reason"
+    }
+
     private fun updateItem(id: String, item: UploadItem) {
         _state.update { state ->
-            state.copy(queue = state.queue.map { if (it.id == id) item else it })
+            state.copy(queue = state.queue.map { if (it.id == id) item else it }.deduplicateQueue())
         }
     }
 

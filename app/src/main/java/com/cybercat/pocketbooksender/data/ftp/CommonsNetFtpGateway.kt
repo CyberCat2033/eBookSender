@@ -13,12 +13,16 @@ import org.apache.commons.net.ftp.FTPReply
 class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
     override suspend fun checkConnection(device: PocketBookDevice): Result<FtpSessionInfo> =
         withFtpClient(device) { client ->
-            Result.success(
+            runCatching {
+                client.listFiles()
+                check(FTPReply.isPositiveCompletion(client.replyCode)) {
+                    "Cannot read ${device.rootPath}: ${client.replyString}"
+                }
                 FtpSessionInfo(
                     rootPath = device.rootPath,
                     systemType = runCatching { client.systemType }.getOrNull(),
-                ),
-            )
+                )
+            }
         }
 
     override suspend fun uploadAtomically(

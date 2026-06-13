@@ -24,7 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -256,9 +256,13 @@ fun OpdsScreen(
                                 }
                             }
 
-                            items(catalog.entries, key = { it.id ?: it.title }) { entry ->
+                            val entryRows = catalog.entries.withStableLazyKeys()
+                            itemsIndexed(
+                                entryRows,
+                                key = { _, row -> row.key },
+                            ) { _, row ->
                                 OpdsEntryCard(
-                                    entry = entry,
+                                    entry = row.entry,
                                     enabled = !state.isLoading && !state.isDownloading,
                                     onOpenLink = onOpenLink,
                                     onDownload = onDownload,
@@ -273,6 +277,38 @@ fun OpdsScreen(
                 }
             }
         }
+    }
+}
+
+private data class OpdsEntryRow(
+    val key: String,
+    val entry: OpdsEntry,
+)
+
+private fun List<OpdsEntry>.withStableLazyKeys(): List<OpdsEntryRow> {
+    val seen = mutableMapOf<String, Int>()
+    return mapIndexed { index, entry ->
+        val acquisitionKey = entry.acquisitions.firstOrNull()?.href.orEmpty()
+        val navigationKey = entry.navigation.firstOrNull()?.href.orEmpty()
+        val baseKey = listOf(
+            entry.id.orEmpty(),
+            entry.title,
+            entry.authors.joinToString("|"),
+            acquisitionKey,
+            navigationKey,
+        )
+            .joinToString(":")
+            .ifBlank { "opds-entry" }
+        val duplicateIndex = seen.getOrDefault(baseKey, 0)
+        seen[baseKey] = duplicateIndex + 1
+        OpdsEntryRow(
+            key = if (duplicateIndex == 0) {
+                baseKey
+            } else {
+                "$baseKey:duplicate:$duplicateIndex:$index"
+            },
+            entry = entry,
+        )
     }
 }
 

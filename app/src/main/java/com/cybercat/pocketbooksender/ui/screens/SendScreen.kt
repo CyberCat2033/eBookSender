@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -87,6 +87,7 @@ fun SendScreen(
     onUploadAll: () -> Unit,
 ) {
     val activeQueue = state.queue.filterNot { it.status == UploadStatus.Uploaded }
+    val activeRows = activeQueue.withStableLazyKeys()
     val activeMangaQueue = activeQueue.filter { it.category == BookCategory.Manga }
     val uploadedQueue = state.queue.filter { it.status == UploadStatus.Uploaded }
     val hasUploadableFiles = state.queue.any {
@@ -151,8 +152,11 @@ fun SendScreen(
             }
 
             if (uploadedQueue.isNotEmpty()) {
-                item {
-                    UploadedSection(items = uploadedQueue)
+                item(key = "uploaded-section") {
+                    UploadedSection(
+                        items = uploadedQueue,
+                        modifier = Modifier.animateItem(),
+                    )
                 }
             }
 
@@ -175,9 +179,14 @@ fun SendScreen(
                     EmptyQueue()
                 }
             } else {
-                items(activeQueue, key = { it.id }) { item ->
+                itemsIndexed(
+                    activeRows,
+                    key = { _, row -> row.key },
+                ) { _, row ->
+                    val item = row.item
                     UploadItemRow(
                         item = item,
+                        modifier = Modifier.animateItem(),
                         programmingTags = state.programmingTags,
                         mangaSeriesSuggestions = state.mangaSeriesSuggestions,
                         onRemove = { onRemoveItem(item.id) },
@@ -223,7 +232,11 @@ private fun ConnectionPanel(
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = if (state.isConnected) "PocketBook connected" else "Connect PocketBook",
+                        text = when {
+                            state.isConnected -> "PocketBook connected"
+                            state.isConnecting -> "Checking FTP..."
+                            else -> "Connect PocketBook"
+                        },
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
@@ -258,6 +271,7 @@ private fun ConnectionPanel(
                         onClick = {
                             startQrScan(context, onQrScanned)
                         },
+                        enabled = !state.isConnecting,
                         modifier = Modifier.weight(1f),
                     ) {
                         Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
@@ -272,15 +286,38 @@ private fun ConnectionPanel(
                                 onConnect()
                             }
                         },
+                        enabled = !state.isConnecting,
                         modifier = Modifier.weight(1f),
                     ) {
                         Icon(Icons.Outlined.WifiTethering, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Connect")
+                        Text(if (state.isConnecting) "Checking" else "Connect")
                     }
                 }
             }
         }
+    }
+}
+
+private data class QueueRow(
+    val key: String,
+    val item: UploadItem,
+)
+
+private fun List<UploadItem>.withStableLazyKeys(): List<QueueRow> {
+    val seen = mutableMapOf<String, Int>()
+    return mapIndexed { index, item ->
+        val baseKey = "queue:${item.id}:${item.sourceUri}"
+        val duplicateIndex = seen.getOrDefault(baseKey, 0)
+        seen[baseKey] = duplicateIndex + 1
+        QueueRow(
+            key = if (duplicateIndex == 0) {
+                baseKey
+            } else {
+                "$baseKey:duplicate:$duplicateIndex:$index"
+            },
+            item = item,
+        )
     }
 }
 
@@ -451,6 +488,7 @@ private fun EmptyQueue() {
 @Composable
 private fun UploadItemRow(
     item: UploadItem,
+    modifier: Modifier = Modifier,
     programmingTags: List<String>,
     mangaSeriesSuggestions: List<String>,
     onRemove: () -> Unit,
@@ -460,7 +498,7 @@ private fun UploadItemRow(
 ) {
     var detailsExpanded by remember(item.id) { mutableStateOf(false) }
 
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -545,10 +583,13 @@ private fun UploadItemRow(
 }
 
 @Composable
-private fun UploadedSection(items: List<UploadItem>) {
+private fun UploadedSection(
+    items: List<UploadItem>,
+    modifier: Modifier = Modifier,
+) {
     var expanded by remember { mutableStateOf(false) }
 
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),

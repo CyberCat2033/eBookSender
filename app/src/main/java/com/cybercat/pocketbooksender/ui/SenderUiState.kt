@@ -7,6 +7,7 @@ import com.cybercat.pocketbooksender.model.UploadItem
 
 data class SenderUiState(
     val ftpInput: String = "",
+    val isConnecting: Boolean = false,
     val connectedDevice: PocketBookDevice? = null,
     val queue: List<UploadItem> = emptyList(),
     val settings: AppSettings = AppSettings(),

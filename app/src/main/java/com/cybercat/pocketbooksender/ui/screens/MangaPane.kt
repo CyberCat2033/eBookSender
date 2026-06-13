@@ -7,6 +7,9 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.Image as ComposeImage
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Checklist
@@ -51,9 +55,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -65,6 +71,11 @@ import com.cybercat.pocketbooksender.ui.MangaUiState
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
@@ -84,8 +95,135 @@ fun MangaPane(
     onClearChapterSelection: () -> Unit,
     onDownloadSelected: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    val selectedChapterIdsState = rememberUpdatedState(state.selectedChapterIds)
+    val onToggleChapterState = rememberUpdatedState(onToggleChapter)
+    val chapterTargets = remember(state.chapters) {
+        state.chapters.mapIndexed { index, chapter ->
+            chapterItemKey(chapter) to ChapterPointerTarget(
+                index = index,
+                chapterId = chapter.chapterId,
+            )
+        }.toMap()
+    }
+
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        state = listState,
+        modifier = modifier
+            .fillMaxSize()
+            .pointerInput(state.chapters, state.isDownloading) {
+                if (state.isDownloading || state.chapters.isEmpty()) return@pointerInput
+
+                coroutineScope {
+                    var selectionActive = false
+                    var targetSelected = true
+                    var currentY = 0f
+                    var anchorIndex: Int? = null
+                    var baselineSelectedIds = emptySet<String>()
+                    var autoScrollJob: Job? = null
+                    val appliedSelectedById = mutableMapOf<String, Boolean>()
+
+                    fun chapterTargetAt(y: Float): ChapterPointerTarget? {
+                        val pointerY = y.toInt()
+                        return listState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { item ->
+                                pointerY >= item.offset && pointerY <= item.offset + item.size
+                            }
+                            ?.key
+                            ?.let { key -> chapterTargets[key] }
+                    }
+
+                    fun applySelectionAt(y: Float) {
+                        val target = chapterTargetAt(y) ?: return
+                        val anchor = anchorIndex ?: target.index
+                        val startIndex = anchor.coerceAtMost(target.index)
+                        val endIndex = anchor.coerceAtLeast(target.index)
+
+                        state.chapters.forEachIndexed { index, chapter ->
+                            val desiredSelected = if (index in startIndex..endIndex) {
+                                targetSelected
+                            } else {
+                                chapter.chapterId in baselineSelectedIds
+                            }
+                            val currentSelected = appliedSelectedById[chapter.chapterId]
+                                ?: (chapter.chapterId in baselineSelectedIds)
+                            if (currentSelected != desiredSelected) {
+                                appliedSelectedById[chapter.chapterId] = desiredSelected
+                                onToggleChapterState.value(chapter.chapterId, desiredSelected)
+                            }
+                        }
+                    }
+
+                    fun autoScrollDelta(): Float {
+                        val edgeSize = 84.dp.toPx()
+                        val viewportHeight = size.height.toFloat()
+                        if (viewportHeight <= 0f) return 0f
+
+                        return when {
+                            currentY < edgeSize -> {
+                                val strength = ((edgeSize - currentY) / edgeSize).coerceIn(0.2f, 1f)
+                                -30f * strength
+                            }
+                            currentY > viewportHeight - edgeSize -> {
+                                val strength = ((currentY - (viewportHeight - edgeSize)) / edgeSize)
+                                    .coerceIn(0.2f, 1f)
+                                30f * strength
+                            }
+                            else -> 0f
+                        }
+                    }
+
+                    fun startAutoScroll() {
+                        autoScrollJob?.cancel()
+                        autoScrollJob = launch {
+                            while (isActive) {
+                                val delta = autoScrollDelta()
+                                if (delta != 0f) {
+                                    listState.scrollBy(delta)
+                                    applySelectionAt(currentY)
+                                }
+                                delay(16L)
+                            }
+                        }
+                    }
+
+                    fun stopSelection() {
+                        selectionActive = false
+                        autoScrollJob?.cancel()
+                        autoScrollJob = null
+                        anchorIndex = null
+                        baselineSelectedIds = emptySet()
+                        appliedSelectedById.clear()
+                    }
+
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            currentY = offset.y
+                            val target = chapterTargetAt(currentY)
+                            if (target == null) {
+                                stopSelection()
+                            } else {
+                                selectionActive = true
+                                baselineSelectedIds = selectedChapterIdsState.value
+                                targetSelected = target.chapterId !in baselineSelectedIds
+                                anchorIndex = target.index
+                                appliedSelectedById.clear()
+                                applySelectionAt(currentY)
+                                startAutoScroll()
+                            }
+                        },
+                        onDrag = { change, _ ->
+                            currentY = change.position.y
+                            if (selectionActive) {
+                                change.consume()
+                                applySelectionAt(currentY)
+                            }
+                        },
+                        onDragEnd = { stopSelection() },
+                        onDragCancel = { stopSelection() },
+                    )
+                }
+            },
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
@@ -147,7 +285,7 @@ fun MangaPane(
                 )
             }
 
-            items(state.chapters, key = { chapter -> chapter.stableKey }) { chapter ->
+            items(state.chapters, key = { chapter -> chapterItemKey(chapter) }) { chapter ->
                 MangaChapterRow(
                     chapter = chapter,
                     selected = chapter.chapterId in state.selectedChapterIds,
@@ -365,9 +503,15 @@ private fun MangaSearchResultCard(
     enabled: Boolean,
     onOpenSeries: (String) -> Unit,
 ) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onOpenSeries(result.seriesId) },
+    ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             MangaCover(
@@ -516,9 +660,15 @@ private fun MangaChapterRow(
     enabled: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onToggle(!selected) },
+    ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Checkbox(
@@ -682,5 +832,13 @@ private suspend fun loadMangaBitmap(url: String): Bitmap? = withContext(Dispatch
         }
     }.getOrNull()
 }
+
+private data class ChapterPointerTarget(
+    val index: Int,
+    val chapterId: String,
+)
+
+private fun chapterItemKey(chapter: MangaChapter): String =
+    "chapter:${chapter.stableKey}"
 
 private const val HtmlExtractDelayMillis = 900L

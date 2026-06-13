@@ -2,7 +2,7 @@
 
 Android client for sending books to the PocketBook FTP app in this repository.
 
-Current status: usable Compose MVP with QR/manual connection input, file/share intake, default classification, path planning, metadata previews, PocketBook catalog browsing, configurable OPDS sources, OPDS download-to-queue, DataStore settings, Room schema, and FTP atomic upload gateway.
+Current status: usable Compose MVP with QR/manual connection input, real FTP availability checks, file/share intake, default classification, path planning, metadata previews, PocketBook catalog browsing, configurable OPDS sources, OPDS download-to-queue, native Com-X manga search/download, DataStore settings, Room schema, and FTP atomic upload gateway.
 
 ## Project Layout
 
@@ -24,12 +24,14 @@ Important packages:
 - `data/database` - Room schema for devices, OPDS sources, and upload queue.
 - `data/settings` - DataStore preferences.
 - `metadata` - metadata extraction contract and filename fallback.
-- `transfer` - foreground transfer service stub.
+- `data/manga` - source adapter contract, Com-X adapter, chapter history, and CBZ packing.
+- `transfer` - foreground transfer service for user-started FTP uploads.
 
 ## Current MVP Behavior
 
 - Scan QR with Google Code Scanner or paste an FTP link/IP manually.
 - Pressing `Connect` with an empty FTP field launches the QR scanner.
+- Pressing `Connect` with a non-empty FTP field parses the address, logs in anonymously, opens the configured root path, and runs an FTP `LIST` check before the device is considered connected.
 - Accept files from Android picker.
 - Accept shared files through `ACTION_SEND` / `ACTION_SEND_MULTIPLE`.
 - Classify files by extension:
@@ -52,7 +54,8 @@ Important packages:
 - Per-item category/tag/series editors are collapsed by default. Queue items show only a compact type summary until expanded.
 - When multiple manga files are in the active queue, show a batch editor that applies one Manga series to all active manga items at once.
 - Hide uploaded files from the active queue and show them in a collapsed `Uploaded` section.
-- Skip already uploaded items when the upload button is pressed again.
+- Deduplicate queued files by identity/path and skip already uploaded items when the upload button is pressed again.
+- Queue cards animate when uploaded items leave the active list.
 - Upload execution runs through `TransferForegroundService`, so a user-started transfer continues when the app is backgrounded.
 - Transfer progress and completion are shown through Android notifications. Android 13+ notification permission is requested at app start.
 - Read PocketBook storage into the `Catalog` tab without downloading book contents:
@@ -69,8 +72,15 @@ Important packages:
   - search the current catalog through OPDS/OpenSearch when the catalog exposes `rel=search`;
   - show catalog covers when image links are available;
   - download a selected acquisition format into app cache;
-  - add the downloaded file to the same upload queue as local files.
-- The `Web` tab also contains native Com-X manga search/download. The embedded browser is only for login/session cookies.
+  - add the downloaded file to the same upload queue as local files;
+  - tolerate duplicate OPDS entry ids from catalogs such as Flibusta by generating unique list keys locally.
+- The `Web` tab also contains native Com-X manga search/download:
+  - the embedded browser is only for login/session cookies;
+  - search results and chapter rows are clickable across the full card/row, not only on the trailing button/checkbox;
+  - chapter rows support long-press drag selection with edge autoscroll;
+  - dragging back shrinks the live selection range and restores chapters outside the range to their pre-gesture state;
+  - selected chapters are downloaded and packed into per-chapter CBZ files;
+  - downloaded chapter history is stored in Room and used to mark already handled chapters.
 - Current debug/test default OPDS source is seeded as `https://flub.flibusta.is/opds`.
 
 CBR handling:
@@ -79,6 +89,7 @@ CBR handling:
 - CBR previews use `junrar`.
 - Manga archive format is detected by file signature, not only extension. A `.cbr` file that is actually ZIP is treated like CBZ.
 - Current RAR support is limited to RAR4 and lower. RAR5 archives should be uploaded as-is unless another extraction backend is added later.
+- CBR-to-CBZ conversion is intentionally not exposed anymore; conversion was removed as unnecessary for the current PocketBook flow.
 - Replace spaces in standard book filenames with underscores.
 - Upload over FTP using temp file + rename:
   - `.Title.epub.uploading`
@@ -132,7 +143,7 @@ Current verified build:
 
 ```text
 APK: app/build/outputs/apk/debug/app-debug.apk
-Size: ~41 MB
+Size: ~43 MB
 Install: adb install -r ... -> Success
 ```
 
@@ -141,8 +152,8 @@ Install: adb install -r ... -> Success
 - Persist the real upload queue through Room.
 - Reintroduce Coil/OkHttp only if they add enough value. OPDS currently uses `HttpURLConnection`; cover previews also use a small local `HttpURLConnection` loader.
 - Harden OPDS browsing/search against more real-world catalogs and add detail screens.
-- Add legal source-adapter support for non-OPDS providers if needed.
-- Implement the Manga source adapter layer for online chapter sources. The contract exists under `data/manga` and supports authenticated sources; real website adapters still need implementation.
+- Harden the Com-X adapter against markup changes, expired sessions, archive-download fallback failures, and large chapter batches.
+- Add more manga source adapters behind the existing `MangaSourceAdapter` contract if needed.
 - Add conflict UI for replace/rename/skip.
 
 Manga adapter design notes are tracked in `../MANGA_SOURCE_ADAPTER.md`.
