@@ -128,41 +128,96 @@ class LocalMetadataExtractor @Inject constructor(
     }
 
     private fun extractEpub(uri: Uri, fallbackTitle: String): BookMetadata {
-        val entries = mutableMapOf<String, ByteArray>()
-        open(uri).use { input ->
+        val opfMetadata = open(uri).use { input ->
             ZipInputStream(input).use { zip ->
+                var opfEntryName: String? = null
+                var opfBytes: ByteArray? = null
                 while (true) {
                     val entry = zip.nextEntry ?: break
                     if (entry.isDirectory) continue
+                    if (entry.name.lowercase().endsWith(".opf")) {
+                        opfEntryName = entry.name
+                        opfBytes = zip.readCurrentEntry(MAX_TEXT_BYTES)
+                        break
+                    }
+                    zip.closeEntry()
+                }
+                if (opfBytes != null && opfEntryName != null) {
+                    val parsed = parseOpf(opfBytes, fallbackTitle)
+                    Pair(opfEntryName, parsed)
+                } else null
+            }
+        } ?: return BookMetadata(title = fallbackTitle)
 
-                    val name = entry.name
-                    val lower = name.lowercase()
-                    if (lower.endsWith(".opf") || lower.isImageName()) {
-                        entries[name] = zip.readCurrentEntry(
-                            if (lower.endsWith(".opf")) MAX_TEXT_BYTES else MAX_IMAGE_BYTES,
-                        )
+        val (opfEntryName, parsed) = opfMetadata
+        val opfDir = opfEntryName.substringBeforeLast('/', missingDelimiterValue = "")
+        val coverPath = parsed.coverHref?.let { resolveZipPath(opfDir, it) }
+
+        var coverBytes: ByteArray? = null
+        if (coverPath != null) {
+            open(uri).use { input ->
+                ZipInputStream(input).use { zip ->
+                    while (true) {
+                        val entry = zip.nextEntry ?: break
+                        if (entry.isDirectory) continue
+                        if (entry.name.equals(coverPath, ignoreCase = true)) {
+                            coverBytes = zip.readCurrentEntry(MAX_IMAGE_BYTES)
+                            break
+                        }
+                        zip.closeEntry()
                     }
                 }
             }
         }
 
-        val opfEntry = entries.keys.firstOrNull { it.lowercase().endsWith(".opf") }
-            ?: return BookMetadata(title = fallbackTitle)
-        val opf = entries.getValue(opfEntry)
-        val opfDir = opfEntry.substringBeforeLast('/', missingDelimiterValue = "")
-        val parsed = parseOpf(opf, fallbackTitle)
-        val coverPath = parsed.coverHref?.let { resolveZipPath(opfDir, it) }
-        val coverBytes = coverPath?.let { path ->
-            entries[path] ?: entries.entries.firstOrNull {
-                it.key.equals(path, ignoreCase = true)
-            }?.value
-        } ?: chooseBestFallbackImage(entries)
+        if (coverBytes == null) {
+            val fallbackImageName = open(uri).use { input ->
+                ZipInputStream(input).use { zip ->
+                    val imageNames = mutableListOf<String>()
+                    while (true) {
+                        val entry = zip.nextEntry ?: break
+                        if (!entry.isDirectory && entry.name.lowercase().isImageName()) {
+                            imageNames += entry.name
+                        }
+                        zip.closeEntry()
+                    }
+                    chooseBestFallbackImageName(imageNames)
+                }
+            }
+
+            if (fallbackImageName != null) {
+                open(uri).use { input ->
+                    ZipInputStream(input).use { zip ->
+                        while (true) {
+                            val entry = zip.nextEntry ?: break
+                            if (entry.name == fallbackImageName) {
+                                coverBytes = zip.readCurrentEntry(MAX_IMAGE_BYTES)
+                                break
+                            }
+                            zip.closeEntry()
+                        }
+                    }
+                }
+            }
+        }
 
         return BookMetadata(
             title = parsed.title,
             authors = parsed.authors,
             preview = coverBytes?.let(::decodeBitmap),
         )
+    }
+
+    private fun chooseBestFallbackImageName(names: List<String>): String? {
+        if (names.isEmpty()) return null
+        val candidates = names.filter { name ->
+            val lower = name.lowercase().substringAfterLast('/')
+            lower.contains("cover") || lower.contains("front") || lower.contains("folder") || lower.contains("title")
+        }
+        if (candidates.isNotEmpty()) {
+            return candidates.sortedWith(NaturalSort.by { it }).first()
+        }
+        return names.sortedWith(NaturalSort.by { it }).first()
     }
 
     private fun parseOpf(bytes: ByteArray, fallbackTitle: String): OpfMetadata {
@@ -230,13 +285,57 @@ class LocalMetadataExtractor @Inject constructor(
     private fun extractMangaArchive(uri: Uri, fallbackTitle: String): BookMetadata {
         val format = open(uri).use(ArchiveFormatDetector::detect)
         val preview = when (format) {
-            ArchiveFormat.Zip -> open(uri).use(::readFirstNaturalZipImage)
+            ArchiveFormat.Zip -> readFirstNaturalZipImage(uri)
             ArchiveFormat.Rar4 -> extractRarPreview(uri)
             ArchiveFormat.Rar5,
             ArchiveFormat.Unknown -> null
         }
 
         return BookMetadata(title = fallbackTitle, preview = preview)
+    }
+
+    private fun readFirstNaturalZipImage(uri: Uri): Bitmap? {
+        var bestEntryName: String? = null
+
+        open(uri).use { input ->
+            ZipInputStream(input).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    if (entry.isDirectory) continue
+
+                    val normalizedName = entry.name
+                        .replace('\\', '/')
+                        .substringAfterLast("/")
+                        .trim()
+
+                    if (normalizedName.lowercase().isImageName()) {
+                        val currentBest = bestEntryName?.replace('\\', '/')?.substringAfterLast("/")?.trim()
+                        if (currentBest == null || NaturalSort.compare(normalizedName, currentBest) < 0) {
+                            bestEntryName = entry.name
+                        }
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
+
+        if (bestEntryName == null) return null
+
+        var bytes: ByteArray? = null
+        open(uri).use { input ->
+            ZipInputStream(input).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    if (entry.name == bestEntryName) {
+                        bytes = zip.readCurrentEntry(MAX_IMAGE_BYTES)
+                        break
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
+
+        return bytes?.let(::decodeBitmap)
     }
 
     private fun extractRarPreview(uri: Uri): Bitmap? =
@@ -293,56 +392,6 @@ class LocalMetadataExtractor @Inject constructor(
 
     private fun ZipInputStream.readCurrentEntry(limit: Int): ByteArray =
         readBytesLimited(limit)
-
-    private fun readFirstNaturalZipImage(input: InputStream): Bitmap? {
-        var bestName: String? = null
-        var bestBytes: ByteArray? = null
-
-        ZipInputStream(input).use { zip ->
-            while (true) {
-                val entry = zip.nextEntry ?: break
-                val normalizedName = entry.name
-                    .replace('\\', '/')
-                    .substringAfterLast("/")
-                    .trim()
-
-                if (!entry.isDirectory && normalizedName.lowercase().isImageName()) {
-                    val currentBest = bestName
-                    if (currentBest == null || NaturalSort.compare(normalizedName, currentBest) < 0) {
-                        bestName = normalizedName
-                        bestBytes = zip.readCurrentEntry(MAX_IMAGE_BYTES)
-                    }
-                }
-
-                zip.closeEntry()
-            }
-        }
-
-        return bestBytes?.let(::decodeBitmap)
-    }
-
-    private fun chooseBestFallbackImage(entries: Map<String, ByteArray>): ByteArray? =
-        entries
-            .filterKeys { it.lowercase().isImageName() }
-            .maxByOrNull { (_, bytes) -> imageFallbackScore(bytes) }
-            ?.value
-
-    private fun imageFallbackScore(bytes: ByteArray): Long {
-        val options = BitmapFactory.Options().apply {
-            inJustDecodeBounds = true
-        }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-
-        val width = options.outWidth
-        val height = options.outHeight
-        if (width <= 0 || height <= 0) return 0
-
-        val area = width.toLong() * height.toLong()
-        val portraitBonus = if (height >= width) area / 3 else 0
-        val tinyPenalty = if (width < 180 || height < 180) area else 0
-
-        return area + portraitBonus - tinyPenalty
-    }
 
     private fun Archive.fileHeaders(): List<FileHeader> {
         val headers = mutableListOf<FileHeader>()

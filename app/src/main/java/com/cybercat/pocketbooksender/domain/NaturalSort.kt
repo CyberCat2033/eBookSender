@@ -2,71 +2,74 @@ package com.cybercat.pocketbooksender.domain
 
 object NaturalSort {
     fun compare(left: String, right: String): Int {
-        val leftTokens = left.tokenizeNatural()
-        val rightTokens = right.tokenizeNatural()
-        val max = minOf(leftTokens.size, rightTokens.size)
+        var ia = 0
+        var ib = 0
+        val nza = left.length
+        val nzb = right.length
 
-        for (index in 0 until max) {
-            val leftToken = leftTokens[index]
-            val rightToken = rightTokens[index]
-            val result = leftToken.compareTo(rightToken)
-            if (result != 0) return result
+        while (ia < nza && ib < nzb) {
+            val ca = left[ia]
+            val cb = right[ib]
+            val isDigitA = ca.isDigit()
+            val isDigitB = cb.isDigit()
+
+            if (isDigitA && isDigitB) {
+                // Skip leading zeros
+                var startA = ia
+                while (startA < nza && left[startA] == '0') startA++
+                var endA = startA
+                while (endA < nza && left[endA].isDigit()) endA++
+
+                var startB = ib
+                while (startB < nzb && right[startB] == '0') startB++
+                var endB = startB
+                while (endB < nzb && right[endB].isDigit()) endB++
+
+                val lenA = endA - startA
+                val lenB = endB - startB
+
+                if (lenA != lenB) {
+                    return lenA.compareTo(lenB)
+                }
+
+                // If lengths are equal, compare digit by digit
+                var ptrA = startA
+                var ptrB = startB
+                var valueDiff = 0
+                while (ptrA < endA) {
+                    val da = left[ptrA]
+                    val db = right[ptrB]
+                    if (da != db && valueDiff == 0) {
+                        valueDiff = da.compareTo(db)
+                    }
+                    ptrA++
+                    ptrB++
+                }
+                if (valueDiff != 0) return valueDiff
+
+                // If values are equal, compare lengths including leading zeros (shorter first)
+                val totalLenA = endA - ia
+                val totalLenB = endB - ib
+                if (totalLenA != totalLenB) {
+                    return totalLenA.compareTo(totalLenB)
+                }
+
+                ia = endA
+                ib = endB
+            } else if (isDigitA != isDigitB) {
+                return if (isDigitA) -1 else 1
+            } else {
+                val la = ca.lowercaseChar()
+                val lb = cb.lowercaseChar()
+                if (la != lb) return la.compareTo(lb)
+                ia++
+                ib++
+            }
         }
 
-        return leftTokens.size.compareTo(rightTokens.size)
+        return (nza - ia).compareTo(nzb - ib)
     }
 
     fun <T> by(selector: (T) -> String): Comparator<T> =
         Comparator { left, right -> compare(selector(left), selector(right)) }
-}
-
-private sealed class NaturalToken : Comparable<NaturalToken> {
-    data class Text(val value: String) : NaturalToken()
-    data class Number(val raw: String) : NaturalToken()
-
-    override fun compareTo(other: NaturalToken): Int {
-        return when {
-            this is Number && other is Number -> compareNumbers(raw, other.raw)
-            this is Text && other is Text -> value.compareTo(other.value, ignoreCase = true)
-            this is Number -> -1
-            else -> 1
-        }
-    }
-
-    private fun compareNumbers(left: String, right: String): Int {
-        val normalizedLeft = left.trimStart('0').ifBlank { "0" }
-        val normalizedRight = right.trimStart('0').ifBlank { "0" }
-        val lengthCompare = normalizedLeft.length.compareTo(normalizedRight.length)
-        if (lengthCompare != 0) return lengthCompare
-
-        val valueCompare = normalizedLeft.compareTo(normalizedRight)
-        if (valueCompare != 0) return valueCompare
-
-        return left.length.compareTo(right.length)
-    }
-}
-
-private fun String.tokenizeNatural(): List<NaturalToken> {
-    if (isEmpty()) return emptyList()
-
-    val tokens = mutableListOf<NaturalToken>()
-    var index = 0
-
-    while (index < length) {
-        val start = index
-        val isDigitRun = this[index].isDigit()
-
-        while (index < length && this[index].isDigit() == isDigitRun) {
-            index++
-        }
-
-        val part = substring(start, index)
-        tokens += if (isDigitRun) {
-            NaturalToken.Number(part)
-        } else {
-            NaturalToken.Text(part)
-        }
-    }
-
-    return tokens
 }
