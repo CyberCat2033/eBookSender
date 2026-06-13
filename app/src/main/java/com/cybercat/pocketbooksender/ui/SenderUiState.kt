@@ -9,6 +9,7 @@ data class SenderUiState(
     val ftpInput: String = "",
     val isConnecting: Boolean = false,
     val connectedDevice: PocketBookDevice? = null,
+    val isTransferActive: Boolean = false,
     val queue: List<UploadItem> = emptyList(),
     val settings: AppSettings = AppSettings(),
     val deviceCatalog: DeviceCatalog = DeviceCatalog(),

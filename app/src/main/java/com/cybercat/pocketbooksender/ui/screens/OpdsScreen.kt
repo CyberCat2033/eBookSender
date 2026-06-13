@@ -30,12 +30,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +63,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -70,12 +75,19 @@ import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
+import com.cybercat.pocketbooksender.data.opds.downloadFormatLabel
+import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
+import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
+import com.cybercat.pocketbooksender.ui.BitmapCache
 import com.cybercat.pocketbooksender.ui.MangaUiState
 import com.cybercat.pocketbooksender.ui.OpdsUiState
 import com.cybercat.pocketbooksender.ui.WebContentMode
+import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,6 +102,7 @@ fun OpdsScreen(
     onOpenSource: (String) -> Unit,
     onOpenLink: (OpdsLink) -> Unit,
     onBack: () -> Unit,
+    onMangaBack: () -> Unit,
     onSearch: () -> Unit,
     onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
     onMangaSearchChanged: (String) -> Unit,
@@ -99,6 +112,9 @@ fun OpdsScreen(
     onMangaWebPageLoaded: (String, String) -> Unit,
     onOpenMangaSeries: (String) -> Unit,
     onToggleMangaChapter: (String, Boolean) -> Unit,
+    onSetMangaSeriesFavorite: (Boolean) -> Unit,
+    onSetMangaSeriesSubscribed: (Boolean) -> Unit,
+    onCheckMangaSubscriptions: () -> Unit,
     onSelectNewMangaChapters: () -> Unit,
     onSelectAllMangaChapters: () -> Unit,
     onClearMangaChapterSelection: () -> Unit,
@@ -107,7 +123,22 @@ fun OpdsScreen(
     var showAddSourceDialog by remember { mutableStateOf(false) }
     var newSourceUrl by remember { mutableStateOf("") }
     var newSourceTitle by remember { mutableStateOf("") }
+    val mangaListState = rememberLazyListState()
     val webMode = state.webMode
+    val selectedMangaChapterCount = mangaState.selectedChapterIds.size
+    val mangaSelectionActive = webMode == WebContentMode.Manga && selectedMangaChapterCount > 0
+
+    BackHandler(enabled = webMode == WebContentMode.Opds && state.canGoBack) {
+        onBack()
+    }
+
+    BackHandler(enabled = webMode == WebContentMode.Manga && mangaState.selectedSeries != null) {
+        onMangaBack()
+    }
+
+    BackHandler(enabled = mangaSelectionActive && !mangaState.isDownloading) {
+        onClearMangaChapterSelection()
+    }
 
     if (showAddSourceDialog) {
         AddSourceDialog(
@@ -126,7 +157,15 @@ fun OpdsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Web") },
+                title = {
+                    Text(
+                        text = if (mangaSelectionActive) {
+                            "$selectedMangaChapterCount selected"
+                        } else {
+                            "Web"
+                        },
+                    )
+                },
                 windowInsets = WindowInsets(0.dp),
                 navigationIcon = {
                     if (webMode == WebContentMode.Opds && state.canGoBack) {
@@ -139,10 +178,29 @@ fun OpdsScreen(
                                 contentDescription = "Back",
                             )
                         }
+                    } else if (webMode == WebContentMode.Manga && mangaState.selectedSeries != null) {
+                        IconButton(
+                            onClick = onMangaBack,
+                            enabled = !mangaState.isLoading && !mangaState.isDownloading,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = "Back",
+                            )
+                        }
                     }
                 },
                 actions = {
-                    if (webMode == WebContentMode.Opds) {
+                    if (mangaSelectionActive) {
+                        MangaSelectionActions(
+                            enabled = !mangaState.isDownloading,
+                            hasNewChapters = mangaState.hasNewChapters,
+                            hasChapters = mangaState.chapters.isNotEmpty(),
+                            onSelectNew = onSelectNewMangaChapters,
+                            onSelectAll = onSelectAllMangaChapters,
+                            onClear = onClearMangaChapterSelection,
+                        )
+                    } else if (webMode == WebContentMode.Opds) {
                         IconButton(
                             onClick = {
                                 newSourceUrl = ""
@@ -155,6 +213,19 @@ fun OpdsScreen(
                     }
                 },
             )
+        },
+        floatingActionButton = {
+            AnimatedVisibility(
+                visible = webMode == WebContentMode.Manga && selectedMangaChapterCount > 0,
+                enter = fadeIn() + slideInVertically { height -> height },
+                exit = fadeOut() + slideOutVertically { height -> height },
+            ) {
+                androidx.compose.material3.ExtendedFloatingActionButton(
+                    onClick = onDownloadSelectedMangaChapters,
+                    icon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                    text = { Text("Download ($selectedMangaChapterCount)") },
+                )
+            }
         },
     ) { innerPadding ->
         BoxWithConstraints(
@@ -179,6 +250,7 @@ fun OpdsScreen(
                 if (webMode == WebContentMode.Manga) {
                     MangaPane(
                         state = mangaState,
+                        listState = mangaListState,
                         modifier = Modifier.weight(1f),
                         onSearchChanged = onMangaSearchChanged,
                         onSearch = onMangaSearch,
@@ -187,12 +259,16 @@ fun OpdsScreen(
                         onWebPageLoaded = onMangaWebPageLoaded,
                         onOpenSeries = onOpenMangaSeries,
                         onToggleChapter = onToggleMangaChapter,
-                        onSelectNewChapters = onSelectNewMangaChapters,
-                        onSelectAllChapters = onSelectAllMangaChapters,
-                        onClearChapterSelection = onClearMangaChapterSelection,
+                        onSetSeriesFavorite = onSetMangaSeriesFavorite,
+                        onSetSeriesSubscribed = onSetMangaSeriesSubscribed,
+                        onCheckSubscriptions = onCheckMangaSubscriptions,
                         onDownloadSelected = onDownloadSelectedMangaChapters,
                     )
                 } else {
+                    val catalog = state.catalog
+                    val entryRows = remember(catalog) { catalog?.entries?.withStableLazyKeys() ?: emptyList() }
+                    val feedLinks = remember(catalog) { catalog?.links?.filter(OpdsLink::isBrowsableFeedLink) ?: emptyList() }
+                    val hasSearch = remember(catalog) { catalog?.hasSearch() ?: false }
                     LazyColumn(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -224,19 +300,17 @@ fun OpdsScreen(
                             }
                         }
 
-                        val catalog = state.catalog
                         if (catalog != null) {
                             item {
                                 SearchPanel(
                                     query = state.searchInput,
-                                    isSearchAvailable = catalog.hasSearch(),
+                                    isSearchAvailable = hasSearch,
                                     enabled = !state.isLoading,
                                     onSearchChanged = onSearchChanged,
                                     onSearch = onSearch,
                                 )
                             }
 
-                            val feedLinks = catalog.links.filter(OpdsLink::isBrowsableFeedLink)
                             if (feedLinks.isNotEmpty()) {
                                 item {
                                     FeedLinksRow(
@@ -256,17 +330,29 @@ fun OpdsScreen(
                                 }
                             }
 
-                            val entryRows = catalog.entries.withStableLazyKeys()
                             itemsIndexed(
                                 entryRows,
                                 key = { _, row -> row.key },
+                                contentType = { _, _ -> "entry" },
                             ) { _, row ->
                                 OpdsEntryCard(
                                     entry = row.entry,
                                     enabled = !state.isLoading && !state.isDownloading,
                                     onOpenLink = onOpenLink,
                                     onDownload = onDownload,
+                                    modifier = Modifier.animateItem(),
                                 )
+                            }
+
+                            if (feedLinks.isNotEmpty()) {
+                                item {
+                                    FeedLinksRow(
+                                        links = feedLinks,
+                                        enabled = !state.isLoading,
+                                        onOpenLink = onOpenLink,
+                                        modifier = Modifier.padding(top = 10.dp),
+                                    )
+                                }
                             }
                         }
 
@@ -284,6 +370,35 @@ private data class OpdsEntryRow(
     val key: String,
     val entry: OpdsEntry,
 )
+
+@Composable
+private fun MangaSelectionActions(
+    enabled: Boolean,
+    hasNewChapters: Boolean,
+    hasChapters: Boolean,
+    onSelectNew: () -> Unit,
+    onSelectAll: () -> Unit,
+    onClear: () -> Unit,
+) {
+    IconButton(
+        onClick = onSelectNew,
+        enabled = enabled && hasNewChapters,
+    ) {
+        Icon(Icons.Outlined.Checklist, contentDescription = "Select new chapters")
+    }
+    IconButton(
+        onClick = onSelectAll,
+        enabled = enabled && hasChapters,
+    ) {
+        Icon(Icons.Outlined.SelectAll, contentDescription = "Select all chapters")
+    }
+    IconButton(
+        onClick = onClear,
+        enabled = enabled,
+    ) {
+        Icon(Icons.Outlined.Close, contentDescription = "Clear chapter selection")
+    }
+}
 
 private fun List<OpdsEntry>.withStableLazyKeys(): List<OpdsEntryRow> {
     val seen = mutableMapOf<String, Int>()
@@ -488,6 +603,13 @@ private fun SearchPanel(
                 enabled = isSearchAvailable && enabled,
                 label = { Text("Search catalog") },
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (query.isNotEmpty() && enabled) {
+                        IconButton(onClick = { onSearchChanged("") }) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                        }
+                    }
+                }
             )
             Button(
                 onClick = onSearch,
@@ -515,9 +637,10 @@ private fun FeedLinksRow(
     links: List<OpdsLink>,
     enabled: Boolean,
     onOpenLink: (OpdsLink) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         links.forEach { link ->
@@ -539,10 +662,11 @@ private fun OpdsEntryCard(
     enabled: Boolean,
     onOpenLink: (OpdsLink) -> Unit,
     onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val isNavigation = entry.acquisitions.isEmpty() && entry.navigation.isNotEmpty()
+    val isNavigation = remember(entry) { entry.acquisitions.isEmpty() && entry.navigation.isNotEmpty() }
 
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -573,9 +697,12 @@ private fun OpdsEntryCard(
                 }
             }
 
-            entry.summary?.takeIf { it.isNotBlank() }?.let { summary ->
+            val cleanedSummary = remember(entry.summary) {
+                entry.summary?.takeIf { it.isNotBlank() }?.cleanSummary()
+            }
+            if (cleanedSummary != null) {
                 Text(
-                    text = summary.cleanSummary(),
+                    text = cleanedSummary,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 4,
@@ -601,19 +728,34 @@ private fun OpdsEntryCard(
                 }
             }
 
-            if (entry.acquisitions.isNotEmpty()) {
+            val supportedAcquisitions = remember(entry) {
+                entry.acquisitions
+                    .mapNotNull { acquisition ->
+                        acquisition.supportedDownloadFormat()?.let { format -> acquisition to format.label }
+                    }
+                    .distinctBy { (_, label) -> label }
+            }
+            val visibleAcquisitions = remember(entry, supportedAcquisitions) {
+                supportedAcquisitions.ifEmpty {
+                    entry.acquisitions
+                        .map { acquisition -> acquisition to acquisition.downloadFormatLabel() }
+                        .distinctBy { (_, label) -> label }
+                }
+            }
+
+            if (visibleAcquisitions.isNotEmpty()) {
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    entry.acquisitions.forEach { acquisition ->
+                    visibleAcquisitions.forEach { (acquisition, label) ->
                         Button(
                             onClick = { onDownload(entry, acquisition) },
                             enabled = enabled,
                         ) {
                             Icon(Icons.Outlined.Download, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text(acquisition.displayFormat())
+                            Text(label)
                         }
                     }
                 }
@@ -628,10 +770,21 @@ private fun EntryArtwork(
     isNavigation: Boolean,
     title: String,
 ) {
-    var bitmap by remember(coverUrl) { mutableStateOf<Bitmap?>(null) }
+    val context = LocalContext.current
+    var bitmap by remember(coverUrl) { mutableStateOf<Bitmap?>(coverUrl?.let { BitmapCache.getFromMemory(it) }) }
 
     LaunchedEffect(coverUrl) {
-        bitmap = coverUrl?.let { loadRemoteBitmap(it) }
+        if (coverUrl != null && bitmap == null) {
+            delay(CoverLoadDelayMillis)
+            if (bitmap == null) {
+                bitmap = loadCachedRemoteBitmap(
+                    context = context,
+                    url = coverUrl,
+                    reqWidth = CoverRequestWidth,
+                    reqHeight = CoverRequestHeight,
+                )
+            }
+        }
     }
 
     Surface(
@@ -730,23 +883,6 @@ private fun StatusMessage(
     }
 }
 
-private suspend fun loadRemoteBitmap(url: String): Bitmap? = withContext(Dispatchers.IO) {
-    runCatching {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 10_000
-            readTimeout = 20_000
-            setRequestProperty("Accept", "image/*")
-            setRequestProperty("User-Agent", "PocketBookSender/0.1")
-        }
-        try {
-            if (connection.responseCode !in 200..299) return@runCatching null
-            connection.inputStream.use(BitmapFactory::decodeStream)
-        } finally {
-            connection.disconnect()
-        }
-    }.getOrNull()
-}
-
 private fun OpdsLink.displayTitle(): String =
     title?.takeIf { it.isNotBlank() }
         ?: rel?.substringAfterLast('/')?.replaceFirstChar { it.uppercase() }
@@ -762,30 +898,18 @@ private fun OpdsLink.isBrowsableFeedLink(): Boolean {
 private fun OpdsCatalog.hasSearch(): Boolean =
     links.any { link -> link.rel.orEmpty().equals("search", ignoreCase = true) }
 
-private fun OpdsAcquisition.displayFormat(): String {
-    val explicitTitle = title?.takeIf { it.isNotBlank() }
-    if (explicitTitle != null && explicitTitle.length <= 18) return explicitTitle
-
-    val mime = type.orEmpty().lowercase()
-    return when {
-        mime.contains("epub") -> "EPUB"
-        mime.contains("fb2") -> "FB2"
-        mime.contains("mobipocket") || mime.contains("mobi") -> "MOBI"
-        mime.contains("pdf") -> "PDF"
-        mime.contains("djvu") -> "DJVU"
-        mime.contains("comicbook+zip") -> "CBZ"
-        mime.contains("comicbook-rar") || mime.contains("rar") -> "CBR"
-        mime.contains("zip") -> "ZIP"
-        explicitTitle != null -> explicitTitle
-        else -> "Download"
-    }
-}
+private val htmlTagRegex = Regex("<[^>]+>")
+private val whitespaceRegex = Regex("\\s+")
 
 private fun String.cleanSummary(): String =
-    replace(Regex("<[^>]+>"), " ")
+    replace(htmlTagRegex, " ")
         .replace("&nbsp;", " ")
         .replace("&amp;", "&")
         .replace("&quot;", "\"")
         .replace("&#39;", "'")
-        .replace(Regex("\\s+"), " ")
+        .replace(whitespaceRegex, " ")
         .trim()
+
+private const val CoverLoadDelayMillis = 120L
+private const val CoverRequestWidth = 160
+private const val CoverRequestHeight = 220

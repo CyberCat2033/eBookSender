@@ -7,29 +7,29 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.core.content.ContextCompat
-import com.cybercat.pocketbooksender.data.ftp.FtpEntry
+import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.manga.MangaChapter
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadedChapter
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadProgress
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
+import com.cybercat.pocketbooksender.data.manga.MangaAuthState
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesDetails
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
+import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsRepository
+import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.domain.FileClassifier
 import com.cybercat.pocketbooksender.domain.FtpUrlParser
-import com.cybercat.pocketbooksender.domain.NaturalSort
 import com.cybercat.pocketbooksender.domain.PathPlanner
 import com.cybercat.pocketbooksender.domain.bookExtension
 import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
-import com.cybercat.pocketbooksender.domain.contentExtension
 import com.cybercat.pocketbooksender.metadata.MetadataExtractor
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.BookCategory
-import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
@@ -62,6 +62,7 @@ class SenderViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val opdsRepository: OpdsRepository,
     private val mangaRepository: MangaRepository,
+    private val deviceCatalogRepository: DeviceCatalogRepository,
 ) : ViewModel() {
     private val classifier = FileClassifier()
     private val pathPlanner = PathPlanner()
@@ -78,9 +79,11 @@ class SenderViewModel @Inject constructor(
                 ),
             )
         }
+        refreshMangaAuthState()
         viewModelScope.launch {
             opdsRepository.seedDefaultsIfNeeded()
         }
+        var firstLoadTriggered = false
         viewModelScope.launch {
             opdsRepository.sources.collect { sources ->
                 _state.update { state ->
@@ -92,6 +95,12 @@ class SenderViewModel @Inject constructor(
                             },
                         ),
                     )
+                }
+                if (!firstLoadTriggered && sources.isNotEmpty()) {
+                    firstLoadTriggered = true
+                    sources.firstOrNull()?.url?.let { defaultUrl ->
+                        loadOpdsCatalog(defaultUrl, emptyList())
+                    }
                 }
             }
         }
@@ -117,6 +126,20 @@ class SenderViewModel @Inject constructor(
             mangaRepository.downloadedStableKeys.collect { keys ->
                 _state.update { state ->
                     state.copy(manga = state.manga.copy(downloadedStableKeys = keys))
+                }
+            }
+        }
+        viewModelScope.launch {
+            mangaRepository.downloadedChapters.collect { chapters ->
+                _state.update { state ->
+                    state.copy(manga = state.manga.copy(downloadedChapters = chapters))
+                }
+            }
+        }
+        viewModelScope.launch {
+            mangaRepository.savedSeries.collect { series ->
+                _state.update { state ->
+                    state.copy(manga = state.manga.copy(savedSeries = series))
                 }
             }
         }
@@ -288,20 +311,37 @@ class SenderViewModel @Inject constructor(
                         isLoading = true,
                         errorMessage = null,
                         statusMessage = null,
+                        catalog = null,
                     ),
                 )
             }
 
             runCatching {
-                opdsRepository.buildSearchUrl(currentUrl, searchLink, query)
-            }.onSuccess { searchUrl ->
-                loadOpdsCatalog(
-                    url = searchUrl,
-                    history = snapshot.history + OpdsHistoryEntry(
-                        title = catalog.title,
-                        url = currentUrl,
-                    ),
-                )
+                val searchUrls = opdsRepository.buildSearchUrls(currentUrl, searchLink, query)
+                val catalogs = searchUrls.mapNotNull { searchUrl ->
+                    runCatching { loadOpdsSearchCatalog(searchUrl, query) }.getOrNull()
+                }
+                if (catalogs.isEmpty()) {
+                    throw IllegalStateException("Cannot open OPDS search")
+                }
+                catalogs
+            }.onSuccess { catalogs ->
+                _state.update { state ->
+                    state.copy(
+                        opds = state.opds.copy(
+                            currentUrl = catalogs.first().first,
+                            urlInput = catalogs.first().first,
+                            catalog = mergeSearchCatalogs(query, catalogs.map { (_, catalog) -> catalog }),
+                            history = snapshot.history + OpdsHistoryEntry(
+                                title = catalog.title,
+                                url = currentUrl,
+                            ),
+                            isLoading = false,
+                            errorMessage = null,
+                            statusMessage = null,
+                        ),
+                    )
+                }
             }.onFailure { error ->
                 _state.update { state ->
                     state.copy(
@@ -470,6 +510,22 @@ class SenderViewModel @Inject constructor(
                 ),
             )
         }
+        refreshMangaAuthState()
+    }
+
+    private fun refreshMangaAuthState() {
+        viewModelScope.launch {
+            val sourceId = _state.value.manga.selectedSourceId
+            val authState = mangaRepository.authState(sourceId)
+            val isAuth = authState is MangaAuthState.Authenticated || authState is MangaAuthState.NotRequired
+            _state.update { state ->
+                state.copy(
+                    manga = state.manga.copy(
+                        isAuthorized = isAuth
+                    )
+                )
+            }
+        }
     }
 
     fun openMangaBrowser(url: String? = null) {
@@ -489,6 +545,22 @@ class SenderViewModel @Inject constructor(
         _state.update { state ->
             state.copy(manga = state.manga.copy(browserVisible = false))
         }
+        refreshMangaAuthState()
+    }
+
+    fun goBackManga() {
+        _state.update { state ->
+            state.copy(
+                manga = state.manga.copy(
+                    selectedSeries = null,
+                    chapters = emptyList(),
+                    selectedChapterIds = emptySet(),
+                    lastReadChapterText = null,
+                    errorMessage = null,
+                    statusMessage = null,
+                ),
+            )
+        }
     }
 
     fun syncMangaWebPage(url: String, html: String) {
@@ -500,6 +572,7 @@ class SenderViewModel @Inject constructor(
                 ),
             )
         }
+        refreshMangaAuthState()
     }
 
     fun searchManga() {
@@ -519,6 +592,10 @@ class SenderViewModel @Inject constructor(
                     browserVisible = false,
                     errorMessage = null,
                     statusMessage = null,
+                    searchResults = emptyList(),
+                    selectedSeries = null,
+                    chapters = emptyList(),
+                    selectedChapterIds = emptySet(),
                 ),
             )
         }
@@ -534,6 +611,7 @@ class SenderViewModel @Inject constructor(
                             selectedSeries = null,
                             chapters = emptyList(),
                             selectedChapterIds = emptySet(),
+                            lastReadChapterText = null,
                             isLoading = false,
                             browserVisible = false,
                             statusMessage = null,
@@ -568,6 +646,9 @@ class SenderViewModel @Inject constructor(
                     browserVisible = false,
                     errorMessage = null,
                     statusMessage = null,
+                    selectedSeries = null,
+                    chapters = emptyList(),
+                    selectedChapterIds = emptySet(),
                 ),
             )
         }
@@ -576,12 +657,14 @@ class SenderViewModel @Inject constructor(
             runCatching {
                 mangaRepository.openSeries(sourceId, seriesId)
             }.onSuccess { seriesPage ->
+                val lastRead = lastReadChapterText(seriesPage.details, _state.value.deviceCatalog)
                 _state.update { state ->
                     state.copy(
                         manga = state.manga.copy(
                             selectedSeries = seriesPage.details,
                             chapters = seriesPage.chapters,
                             selectedChapterIds = emptySet(),
+                            lastReadChapterText = lastRead,
                             isLoading = false,
                             browserVisible = false,
                             errorMessage = null,
@@ -638,6 +721,119 @@ class SenderViewModel @Inject constructor(
     fun clearMangaChapterSelection() {
         _state.update { state ->
             state.copy(manga = state.manga.copy(selectedChapterIds = emptySet()))
+        }
+    }
+
+    fun setSelectedMangaFavorite(favorite: Boolean) {
+        val series = _state.value.manga.selectedSeries ?: return
+        viewModelScope.launch {
+            runCatching {
+                mangaRepository.setFavorite(series, favorite)
+            }.onFailure { error ->
+                _state.update { state ->
+                    state.copy(
+                        manga = state.manga.copy(
+                            errorMessage = error.message ?: "Cannot update favorite manga",
+                            statusMessage = null,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun setSelectedMangaSubscribed(subscribed: Boolean) {
+        val series = _state.value.manga.selectedSeries ?: return
+        viewModelScope.launch {
+            runCatching {
+                mangaRepository.setSubscribed(series, subscribed)
+            }.onFailure { error ->
+                _state.update { state ->
+                    state.copy(
+                        manga = state.manga.copy(
+                            errorMessage = error.message ?: "Cannot update manga subscription",
+                            statusMessage = null,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    fun checkMangaSubscriptions() {
+        if (_state.value.manga.isCheckingSubscriptions) return
+
+        _state.update { state ->
+            state.copy(
+                manga = state.manga.copy(
+                    isCheckingSubscriptions = true,
+                    statusMessage = "Checking subscriptions",
+                    errorMessage = null,
+                ),
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                mangaRepository.checkSubscriptions()
+            }.onSuccess { results ->
+                val firstWithNewChapters = results.firstOrNull { result -> result.newChapters.isNotEmpty() }
+                if (firstWithNewChapters == null) {
+                    _state.update { state ->
+                        state.copy(
+                            manga = state.manga.copy(
+                                isCheckingSubscriptions = false,
+                                statusMessage = null,
+                                errorMessage = null,
+                            ),
+                        )
+                    }
+                    showMangaStatus("No new manga chapters")
+                    return@onSuccess
+                }
+
+                val page = firstWithNewChapters.page
+                val selectedIds = firstWithNewChapters.newChapters
+                    .mapTo(mutableSetOf()) { chapter -> chapter.chapterId }
+                val newCount = selectedIds.size
+                val subscribedWithNews = results.count { result -> result.newChapters.isNotEmpty() }
+                val lastRead = lastReadChapterText(page.details, _state.value.deviceCatalog)
+
+                _state.update { state ->
+                    state.copy(
+                        opds = state.opds.copy(webMode = WebContentMode.Manga),
+                        manga = state.manga.copy(
+                            selectedSeries = page.details,
+                            chapters = page.chapters,
+                            selectedChapterIds = selectedIds,
+                            isCheckingSubscriptions = false,
+                            isLoading = false,
+                            browserVisible = false,
+                            lastReadChapterText = lastRead,
+                            statusMessage = "$newCount new chapters selected",
+                            errorMessage = null,
+                        ),
+                    )
+                }
+
+                showMangaStatus(
+                    if (subscribedWithNews > 1) {
+                        "$newCount new chapters selected, $subscribedWithNews series have updates"
+                    } else {
+                        "$newCount new chapters selected"
+                    },
+                )
+            }.onFailure { error ->
+                _state.update { state ->
+                    state.copy(
+                        manga = state.manga.copy(
+                            isCheckingSubscriptions = false,
+                            statusMessage = null,
+                            errorMessage = error.message ?: "Cannot check manga subscriptions",
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -942,6 +1138,56 @@ class SenderViewModel @Inject constructor(
         }
     }
 
+    fun updateDefaultProgrammingTag(value: String) {
+        _state.update { state ->
+            val settings = state.settings.copy(defaultProgrammingTag = value.ifBlank { "Untagged" })
+            state.copy(settings = settings, queue = state.queue.map { replan(it, settings) }.deduplicateQueue())
+        }
+        viewModelScope.launch {
+            settingsRepository.setDefaultProgrammingTag(value)
+        }
+    }
+
+    fun updateDefaultMangaSeries(value: String) {
+        _state.update { state ->
+            val settings = state.settings.copy(defaultMangaSeries = value.ifBlank { "Unknown_Series" })
+            state.copy(settings = settings, queue = state.queue.map { replan(it, settings) }.deduplicateQueue())
+        }
+        viewModelScope.launch {
+            settingsRepository.setDefaultMangaSeries(value)
+        }
+    }
+
+    fun updateBookFileNameTemplate(value: String) {
+        _state.update { state ->
+            val settings = state.settings.copy(bookFileNameTemplate = value.ifBlank { "{title}" })
+            state.copy(settings = settings, queue = state.queue.map { replan(it, settings) }.deduplicateQueue())
+        }
+        viewModelScope.launch {
+            settingsRepository.setBookFileNameTemplate(value)
+        }
+    }
+
+    fun updateProgrammingFileNameTemplate(value: String) {
+        _state.update { state ->
+            val settings = state.settings.copy(programmingFileNameTemplate = value.ifBlank { "{title}" })
+            state.copy(settings = settings, queue = state.queue.map { replan(it, settings) }.deduplicateQueue())
+        }
+        viewModelScope.launch {
+            settingsRepository.setProgrammingFileNameTemplate(value)
+        }
+    }
+
+    fun updateMangaFileNameTemplate(value: String) {
+        _state.update { state ->
+            val settings = state.settings.copy(mangaFileNameTemplate = value.ifBlank { "{volume}" })
+            state.copy(settings = settings, queue = state.queue.map { replan(it, settings) }.deduplicateQueue())
+        }
+        viewModelScope.launch {
+            settingsRepository.setMangaFileNameTemplate(value)
+        }
+    }
+
     fun updateDynamicColor(enabled: Boolean) {
         _state.update { state ->
             state.copy(settings = state.settings.copy(useDynamicColor = enabled))
@@ -958,7 +1204,10 @@ class SenderViewModel @Inject constructor(
                     .sumOf { name -> clearDirectory(File(context.cacheDir, name)) }
             }
             _state.update { state ->
-                state.copy(settingsStatusMessage = "Cleared ${deletedBytes.formatBytes()} of downloaded cache")
+                state.copy(
+                    queue = emptyList(),
+                    settingsStatusMessage = "Cleared ${deletedBytes.formatBytes()} of downloaded cache and queue",
+                )
             }
         }
     }
@@ -1005,9 +1254,10 @@ class SenderViewModel @Inject constructor(
 
         _state.update { state ->
             state.copy(
+                isTransferActive = true,
                 queue = state.queue.map { item ->
                     if (uploadableItems.any { it.id == item.id }) {
-                        item.copy(status = UploadStatus.Uploading, progress = 0.02f)
+                        item.copy(status = UploadStatus.Pending, progress = 0.0f)
                     } else {
                         item
                     }
@@ -1040,7 +1290,20 @@ class SenderViewModel @Inject constructor(
                     state.copy(
                         queue = state.queue.map { item ->
                             if (item.id == event.itemId) {
-                                item.copy(status = UploadStatus.Uploading, progress = 0.05f)
+                                item.copy(status = UploadStatus.Uploading, progress = 0.0f)
+                            } else {
+                                item
+                            }
+                        }.deduplicateQueue(),
+                    )
+                }
+            }
+            is TransferEvent.ItemProgress -> {
+                _state.update { state ->
+                    state.copy(
+                        queue = state.queue.map { item ->
+                            if (item.id == event.itemId) {
+                                item.copy(status = UploadStatus.Uploading, progress = event.progress)
                             } else {
                                 item
                             }
@@ -1076,6 +1339,7 @@ class SenderViewModel @Inject constructor(
                 }
             }
             is TransferEvent.Completed -> {
+                _state.update { it.copy(isTransferActive = false) }
                 val device = _state.value.connectedDevice
                 if (device != null) {
                     refreshRemoteSuggestions(device)
@@ -1140,6 +1404,7 @@ class SenderViewModel @Inject constructor(
                         isLoading = true,
                         errorMessage = null,
                         statusMessage = null,
+                        catalog = null,
                     ),
                 )
             }
@@ -1176,6 +1441,86 @@ class SenderViewModel @Inject constructor(
 
     private fun addDownloadedOpdsFile(file: File) {
         addUris(listOf(Uri.fromFile(file)))
+    }
+
+    private suspend fun loadOpdsSearchCatalog(
+        searchUrl: String,
+        query: String,
+    ): Pair<String, OpdsCatalog> {
+        val catalog = opdsRepository.loadCatalog(searchUrl)
+        if (!searchUrl.contains("/opds/authorsindex/", ignoreCase = true)) {
+            return searchUrl to catalog
+        }
+
+        val authorLink = catalog.entries
+            .singleOrNull()
+            ?.navigation
+            ?.firstOrNull { link -> link.href.contains("/opds/authors/", ignoreCase = true) }
+
+        if (authorLink == null) {
+            return searchUrl to catalog.filterAuthorEntries(query)
+        }
+
+        val expandedCatalog = opdsRepository.loadCatalog(authorLink.href).filterAuthorEntries(query)
+        return authorLink.href to expandedCatalog
+    }
+
+    private fun mergeSearchCatalogs(
+        query: String,
+        catalogs: List<OpdsCatalog>,
+    ): OpdsCatalog {
+        if (catalogs.size == 1) return catalogs.first()
+
+        return OpdsCatalog(
+            title = "Search: $query",
+            entries = catalogs.flatMap { catalog -> catalog.entries },
+            links = catalogs
+                .flatMap { catalog -> catalog.links }
+                .distinctBy { link ->
+                    listOf(link.href, link.rel.orEmpty(), link.type.orEmpty()).joinToString("|")
+                },
+        )
+    }
+
+    private fun OpdsCatalog.filterAuthorEntries(query: String): OpdsCatalog {
+        val tokens = query.searchTokens()
+        if (tokens.size < 2) return this
+
+        val filteredEntries = entries.filter { entry ->
+            val title = entry.title.searchComparableText()
+            tokens.all { token -> token in title }
+        }
+
+        return if (filteredEntries.isEmpty()) {
+            this
+        } else {
+            copy(entries = filteredEntries)
+        }
+    }
+
+    private fun lastReadChapterText(
+        series: MangaSeriesDetails,
+        catalog: DeviceCatalog,
+    ): String? {
+        val seriesKey = series.title.catalogMatchKey()
+        if (seriesKey.isBlank()) return null
+
+        val group = catalog.manga.firstOrNull { mangaGroup ->
+            val groupKey = mangaGroup.name.catalogMatchKey()
+            groupKey.isNotBlank() && (groupKey == seriesKey || groupKey in seriesKey || seriesKey in groupKey)
+        } ?: return null
+
+        val file = group.lastReadFile ?: return null
+        val progress = when {
+            file.completed -> "completed"
+            file.readProgressPercent != null -> "${file.readProgressPercent}%"
+            else -> null
+        }
+        return if (progress == null) {
+            file.title ?: file.name
+        } else {
+            "${file.title ?: file.name} · $progress"
+        }
     }
 
     private fun addDownloadedMangaFiles(
@@ -1331,6 +1676,21 @@ class SenderViewModel @Inject constructor(
         return "Cannot connect to ${device.host}:${device.port}: $reason"
     }
 
+    private fun String.catalogMatchKey(): String =
+        lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), "")
+
+    private fun String.searchTokens(): List<String> =
+        trim()
+            .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .lowercase()
+            .split(' ')
+            .map { token -> token.trim('-', ' ') }
+            .filter { token -> token.length >= 2 }
+
+    private fun String.searchComparableText(): String =
+        searchTokens().joinToString(" ")
+
     private fun updateItem(id: String, item: UploadItem) {
         _state.update { state ->
             state.copy(queue = state.queue.map { if (it.id == id) item else it }.deduplicateQueue())
@@ -1357,28 +1717,23 @@ class SenderViewModel @Inject constructor(
                 it.copy(deviceCatalog = it.deviceCatalog.copy(isLoading = true, errorMessage = null))
             }
 
-            val result = runCatching {
-                val books = loadGroupedFiles(device, "Books")
-                val programming = loadGroupedFiles(device, "Programming")
-                val manga = loadMangaSeries(device, "Manga")
-
-                DeviceCatalog(
-                    books = books,
-                    programming = programming,
-                    manga = manga,
-                    scannedAtMillis = System.currentTimeMillis(),
-                    isLoading = false,
-                    errorMessage = null,
-                )
-            }
+            val result = runCatching { deviceCatalogRepository.load(device) }
 
             _state.update { state ->
                 result.fold(
                     onSuccess = { catalog ->
+                        val selectedSeries = state.manga.selectedSeries
                         state.copy(
                             deviceCatalog = catalog,
                             programmingTags = catalog.programming.map(CatalogGroup::name),
                             mangaSeriesSuggestions = catalog.manga.map(MangaSeriesGroup::name),
+                            manga = if (selectedSeries == null) {
+                                state.manga
+                            } else {
+                                state.manga.copy(
+                                    lastReadChapterText = lastReadChapterText(selectedSeries, catalog),
+                                )
+                            },
                         )
                     },
                     onFailure = { error ->
@@ -1394,92 +1749,12 @@ class SenderViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadGroupedFiles(
-        device: PocketBookDevice,
-        root: String,
-    ): List<CatalogGroup> {
-        return ftpGateway.listEntries(device, root)
-            .getOrDefault(emptyList())
-            .filter(FtpEntry::isDirectory)
-            .mapNotNull { group ->
-                val files = ftpGateway.listEntries(device, group.path)
-                    .getOrDefault(emptyList())
-                    .filterNot(FtpEntry::isDirectory)
-                    .filter { it.isKnownBookFile() }
-                    .map { it.toCatalogFile() }
-                    .sortedWith(NaturalSort.by { it.name })
-
-                if (files.isEmpty()) {
-                    null
-                } else {
-                    CatalogGroup(
-                        name = group.name,
-                        path = group.path,
-                        files = files,
-                    )
-                }
-            }
-            .sortedWith(NaturalSort.by { it.name })
-    }
-
-    private suspend fun loadMangaSeries(
-        device: PocketBookDevice,
-        root: String,
-    ): List<MangaSeriesGroup> {
-        return ftpGateway.listEntries(device, root)
-            .getOrDefault(emptyList())
-            .filter(FtpEntry::isDirectory)
-            .mapNotNull { series ->
-                val files = ftpGateway.listEntries(device, series.path)
-                    .getOrDefault(emptyList())
-                    .filterNot(FtpEntry::isDirectory)
-                    .filter { it.name.contentExtension() in MangaExtensions }
-                    .map { it.toCatalogFile() }
-                    .sortedWith(NaturalSort.by { it.name })
-
-                if (files.isEmpty()) {
-                    null
-                } else {
-                    MangaSeriesGroup(
-                        name = series.name,
-                        path = series.path,
-                        latestFile = files.maxWithOrNull(
-                            compareBy<CatalogFile, String>(
-                                NaturalSort.by { it },
-                                CatalogFile::name,
-                            ),
-                        ) ?: files.maxByOrNull { it.modifiedAtMillis ?: 0L },
-                        files = files,
-                    )
-                }
-            }
-            .sortedWith(NaturalSort.by { it.name })
-    }
-
-    private fun FtpEntry.toCatalogFile(): CatalogFile =
-        CatalogFile(
-            name = name,
-            path = path,
-            size = size,
-            modifiedAtMillis = modifiedAtMillis,
-        )
-
-    private fun FtpEntry.isKnownBookFile(): Boolean =
-        name.contentExtension() in BookExtensions
-
     private fun OpdsEntry.bestAcquisition(): OpdsAcquisition? =
-        acquisitions.minByOrNull { acquisition ->
-            val type = acquisition.type.orEmpty().lowercase()
-            when {
-                type.contains("comicbook+zip") || type.contains("comicbook-rar") -> 0
-                acquisition.href.contentExtension() in MangaExtensions -> 0
-                type.contains("fb2") || acquisition.href.bookExtension() == "fb2.zip" -> 1
-                type.contains("epub") || acquisition.href.contentExtension() == "epub" -> 2
-                type.contains("mobi") || acquisition.href.contentExtension() == "mobi" -> 3
-                type.contains("pdf") || acquisition.href.contentExtension() == "pdf" -> 4
-                else -> 10
-            }
-        }
+        acquisitions.mapNotNull { acquisition ->
+            acquisition.supportedDownloadFormat()?.let { format -> acquisition to format.priority }
+        }.minByOrNull { (_, priority) ->
+            priority
+        }?.first
 
     private companion object {
         val BookExtensions = setOf(
@@ -1494,7 +1769,6 @@ class SenderViewModel @Inject constructor(
             "cbz",
             "cbr",
         )
-        val MangaExtensions = setOf("cbz", "cbr")
         const val StatusMessageMillis = 5_000L
         const val OpdsStatusMessageMillis = 2_300L
     }

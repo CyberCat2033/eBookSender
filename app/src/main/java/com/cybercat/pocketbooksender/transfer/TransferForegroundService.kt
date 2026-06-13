@@ -63,66 +63,115 @@ class TransferForegroundService : Service() {
         var failed = 0
         val total = request.items.size
 
-        request.items.forEachIndexed { index, item ->
+        try {
+            request.items.forEachIndexed { index, item ->
+                TransferCoordinator.emit(
+                    TransferEvent.ItemStarted(
+                        itemId = item.id,
+                        completed = index,
+                        total = total,
+                    ),
+                )
+                notifyProgress("Uploading ${index + 1} of $total", index, total)
+
+                val result = uploadItem(request, item)
+                result
+                    .onSuccess {
+                        uploaded += 1
+                        TransferCoordinator.emit(
+                            TransferEvent.ItemUploaded(
+                                itemId = item.id,
+                                completed = uploaded + failed,
+                                total = total,
+                            ),
+                        )
+                    }
+                    .onFailure { error ->
+                        failed += 1
+                        TransferCoordinator.emit(
+                            TransferEvent.ItemFailed(
+                                itemId = item.id,
+                                message = error.message ?: "FTP upload failed",
+                            ),
+                        )
+                    }
+
+                notifyProgress("Uploaded $uploaded, failed $failed", uploaded + failed, total)
+            }
+        } finally {
             TransferCoordinator.emit(
-                TransferEvent.ItemStarted(
-                    itemId = item.id,
-                    completed = index,
-                    total = total,
+                TransferEvent.Completed(
+                    uploaded = uploaded,
+                    failed = failed,
                 ),
             )
-            notifyProgress("Uploading ${index + 1} of $total", index, total)
-
-            val result = uploadItem(request, item)
-            result
-                .onSuccess {
-                    uploaded += 1
-                    TransferCoordinator.emit(
-                        TransferEvent.ItemUploaded(
-                            itemId = item.id,
-                            completed = uploaded + failed,
-                            total = total,
-                        ),
-                    )
-                }
-                .onFailure { error ->
-                    failed += 1
-                    TransferCoordinator.emit(
-                        TransferEvent.ItemFailed(
-                            itemId = item.id,
-                            message = error.message ?: "FTP upload failed",
-                        ),
-                    )
-                }
-
-            notifyProgress("Uploaded $uploaded, failed $failed", uploaded + failed, total)
+            showFinishedNotification(uploaded, failed)
         }
-
-        TransferCoordinator.emit(
-            TransferEvent.Completed(
-                uploaded = uploaded,
-                failed = failed,
-            ),
-        )
-        showFinishedNotification(uploaded, failed)
     }
 
     private suspend fun uploadItem(
         request: TransferRequest,
         item: TransferUploadItem,
     ): Result<Unit> {
-        val input = contentResolver.openInputStream(Uri.parse(item.sourceUri))
+        val uri = Uri.parse(item.sourceUri)
+        val input = contentResolver.openInputStream(uri)
             ?: return Result.failure(IllegalStateException("Cannot open ${item.originalName}"))
+
+        val fileSize = getUriSize(uri)
 
         return try {
             ftpGateway.uploadAtomically(
                 device = request.device,
                 remoteRelativePath = item.plannedPath,
                 input = input,
+                onProgress = { bytesRead ->
+                    if (fileSize > 0) {
+                        val progress = (bytesRead.toFloat() / fileSize.toFloat()).coerceIn(0f, 0.99f)
+                        TransferCoordinator.emit(
+                            TransferEvent.ItemProgress(
+                                itemId = item.id,
+                                progress = progress,
+                            ),
+                        )
+                    }
+                },
             )
         } finally {
             input.close()
         }
+    }
+
+    private fun getUriSize(uri: Uri): Long {
+        if (uri.scheme == "file") {
+            return try {
+                java.io.File(uri.path.orEmpty()).length()
+            } catch (e: Exception) {
+                -1L
+            }
+        }
+        var size = -1L
+        try {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (index != -1) {
+                        size = cursor.getLong(index)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+        if (size <= 0L) {
+            try {
+                contentResolver.openAssetFileDescriptor(uri, "r")?.use {
+                    size = it.length
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+        return size
     }
 
     private fun notifyProgress(

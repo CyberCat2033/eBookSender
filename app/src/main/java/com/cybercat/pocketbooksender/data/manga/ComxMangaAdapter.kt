@@ -54,6 +54,12 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
             parseSeriesPage(seriesId, fetchText(seriesId, HomeUrl))?.chapters.orEmpty()
         }
 
+    override suspend fun getSeriesPage(seriesId: String): MangaSeriesPage =
+        withContext(Dispatchers.IO) {
+            parseSeriesPage(seriesId, fetchText(seriesId, HomeUrl))
+                ?: throw IOException("Cannot parse manga series")
+        }
+
     override suspend fun getChapterPages(chapterId: String): List<MangaPage> =
         withContext(Dispatchers.IO) {
             parseChapterPages(chapterId, fetchText(chapterId, HomeUrl))

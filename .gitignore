@@ -10,3 +10,4 @@ captures/
 *.iml
 *.apk
 *.aab
+*.keystore

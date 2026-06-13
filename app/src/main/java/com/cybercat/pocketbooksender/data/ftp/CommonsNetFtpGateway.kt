@@ -2,6 +2,7 @@ package com.cybercat.pocketbooksender.data.ftp
 
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import java.io.InputStream
+import java.io.OutputStream
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,6 +30,7 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
         device: PocketBookDevice,
         remoteRelativePath: String,
         input: InputStream,
+        onProgress: ((Long) -> Unit)?,
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
             val normalized = remoteRelativePath.trimStart('/')
@@ -41,7 +43,13 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
                 client.makeDirectories(directory)
             }
 
-            input.use { stream ->
+            val wrappedInput = if (onProgress != null) {
+                ProgressInputStream(input, onProgress)
+            } else {
+                input
+            }
+
+            wrappedInput.use { stream ->
                 check(client.storeFile(tempPath, stream)) {
                     "FTP upload failed: ${client.replyString}"
                 }
@@ -93,6 +101,21 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
                     )
                 }
                 .sortedWith(compareBy<FtpEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+        }
+    }
+
+    override suspend fun downloadFile(
+        device: PocketBookDevice,
+        remoteRelativePath: String,
+        output: OutputStream,
+    ): Result<Unit> = withFtpClient(device) { client ->
+        runCatching {
+            val normalized = remoteRelativePath.trimStart('/')
+            output.use { stream ->
+                check(client.retrieveFile(normalized, stream)) {
+                    "FTP download failed for $normalized: ${client.replyString}"
+                }
+            }
         }
     }
 
@@ -156,5 +179,58 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
     private companion object {
         const val CONNECT_TIMEOUT_MS = 5_000
         const val DATA_TIMEOUT_MS = 30_000
+    }
+}
+
+private class ProgressInputStream(
+    private val delegate: InputStream,
+    private val onProgress: (Long) -> Unit
+) : InputStream() {
+    private var bytesRead = 0L
+    private var lastUpdate = 0L
+
+    private fun reportProgress(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (force || now - lastUpdate >= 100) { // Throttle updates to every 100ms
+            onProgress(bytesRead)
+            lastUpdate = now
+        }
+    }
+
+    override fun read(): Int {
+        val b = delegate.read()
+        if (b != -1) {
+            bytesRead++
+            reportProgress()
+        }
+        return b
+    }
+
+    override fun read(b: ByteArray): Int {
+        return read(b, 0, b.size)
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        val result = delegate.read(b, off, len)
+        if (result != -1) {
+            bytesRead += result
+            reportProgress()
+        }
+        return result
+    }
+
+    override fun close() {
+        delegate.close()
+        reportProgress(force = true)
+    }
+
+    override fun available(): Int = delegate.available()
+    override fun skip(n: Long): Long {
+        val result = delegate.skip(n)
+        if (result > 0) {
+            bytesRead += result
+            reportProgress()
+        }
+        return result
     }
 }

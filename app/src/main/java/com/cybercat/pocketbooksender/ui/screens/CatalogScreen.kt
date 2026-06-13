@@ -1,5 +1,14 @@
 package com.cybercat.pocketbooksender.ui.screens
 
+import android.text.format.DateUtils
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,13 +16,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,9 +37,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.DeviceCatalog
@@ -81,7 +95,8 @@ fun CatalogScreen(
                 item {
                     CatalogMessage(
                         title = "Reading PocketBook catalog",
-                        text = "Scanning Books, Programming, and Manga folders by FTP.",
+                        text = "Reading PocketBook library database with FTP fallback.",
+                        isLoading = true,
                     )
                 }
             }
@@ -108,22 +123,34 @@ fun CatalogScreen(
             item {
                 SectionTitle("Books", catalog.books.sumOf { it.files.size })
             }
-            items(catalog.books, key = { "books:${it.path}" }) { group ->
-                CatalogGroupCard(group = group)
+            items(
+                items = catalog.books,
+                key = { "books:${it.path}" },
+                contentType = { "catalog_group" }
+            ) { group ->
+                CatalogGroupCard(group = group, modifier = Modifier.animateItem())
             }
 
             item {
                 SectionTitle("Programming", catalog.programming.sumOf { it.files.size })
             }
-            items(catalog.programming, key = { "programming:${it.path}" }) { group ->
-                CatalogGroupCard(group = group)
+            items(
+                items = catalog.programming,
+                key = { "programming:${it.path}" },
+                contentType = { "catalog_group" }
+            ) { group ->
+                CatalogGroupCard(group = group, modifier = Modifier.animateItem())
             }
 
             item {
                 SectionTitle("Manga", catalog.manga.size)
             }
-            items(catalog.manga, key = { "manga:${it.path}" }) { group ->
-                MangaSeriesCard(group = group)
+            items(
+                items = catalog.manga,
+                key = { "manga:${it.path}" },
+                contentType = { "manga_series_group" }
+            ) { group ->
+                MangaSeriesCard(group = group, modifier = Modifier.animateItem())
             }
         }
     }
@@ -134,6 +161,7 @@ private fun CatalogMessage(
     title: String,
     text: String,
     isError: Boolean = false,
+    isLoading: Boolean = false,
 ) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
@@ -153,6 +181,10 @@ private fun CatalogMessage(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
+            if (isLoading) {
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
         }
     }
 }
@@ -180,18 +212,25 @@ private fun SectionTitle(title: String, count: Int) {
 }
 
 @Composable
-private fun CatalogGroupCard(group: CatalogGroup) {
+private fun CatalogGroupCard(
+    group: CatalogGroup,
+    modifier: Modifier = Modifier
+) {
     var expanded by remember(group.path) { mutableStateOf(false) }
 
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             ExpandableHeader(
                 title = group.name,
-                subtitle = "${group.files.size} files",
+                subtitle = group.files.summary(),
                 expanded = expanded,
                 onToggle = { expanded = !expanded },
             )
-            if (expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+            ) {
                 FileList(group.files)
             }
         }
@@ -199,20 +238,29 @@ private fun CatalogGroupCard(group: CatalogGroup) {
 }
 
 @Composable
-private fun MangaSeriesCard(group: MangaSeriesGroup) {
+private fun MangaSeriesCard(
+    group: MangaSeriesGroup,
+    modifier: Modifier = Modifier
+) {
     var expanded by remember(group.path) { mutableStateOf(false) }
 
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             ExpandableHeader(
                 title = group.name,
-                subtitle = group.latestFile?.let { "Latest: ${it.name}" } ?: "No files",
+                subtitle = group.latestFile?.let { file ->
+                    "Latest: ${file.displayTitle()}${file.progressSuffix()}"
+                } ?: "No files",
                 subtitleMaxLines = 3,
                 expanded = expanded,
                 onToggle = { expanded = !expanded },
             )
-            if (expanded) {
-                FileList(group.files)
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+            ) {
+                FileList(files = group.files, showProgress = false)
             }
         }
     }
@@ -245,28 +293,148 @@ private fun ExpandableHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        val rotationState by animateFloatAsState(
+            targetValue = if (expanded) 180f else 0f,
+            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+            label = "ChevronRotation"
+        )
         IconButton(onClick = onToggle) {
             Icon(
-                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                imageVector = Icons.Outlined.ExpandMore,
                 contentDescription = if (expanded) "Collapse" else "Expand",
+                modifier = Modifier.rotate(rotationState)
             )
         }
     }
 }
 
 @Composable
-private fun FileList(files: List<CatalogFile>) {
+private fun FileList(
+    files: List<CatalogFile>,
+    showProgress: Boolean = true,
+) {
     Column(
         modifier = Modifier.padding(top = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         files.forEach { file ->
-            Text(
-                text = file.name,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = file.displayTitle(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (showProgress) {
+                        val progressDetailText = when {
+                            file.completed -> "Completed"
+                            file.currentPage != null && file.currentPage > 0 -> {
+                                if (file.totalPages != null && file.totalPages > 0) {
+                                    "Page ${file.currentPage} of ${file.totalPages}"
+                                } else {
+                                    "Page ${file.currentPage}"
+                                }
+                            }
+                            else -> "Not started"
+                        }
+
+                        val lastReadText = file.lastOpenedAtMillis?.let { time ->
+                            val relative = DateUtils.getRelativeTimeSpanString(
+                                time,
+                                System.currentTimeMillis(),
+                                DateUtils.MINUTE_IN_MILLIS,
+                                DateUtils.FORMAT_ABBREV_RELATIVE
+                            ).toString()
+                            "Last read: $relative"
+                        }
+
+                        val subtitleParts = buildList {
+                            if (!file.series.isNullOrBlank()) {
+                                add("Series: ${file.series}")
+                            }
+                            add(progressDetailText)
+                            if (lastReadText != null) {
+                                add(lastReadText)
+                            }
+                        }
+
+                        Text(
+                            text = subtitleParts.joinToString(" | "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                if (showProgress) {
+                    val percent = file.readProgressPercent
+                    if (percent != null && percent > 0) {
+                        Spacer(Modifier.width(12.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { percent / 100f },
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.5.dp,
+                                color = if (file.completed) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.secondary
+                                },
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                            Text(
+                                text = "$percent%",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
+private fun List<CatalogFile>.summary(): String {
+    val withProgress = count { it.readProgressPercent != null }
+    val completed = count(CatalogFile::completed)
+    val fileCount = size
+    return buildList {
+        add("$fileCount files")
+        if (withProgress > 0) add("$withProgress with progress")
+        if (completed > 0) add("$completed completed")
+    }.joinToString(", ")
+}
+
+private fun CatalogFile.displayTitle(): String =
+    title?.takeIf { it.isNotBlank() } ?: name
+
+private fun MangaSeriesGroup.subtitle(): String =
+    lastReadFile?.let { file ->
+        "Last read: ${file.displayTitle()}${file.progressSuffix()}"
+    } ?: latestFile?.let { file ->
+        "Latest: ${file.displayTitle()}"
+    } ?: "No files"
+
+private fun CatalogFile.progressSuffix(): String =
+    progressText()?.let { " | $it" }.orEmpty()
+
+private fun CatalogFile.progressText(): String? =
+    when {
+        completed -> "Completed"
+        readProgressPercent != null -> "Read $readProgressPercent%"
+        else -> null
+    }

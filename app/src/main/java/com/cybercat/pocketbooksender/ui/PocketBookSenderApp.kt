@@ -22,6 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.core.tween
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -120,6 +124,20 @@ private fun AppNavHost(
         navController = navController,
         startDestination = MainDestination.Send.route,
         modifier = modifier,
+        enterTransition = {
+            fadeIn(animationSpec = tween(200, delayMillis = 80)) +
+            scaleIn(initialScale = 0.96f, animationSpec = tween(200, delayMillis = 80))
+        },
+        exitTransition = {
+            fadeOut(animationSpec = tween(80))
+        },
+        popEnterTransition = {
+            fadeIn(animationSpec = tween(200, delayMillis = 80)) +
+            scaleIn(initialScale = 0.96f, animationSpec = tween(200, delayMillis = 80))
+        },
+        popExitTransition = {
+            fadeOut(animationSpec = tween(80))
+        },
     ) {
         composable(MainDestination.Send.route) {
             SendScreen(
@@ -156,6 +174,7 @@ private fun AppNavHost(
                 onOpenSource = viewModel::openOpdsUrl,
                 onOpenLink = viewModel::openOpdsLink,
                 onBack = viewModel::goBackOpds,
+                onMangaBack = viewModel::goBackManga,
                 onSearch = viewModel::searchOpds,
                 onDownload = viewModel::downloadOpdsAcquisition,
                 onMangaSearchChanged = viewModel::onMangaSearchChanged,
@@ -165,6 +184,9 @@ private fun AppNavHost(
                 onMangaWebPageLoaded = viewModel::syncMangaWebPage,
                 onOpenMangaSeries = viewModel::openMangaSeries,
                 onToggleMangaChapter = viewModel::toggleMangaChapter,
+                onSetMangaSeriesFavorite = viewModel::setSelectedMangaFavorite,
+                onSetMangaSeriesSubscribed = viewModel::setSelectedMangaSubscribed,
+                onCheckMangaSubscriptions = viewModel::checkMangaSubscriptions,
                 onSelectNewMangaChapters = viewModel::selectNewMangaChapters,
                 onSelectAllMangaChapters = viewModel::selectAllMangaChapters,
                 onClearMangaChapterSelection = viewModel::clearMangaChapterSelection,
@@ -175,6 +197,11 @@ private fun AppNavHost(
             SettingsScreen(
                 state = state,
                 onRootPathChanged = viewModel::updateRootPath,
+                onDefaultProgrammingTagChanged = viewModel::updateDefaultProgrammingTag,
+                onDefaultMangaSeriesChanged = viewModel::updateDefaultMangaSeries,
+                onBookFileNameTemplateChanged = viewModel::updateBookFileNameTemplate,
+                onProgrammingFileNameTemplateChanged = viewModel::updateProgrammingFileNameTemplate,
+                onMangaFileNameTemplateChanged = viewModel::updateMangaFileNameTemplate,
                 onDynamicColorChanged = viewModel::updateDynamicColor,
                 onClearDownloadCache = viewModel::clearDownloadCache,
             )

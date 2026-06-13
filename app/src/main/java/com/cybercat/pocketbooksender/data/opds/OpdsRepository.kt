@@ -12,6 +12,7 @@ import java.net.URI
 import java.net.URL
 import java.net.URLDecoder
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -26,6 +27,8 @@ class OpdsRepository @Inject constructor(
     private val parser: OpdsParser,
     private val sourceDao: OpdsSourceDao,
 ) {
+    private val catalogCache = ConcurrentHashMap<String, TimedCacheEntry<OpdsCatalog>>()
+
     val sources: Flow<List<OpdsSource>> =
         sourceDao.observeSources().map { entities ->
             entities
@@ -80,14 +83,20 @@ class OpdsRepository @Inject constructor(
 
     suspend fun loadCatalog(url: String): OpdsCatalog = withContext(Dispatchers.IO) {
         val normalizedUrl = normalizeUrl(url)
+        catalogCache[normalizedUrl]?.takeIf { entry -> entry.isFresh(CatalogCacheTtlMillis) }?.let { entry ->
+            return@withContext entry.value
+        }
+
         val connection = openConnection(
             url = normalizedUrl,
             accept = "application/atom+xml;profile=opds-catalog, application/atom+xml, application/xml, text/xml, */*",
         )
         try {
-            connection.inputStream.use { input ->
+            val catalog = connection.inputStream.use { input ->
                 parser.parse(input).resolvedAgainst(normalizedUrl)
             }
+            catalogCache[normalizedUrl] = TimedCacheEntry(catalog)
+            catalog
         } finally {
             connection.disconnect()
         }
@@ -145,6 +154,15 @@ class OpdsRepository @Inject constructor(
         }
 
         expandSearchTemplate(template, query)
+    }
+
+    suspend fun buildSearchUrls(
+        baseUrl: String,
+        searchLink: OpdsLink,
+        query: String,
+    ): List<String> = withContext(Dispatchers.IO) {
+        val bookSearchUrl = buildSearchUrl(baseUrl, searchLink, query)
+        (listOf(bookSearchUrl) + bookSearchUrl.flibustaAuthorSearchUrls(query)).distinct()
     }
 
     fun resolveUrl(baseUrl: String, href: String): String {
@@ -323,11 +341,6 @@ class OpdsRepository @Inject constructor(
             mime.contains("epub") -> "epub"
             mime.contains("fb2") -> "fb2"
             mime.contains("mobipocket") || mime.contains("mobi") -> "mobi"
-            mime.contains("pdf") -> "pdf"
-            mime.contains("djvu") -> "djvu"
-            mime.contains("comicbook+zip") -> "cbz"
-            mime.contains("comicbook-rar") || mime.contains("rar") -> "cbr"
-            mime.contains("zip") -> "zip"
             else -> ""
         }
     }
@@ -335,6 +348,7 @@ class OpdsRepository @Inject constructor(
     private companion object {
         const val ConnectTimeoutMillis = 15_000
         const val ReadTimeoutMillis = 45_000
+        const val CatalogCacheTtlMillis = 5 * 60 * 1000L
         const val MaxRedirects = 5
         const val UserAgent = "PocketBookSender/0.1"
         const val SearchTermsPlaceholder = "{searchTerms"
@@ -361,4 +375,40 @@ private fun expandSearchTemplate(
         .replace(Regex("\\{[^}]+\\}"), "")
         .replace("?&", "?")
         .trimEnd('?', '&')
+}
+
+private fun String.flibustaAuthorSearchUrls(query: String): List<String> {
+    val uri = runCatching { URI(this) }.getOrNull() ?: return emptyList()
+    val host = uri.host.orEmpty().lowercase()
+    if ("flibusta" !in host && "flub" !in host) return emptyList()
+
+    val normalizedQuery = query.cleanAuthorSearchQuery()
+    if (normalizedQuery.isBlank()) return emptyList()
+
+    val authorPrefix = normalizedQuery
+        .split(' ')
+        .lastOrNull { token -> token.length >= 2 }
+        ?: return emptyList()
+
+    val baseUrl = "${uri.scheme}://${uri.rawAuthority}"
+    return listOf("$baseUrl/opds/authorsindex/${authorPrefix.urlPathEncode()}")
+}
+
+private fun String.cleanAuthorSearchQuery(): String =
+    trim()
+        .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .lowercase()
+
+private fun String.urlPathEncode(): String =
+    URLEncoder.encode(this, Charsets.UTF_8.name())
+        .replace("+", "%20")
+
+private data class TimedCacheEntry<T>(
+    val value: T,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+) {
+    fun isFresh(ttlMillis: Long): Boolean =
+        System.currentTimeMillis() - createdAtMillis <= ttlMillis
 }

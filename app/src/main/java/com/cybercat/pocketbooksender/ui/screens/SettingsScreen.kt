@@ -35,6 +35,11 @@ import com.cybercat.pocketbooksender.ui.SenderUiState
 fun SettingsScreen(
     state: SenderUiState,
     onRootPathChanged: (String) -> Unit,
+    onDefaultProgrammingTagChanged: (String) -> Unit,
+    onDefaultMangaSeriesChanged: (String) -> Unit,
+    onBookFileNameTemplateChanged: (String) -> Unit,
+    onProgrammingFileNameTemplateChanged: (String) -> Unit,
+    onMangaFileNameTemplateChanged: (String) -> Unit,
     onDynamicColorChanged: (Boolean) -> Unit,
     onClearDownloadCache: () -> Unit,
 ) {
@@ -66,6 +71,55 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Root path") },
                         leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+                        singleLine = true,
+                    )
+                }
+            }
+
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("Naming rules", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "Tokens: {title}, {author}, {tag}, {series}, {volume}.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = state.settings.defaultProgrammingTag,
+                        onValueChange = onDefaultProgrammingTagChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Default programming tag") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = state.settings.defaultMangaSeries,
+                        onValueChange = onDefaultMangaSeriesChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Default manga series") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = state.settings.bookFileNameTemplate,
+                        onValueChange = onBookFileNameTemplateChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Books file name") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = state.settings.programmingFileNameTemplate,
+                        onValueChange = onProgrammingFileNameTemplateChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Programming file name") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = state.settings.mangaFileNameTemplate,
+                        onValueChange = onMangaFileNameTemplateChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Manga file name") },
                         singleLine = true,
                     )
                 }

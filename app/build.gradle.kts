@@ -23,6 +23,27 @@ android {
         compose = true
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("RELEASE_STORE_FILE") ?: "../release.keystore")
+            storePassword = System.getenv("RELEASE_STORE_PASSWORD")
+            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "pocketbooksender"
+            keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -47,9 +68,6 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.work.runtime.ktx)
-    implementation(libs.camerax.camera2)
-    implementation(libs.camerax.lifecycle)
-    implementation(libs.camerax.view)
     implementation(libs.commons.net)
     implementation(libs.compose.foundation)
     implementation(libs.compose.material.icons.extended)
@@ -61,7 +79,6 @@ dependencies {
     implementation(libs.junrar)
     implementation(libs.jsoup)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.mlkit.barcode.scanning)
     implementation(libs.play.services.code.scanner)
 
     ksp(libs.androidx.room.compiler)

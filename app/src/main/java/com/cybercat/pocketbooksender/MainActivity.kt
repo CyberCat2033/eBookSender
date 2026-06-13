@@ -38,6 +38,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isFinishing) {
+            com.cybercat.pocketbooksender.ui.BitmapCache.clear(this)
+        }
+    }
+
     private fun requestNotificationsIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val granted = ContextCompat.checkSelfPermission(

@@ -59,6 +59,11 @@ sealed interface TransferEvent {
         val total: Int,
     ) : TransferEvent
 
+    data class ItemProgress(
+        val itemId: String,
+        val progress: Float,
+    ) : TransferEvent
+
     data class ItemUploaded(
         val itemId: String,
         val completed: Int,

@@ -19,6 +19,7 @@ Important packages:
 - `ui` - Compose app shell, navigation, screens, ViewModel.
 - `model` - app models and enums.
 - `domain` - file classification, FTP URL parsing, filename/path planning.
+- `data/catalog` - PocketBook library database snapshot loading, parsing, and FTP folder fallback.
 - `data/ftp` - FTP gateway based on Apache Commons Net.
 - `data/opds` - OPDS model/parser/repository for saved sources, browsing, and downloads.
 - `data/database` - Room schema for devices, OPDS sources, and upload queue.
@@ -49,6 +50,11 @@ Important packages:
   - `Books/<Author>/<Book_Title>.<ext>`
   - `Programming/<Tag>/<Title>.<ext>`
   - `Manga/<Series>/<Volume>.<ext>`
+- Configure global file-name templates in Settings:
+  - Books default: `{title}`
+  - Programming default: `{title}`
+  - Manga default: `{volume}`
+  - Supported tokens: `{title}`, `{author}`, `{tag}`, `{series}`, `{volume}`.
 - Edit `Programming` tags directly in queue items. Suggestions are loaded only from PocketBook folders under `/Programming`.
 - Edit Manga series directly in queue items. Suggestions are loaded only from PocketBook folders under `/Manga`.
 - Per-item category/tag/series editors are collapsed by default. Queue items show only a compact type summary until expanded.
@@ -59,9 +65,14 @@ Important packages:
 - Upload execution runs through `TransferForegroundService`, so a user-started transfer continues when the app is backgrounded.
 - Transfer progress and completion are shown through Android notifications. Android 13+ notification permission is requested at app start.
 - Read PocketBook storage into the `Catalog` tab without downloading book contents:
-  - `Books` grouped by author folders.
-  - `Programming` grouped by tag folders.
-- `Manga` grouped by series folders with the latest file shown.
+  - primary source is PocketBook's `system/explorer-3/explorer-3.db` library database, downloaded as a local snapshot together with `-wal` and `-shm`;
+  - FTP folder scanning remains as fallback when the database snapshot cannot be loaded;
+  - `Books` are grouped by author folder or database author metadata;
+  - `Programming` is grouped by tag folders;
+  - `Manga` is grouped by series folders with the latest file shown.
+- Catalog entries show PocketBook database metadata when available: title, authors, read percentage, and completed state.
+- Duplicate database rows for the same `book_id` are collapsed inside each Catalog area, preferring files already placed under the expected subfolder structure.
+- Manga series cards surface only the last opened/read chapter progress; expanded manga file lists stay focused on file names.
 - Catalog groups and files use natural sorting, so `2` is ordered before `10`.
 - Use the separate `Web` tab to:
   - show saved OPDS sources as the primary list;
@@ -71,11 +82,19 @@ Important packages:
   - browse navigation/acquisition feeds;
   - search the current catalog through OPDS/OpenSearch when the catalog exposes `rel=search`;
   - show catalog covers when image links are available;
+  - reuse Android `HttpResponseCache` for `HttpURLConnection` responses when source servers allow caching;
+  - cache remote covers as downsampled JPEG previews on disk;
   - download a selected acquisition format into app cache;
   - add the downloaded file to the same upload queue as local files;
   - tolerate duplicate OPDS entry ids from catalogs such as Flibusta by generating unique list keys locally.
 - The `Web` tab also contains native Com-X manga search/download:
   - the embedded browser is only for login/session cookies;
+  - series pages are fetched once per open and cached briefly in memory to avoid duplicate network + HTML parse work;
+  - search results are cached briefly in memory for fast repeat/back flows;
+  - favorite and subscribed manga series are stored in Room;
+  - subscribed manga can be checked for new chapters, opening the first updated series and selecting new chapters automatically;
+  - selected series details show the latest downloaded chapter and best-effort latest read chapter from the PocketBook catalog when available, with the static download button removed;
+  - a floating action button (FAB) is displayed at the bottom of the screen at all times when at least one manga chapter is selected;
   - search results and chapter rows are clickable across the full card/row, not only on the trailing button/checkbox;
   - chapter rows support long-press drag selection with edge autoscroll;
   - dragging back shrinks the live selection range and restores chapters outside the range to their pre-gesture state;
@@ -96,6 +115,9 @@ CBR handling:
   - `Title.epub`
 - Persist settings in DataStore:
   - root path
+  - default Programming tag
+  - default Manga series
+  - Books/Programming/Manga filename templates
   - dynamic color toggle
 - Launcher icon is a custom adaptive icon with foreground and monochrome layers for Android themed icons.
 - Settings screen is scrollable on short screens.
@@ -139,18 +161,29 @@ Install on an attached phone:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Current verified build:
+## Verified Builds & Verification
 
-```text
-APK: app/build/outputs/apk/debug/app-debug.apk
-Size: ~43 MB
-Install: adb install -r ... -> Success
+Both debug and optimized/signed release versions are verified:
+
+### Debug Build
+```sh
+./gradlew :app:assembleDebug
+# APK size: ~43 MB
+# Install: adb install -r app/build/outputs/apk/debug/app-debug.apk -> Success
+```
+
+### Release Build (Optimized & Signed)
+Builds with R8 full minification and resource shrinking enabled, signed with a valid release keystore (`release.keystore`), and optimized with Proguard rules:
+```sh
+./gradlew :app:assembleRelease
+# APK size: ~2.3 MB (significant reduction from 43 MB via R8/proguard optimization!)
+# Install: adb install -r app/build/outputs/apk/release/app-release.apk -> Success
 ```
 
 ## Next Implementation Steps
 
 - Persist the real upload queue through Room.
-- Reintroduce Coil/OkHttp only if they add enough value. OPDS currently uses `HttpURLConnection`; cover previews also use a small local `HttpURLConnection` loader.
+- Reintroduce Coil/OkHttp only if they add enough value. OPDS currently uses `HttpURLConnection` plus Android `HttpResponseCache`; OPDS catalog pages also have a short in-memory cache; cover previews use a custom sub-sampled, throttled (max 3 downloads), memory/disk-cached JPEG loader.
 - Harden OPDS browsing/search against more real-world catalogs and add detail screens.
 - Harden the Com-X adapter against markup changes, expired sessions, archive-download fallback failures, and large chapter batches.
 - Add more manga source adapters behind the existing `MangaSourceAdapter` contract if needed.

@@ -14,6 +14,9 @@ interface MangaChapterHistoryDao {
     @Query("SELECT stableKey FROM manga_chapter_history")
     fun observeDownloadedStableKeys(): Flow<List<String>>
 
+    @Query("SELECT stableKey FROM manga_chapter_history")
+    suspend fun downloadedStableKeys(): List<String>
+
     @Upsert
     suspend fun upsertAll(items: List<MangaChapterHistoryEntity>)
 }

@@ -11,6 +11,11 @@ interface MangaSourceAdapter {
     suspend fun searchSeries(query: String): List<MangaSeriesSearchResult>
     suspend fun getSeries(seriesId: String): MangaSeriesDetails
     suspend fun listChapters(seriesId: String): List<MangaChapter>
+    suspend fun getSeriesPage(seriesId: String): MangaSeriesPage =
+        MangaSeriesPage(
+            details = getSeries(seriesId),
+            chapters = listChapters(seriesId),
+        )
     suspend fun getChapterPages(chapterId: String): List<MangaPage>
     suspend fun downloadPage(page: MangaPage): MangaDownloadedPage
     suspend fun downloadChapterArchive(
@@ -111,4 +116,32 @@ data class MangaSourceSummary(
     val id: String,
     val title: String,
     val homeUrl: String,
+)
+
+data class MangaSeriesBookmark(
+    val sourceId: String,
+    val seriesId: String,
+    val title: String,
+    val coverUrl: String?,
+    val description: String?,
+    val favorite: Boolean,
+    val subscribed: Boolean,
+    val addedAtMillis: Long,
+    val lastOpenedAtMillis: Long,
+    val lastCheckedAtMillis: Long?,
+)
+
+data class MangaChapterDownload(
+    val sourceId: String,
+    val seriesId: String,
+    val stableKey: String,
+    val seriesTitle: String,
+    val chapterTitle: String,
+    val fileName: String,
+    val downloadedAtMillis: Long,
+)
+
+data class MangaSubscriptionCheckResult(
+    val page: MangaSeriesPage,
+    val newChapters: List<MangaChapter>,
 )

@@ -1,7 +1,6 @@
 package com.cybercat.pocketbooksender.ui.screens
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -24,18 +23,22 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -59,29 +62,35 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.platform.LocalContext
+import com.cybercat.pocketbooksender.ui.BitmapCache
+import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
 import com.cybercat.pocketbooksender.data.manga.MangaChapter
+import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.ui.MangaUiState
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import org.json.JSONArray
 
 @Composable
 fun MangaPane(
     state: MangaUiState,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     modifier: Modifier = Modifier,
     onSearchChanged: (String) -> Unit,
     onSearch: () -> Unit,
@@ -90,14 +99,14 @@ fun MangaPane(
     onWebPageLoaded: (String, String) -> Unit,
     onOpenSeries: (String) -> Unit,
     onToggleChapter: (String, Boolean) -> Unit,
-    onSelectNewChapters: () -> Unit,
-    onSelectAllChapters: () -> Unit,
-    onClearChapterSelection: () -> Unit,
+    onSetSeriesFavorite: (Boolean) -> Unit,
+    onSetSeriesSubscribed: (Boolean) -> Unit,
+    onCheckSubscriptions: () -> Unit,
     onDownloadSelected: () -> Unit,
 ) {
-    val listState = rememberLazyListState()
     val selectedChapterIdsState = rememberUpdatedState(state.selectedChapterIds)
     val onToggleChapterState = rememberUpdatedState(onToggleChapter)
+    val selectedSeriesId = state.selectedSeries?.seriesId
     val chapterTargets = remember(state.chapters) {
         state.chapters.mapIndexed { index, chapter ->
             chapterItemKey(chapter) to ChapterPointerTarget(
@@ -105,6 +114,12 @@ fun MangaPane(
                 chapterId = chapter.chapterId,
             )
         }.toMap()
+    }
+
+    LaunchedEffect(selectedSeriesId) {
+        if (selectedSeriesId != null) {
+            listState.animateScrollToItem(state.selectedSeriesItemIndex())
+        }
     }
 
     LazyColumn(
@@ -161,13 +176,18 @@ fun MangaPane(
 
                         return when {
                             currentY < edgeSize -> {
-                                val strength = ((edgeSize - currentY) / edgeSize).coerceIn(0.2f, 1f)
-                                -30f * strength
+                                val distance = edgeSize - currentY
+                                val ratio = distance / edgeSize
+                                val maxSpeed = 120f
+                                val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
+                                -speed
                             }
                             currentY > viewportHeight - edgeSize -> {
-                                val strength = ((currentY - (viewportHeight - edgeSize)) / edgeSize)
-                                    .coerceIn(0.2f, 1f)
-                                30f * strength
+                                val distance = currentY - (viewportHeight - edgeSize)
+                                val ratio = distance / edgeSize
+                                val maxSpeed = 120f
+                                val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
+                                speed
                             }
                             else -> 0f
                         }
@@ -235,6 +255,18 @@ fun MangaPane(
             )
         }
 
+        if (state.savedSeries.isNotEmpty()) {
+            item {
+                SavedMangaPanel(
+                    savedSeries = state.savedSeries,
+                    isCheckingSubscriptions = state.isCheckingSubscriptions,
+                    enabled = !state.isLoading && !state.isDownloading,
+                    onOpenSeries = onOpenSeries,
+                    onCheckSubscriptions = onCheckSubscriptions,
+                )
+            }
+        }
+
         if (state.browserVisible) {
             item {
                 MangaBrowserCard(
@@ -266,11 +298,22 @@ fun MangaPane(
 
         val series = state.selectedSeries
         if (series != null) {
+            val savedSeries = state.savedSeries.firstOrNull { saved ->
+                saved.sourceId == series.sourceId && saved.seriesId == series.seriesId
+            }
+            val lastDownloadedChapter = state.downloadedChapters.firstOrNull { downloaded ->
+                downloaded.sourceId == series.sourceId && downloaded.seriesId == series.seriesId
+            }?.chapterTitle
+
             item {
                 SelectedSeriesCard(
                     title = series.title,
                     description = series.description,
                     coverUrl = series.coverUrl,
+                    isFavorite = savedSeries?.favorite == true,
+                    isSubscribed = savedSeries?.subscribed == true,
+                    lastDownloadedChapter = lastDownloadedChapter,
+                    lastReadChapter = state.lastReadChapterText,
                     chapters = state.chapters,
                     selectedCount = state.selectedChapterIds.size,
                     newCount = state.chapters.count { chapter ->
@@ -278,20 +321,22 @@ fun MangaPane(
                     },
                     isDownloading = state.isDownloading,
                     downloadProgressText = state.downloadProgressText,
-                    onSelectNewChapters = onSelectNewChapters,
-                    onSelectAllChapters = onSelectAllChapters,
-                    onClearChapterSelection = onClearChapterSelection,
-                    onDownloadSelected = onDownloadSelected,
+                    onSetFavorite = onSetSeriesFavorite,
+                    onSetSubscribed = onSetSeriesSubscribed,
                 )
             }
 
-            items(state.chapters, key = { chapter -> chapterItemKey(chapter) }) { chapter ->
+            items(
+                items = state.chapters,
+                key = { chapter -> chapterItemKey(chapter) },
+                contentType = { "chapter" }
+            ) { chapter ->
                 MangaChapterRow(
                     chapter = chapter,
                     selected = chapter.chapterId in state.selectedChapterIds,
                     downloaded = chapter.stableKey in state.downloadedStableKeys,
                     enabled = !state.isDownloading,
-                    onToggle = { selected -> onToggleChapter(chapter.chapterId, selected) },
+                    onToggle = onToggleChapter,
                 )
             }
         }
@@ -300,7 +345,11 @@ fun MangaPane(
             item {
                 MangaSectionTitle("Search results", state.searchResults.size)
             }
-            items(state.searchResults, key = { result -> result.seriesId }) { result ->
+            items(
+                items = state.searchResults,
+                key = { result -> result.seriesId },
+                contentType = { "search_result" }
+            ) { result ->
                 MangaSearchResultCard(
                     result = result,
                     enabled = !state.isLoading && !state.isDownloading,
@@ -347,10 +396,12 @@ private fun MangaSearchPanel(
                             onSearch = onSearch,
                             modifier = Modifier.width(180.dp),
                         )
-                        MangaLoginButton(
-                            state = state,
-                            onOpenBrowser = onOpenBrowser,
-                        )
+                        if (!state.isAuthorized) {
+                            MangaLoginButton(
+                                state = state,
+                                onOpenBrowser = onOpenBrowser,
+                            )
+                        }
                     }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -368,10 +419,12 @@ private fun MangaSearchPanel(
                                 onSearch = onSearch,
                                 modifier = Modifier.weight(1f),
                             )
-                            MangaLoginButton(
-                                state = state,
-                                onOpenBrowser = onOpenBrowser,
-                            )
+                            if (!state.isAuthorized) {
+                                MangaLoginButton(
+                                    state = state,
+                                    onOpenBrowser = onOpenBrowser,
+                                )
+                            }
                         }
                     }
                 }
@@ -386,14 +439,22 @@ private fun MangaSearchField(
     onSearchChanged: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val enabled = !state.isLoading && !state.isDownloading
     OutlinedTextField(
         value = state.searchInput,
         onValueChange = onSearchChanged,
         modifier = modifier,
-        enabled = !state.isLoading && !state.isDownloading,
+        enabled = enabled,
         singleLine = true,
         label = { Text("Search manga") },
         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+        trailingIcon = {
+            if (state.searchInput.isNotEmpty() && enabled) {
+                IconButton(onClick = { onSearchChanged("") }) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                }
+            }
+        }
     )
 }
 
@@ -426,6 +487,70 @@ private fun MangaLoginButton(
         Icon(Icons.Outlined.OpenInBrowser, contentDescription = null)
         Spacer(Modifier.width(8.dp))
         Text("Login")
+    }
+}
+
+@Composable
+private fun SavedMangaPanel(
+    savedSeries: List<MangaSeriesBookmark>,
+    isCheckingSubscriptions: Boolean,
+    enabled: Boolean,
+    onOpenSeries: (String) -> Unit,
+    onCheckSubscriptions: () -> Unit,
+) {
+    val subscribedCount = savedSeries.count { series -> series.subscribed }
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Saved manga",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                OutlinedButton(
+                    onClick = onCheckSubscriptions,
+                    enabled = enabled && subscribedCount > 0 && !isCheckingSubscriptions,
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isCheckingSubscriptions) "Checking" else "Check new")
+                }
+            }
+
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                savedSeries.forEach { series ->
+                    AssistChip(
+                        onClick = { if (enabled) onOpenSeries(series.seriesId) },
+                        modifier = Modifier.widthIn(max = 280.dp),
+                        label = {
+                            Text(
+                                text = series.title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        leadingIcon = {
+                            val icon = if (series.subscribed) {
+                                Icons.Filled.Notifications
+                            } else {
+                                Icons.Outlined.Favorite
+                            }
+                            Icon(icon, contentDescription = null)
+                        },
+                        enabled = enabled,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -551,15 +676,17 @@ private fun SelectedSeriesCard(
     title: String,
     description: String?,
     coverUrl: String?,
+    isFavorite: Boolean,
+    isSubscribed: Boolean,
+    lastDownloadedChapter: String?,
+    lastReadChapter: String?,
     chapters: List<MangaChapter>,
     selectedCount: Int,
     newCount: Int,
     isDownloading: Boolean,
     downloadProgressText: String?,
-    onSelectNewChapters: () -> Unit,
-    onSelectAllChapters: () -> Unit,
-    onClearChapterSelection: () -> Unit,
-    onDownloadSelected: () -> Unit,
+    onSetFavorite: (Boolean) -> Unit,
+    onSetSubscribed: (Boolean) -> Unit,
 ) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
@@ -581,6 +708,24 @@ private fun SelectedSeriesCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    lastDownloadedChapter?.let { chapter ->
+                        Text(
+                            text = "Last downloaded: $chapter",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    lastReadChapter?.let { chapter ->
+                        Text(
+                            text = "Last read: $chapter",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
 
@@ -599,42 +744,34 @@ private fun SelectedSeriesCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedButton(
-                    onClick = onSelectNewChapters,
-                    enabled = !isDownloading && newCount > 0,
+                    onClick = { onSetFavorite(!isFavorite) },
+                    enabled = !isDownloading,
                 ) {
-                    Icon(Icons.Outlined.Checklist, contentDescription = null)
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = null,
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text("New")
+                    Text(if (isFavorite) "Favorite" else "Favorite")
                 }
                 OutlinedButton(
-                    onClick = onSelectAllChapters,
-                    enabled = !isDownloading && chapters.isNotEmpty(),
+                    onClick = { onSetSubscribed(!isSubscribed) },
+                    enabled = !isDownloading,
                 ) {
-                    Icon(Icons.Outlined.SelectAll, contentDescription = null)
+                    Icon(
+                        imageVector = if (isSubscribed) {
+                            Icons.Filled.Notifications
+                        } else {
+                            Icons.Outlined.NotificationsNone
+                        },
+                        contentDescription = null,
+                    )
                     Spacer(Modifier.width(8.dp))
-                    Text("All")
-                }
-                OutlinedButton(
-                    onClick = onClearChapterSelection,
-                    enabled = !isDownloading && selectedCount > 0,
-                ) {
-                    Text("Clear")
+                    Text(if (isSubscribed) "Subscribed" else "Subscribe")
                 }
             }
 
-            Button(
-                onClick = onDownloadSelected,
-                enabled = !isDownloading && selectedCount > 0,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (isDownloading) {
-                    CircularProgressIndicator(Modifier.size(18.dp))
-                } else {
-                    Icon(Icons.Outlined.CloudDownload, contentDescription = null)
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(if (isDownloading) "Downloading" else "Download selected")
-            }
+
 
             if (isDownloading) {
                 downloadProgressText?.let { text ->
@@ -658,12 +795,12 @@ private fun MangaChapterRow(
     selected: Boolean,
     downloaded: Boolean,
     enabled: Boolean,
-    onToggle: (Boolean) -> Unit,
+    onToggle: (String, Boolean) -> Unit,
 ) {
     ElevatedCard(
         Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled) { onToggle(!selected) },
+            .clickable(enabled = enabled) { onToggle(chapter.chapterId, !selected) },
     ) {
         Row(
             modifier = Modifier
@@ -673,7 +810,7 @@ private fun MangaChapterRow(
         ) {
             Checkbox(
                 checked = selected,
-                onCheckedChange = onToggle,
+                onCheckedChange = { onToggle(chapter.chapterId, it) },
                 enabled = enabled,
             )
             Column(Modifier.weight(1f)) {
@@ -707,10 +844,25 @@ private fun MangaCover(
     coverUrl: String?,
     title: String,
 ) {
-    var bitmap by remember(coverUrl) { mutableStateOf<Bitmap?>(null) }
+    val context = LocalContext.current
+    var bitmap by remember(coverUrl) { mutableStateOf<Bitmap?>(coverUrl?.let { BitmapCache.getFromMemory(it) }) }
 
     LaunchedEffect(coverUrl) {
-        bitmap = coverUrl?.let { loadMangaBitmap(it) }
+        if (coverUrl != null && bitmap == null) {
+            delay(CoverLoadDelayMillis)
+            val cookie = withContext(Dispatchers.IO) {
+                runCatching { CookieManager.getInstance().getCookie(coverUrl) }.getOrNull()
+            }
+            if (bitmap == null) {
+                bitmap = loadCachedRemoteBitmap(
+                    context = context,
+                    url = coverUrl,
+                    cookie = cookie,
+                    reqWidth = CoverRequestWidth,
+                    reqHeight = CoverRequestHeight,
+                )
+            }
+        }
     }
 
     Surface(
@@ -813,26 +965,6 @@ private fun WebView.extractHtml(onHtml: (String) -> Unit) {
     }
 }
 
-private suspend fun loadMangaBitmap(url: String): Bitmap? = withContext(Dispatchers.IO) {
-    runCatching {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 10_000
-            readTimeout = 20_000
-            setRequestProperty("Accept", "image/*")
-            setRequestProperty("User-Agent", "PocketBookSender/0.1")
-            CookieManager.getInstance().getCookie(url)?.takeIf { it.isNotBlank() }?.let { cookie ->
-                setRequestProperty("Cookie", cookie)
-            }
-        }
-        try {
-            if (connection.responseCode !in 200..299) return@runCatching null
-            connection.inputStream.use(BitmapFactory::decodeStream)
-        } finally {
-            connection.disconnect()
-        }
-    }.getOrNull()
-}
-
 private data class ChapterPointerTarget(
     val index: Int,
     val chapterId: String,
@@ -840,5 +972,19 @@ private data class ChapterPointerTarget(
 
 private fun chapterItemKey(chapter: MangaChapter): String =
     "chapter:${chapter.stableKey}"
+
+internal fun MangaUiState.selectedSeriesItemIndex(): Int {
+    var index = 1 // Search panel is always the first list item.
+    if (browserVisible) index++
+    if (errorMessage != null) index++
+    if (statusMessage != null) index++
+    if (isLoading) index++
+    return index
+}
+
+private const val MangaLongPressMillis = 300L
+private const val CoverLoadDelayMillis = 120L
+private const val CoverRequestWidth = 160
+private const val CoverRequestHeight = 220
 
 private const val HtmlExtractDelayMillis = 900L

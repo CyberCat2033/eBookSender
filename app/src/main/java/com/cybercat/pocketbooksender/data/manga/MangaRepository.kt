@@ -3,11 +3,14 @@ package com.cybercat.pocketbooksender.data.manga
 import android.content.Context
 import android.net.Uri
 import com.cybercat.pocketbooksender.data.database.dao.MangaChapterHistoryDao
+import com.cybercat.pocketbooksender.data.database.dao.MangaSeriesBookmarkDao
 import com.cybercat.pocketbooksender.data.database.entity.MangaChapterHistoryEntity
+import com.cybercat.pocketbooksender.data.database.entity.MangaSeriesBookmarkEntity
 import com.cybercat.pocketbooksender.domain.FilenameSanitizer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -21,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Semaphore
@@ -30,10 +34,13 @@ import kotlinx.coroutines.sync.withPermit
 class MangaRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val historyDao: MangaChapterHistoryDao,
+    private val bookmarkDao: MangaSeriesBookmarkDao,
     private val comxAdapter: ComxMangaAdapter,
 ) {
     private val adapters: List<HtmlMangaSourceAdapter> = listOf(comxAdapter)
     private val fileLock = Any()
+    private val searchCache = ConcurrentHashMap<String, TimedCacheEntry<List<MangaSeriesSearchResult>>>()
+    private val seriesCache = ConcurrentHashMap<String, TimedCacheEntry<MangaSeriesPage>>()
 
     val sources: List<MangaSourceSummary> =
         adapters.map { adapter ->
@@ -47,6 +54,18 @@ class MangaRepository @Inject constructor(
     val downloadedStableKeys: Flow<Set<String>> =
         historyDao.observeDownloadedStableKeys().map { keys -> keys.toSet() }
 
+    val downloadedChapters: Flow<List<MangaChapterDownload>> =
+        historyDao.observeHistory().map { items ->
+            items.map { item -> item.toDownload() }
+        }
+
+    val savedSeries: Flow<List<MangaSeriesBookmark>> =
+        bookmarkDao.observeSavedSeries()
+            .onStart { bookmarkDao.normalizeMutualExclusion() }
+            .map { items ->
+                items.map { item -> item.toBookmark() }
+            }
+
     suspend fun authState(sourceId: String): MangaAuthState =
         adapter(sourceId).authState()
 
@@ -59,19 +78,31 @@ class MangaRepository @Inject constructor(
     suspend fun searchSeries(
         sourceId: String,
         query: String,
-    ): List<MangaSeriesSearchResult> =
-        adapter(sourceId).searchSeries(query)
+    ): List<MangaSeriesSearchResult> {
+        val key = "$sourceId:${query.trim().lowercase()}"
+        searchCache[key]?.takeIf { entry -> entry.isFresh(SearchCacheTtlMillis) }?.let { entry ->
+            return entry.value
+        }
+
+        val results = adapter(sourceId).searchSeries(query)
+        searchCache[key] = TimedCacheEntry(results)
+        return results
+    }
 
     suspend fun openSeries(
         sourceId: String,
         seriesId: String,
     ): MangaSeriesPage {
-        val adapter = adapter(sourceId)
-        val details = adapter.getSeries(seriesId)
-        return MangaSeriesPage(
-            details = details,
-            chapters = adapter.listChapters(seriesId),
-        )
+        val key = "$sourceId:${seriesId.normalizeCacheKey()}"
+        seriesCache[key]?.takeIf { entry -> entry.isFresh(SeriesCacheTtlMillis) }?.let { entry ->
+            saveSeriesSnapshot(entry.value.details)
+            return entry.value
+        }
+
+        val page = adapter(sourceId).getSeriesPage(seriesId)
+        seriesCache[key] = TimedCacheEntry(page)
+        saveSeriesSnapshot(page.details)
+        return page
     }
 
     fun parseWebPage(
@@ -98,6 +129,70 @@ class MangaRepository @Inject constructor(
         }
 
         return MangaParsedPage.Unsupported
+    }
+
+    suspend fun saveSeriesSnapshot(series: MangaSeriesDetails) = withContext(Dispatchers.IO) {
+        bookmarkDao.upsertSnapshot(
+            sourceId = series.sourceId,
+            seriesId = series.seriesId,
+            title = series.title,
+            coverUrl = series.coverUrl,
+            description = series.description,
+            openedAtMillis = System.currentTimeMillis(),
+        )
+    }
+
+    suspend fun setFavorite(
+        series: MangaSeriesDetails,
+        favorite: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val updated = bookmarkDao.setFavorite(
+            sourceId = series.sourceId,
+            seriesId = series.seriesId,
+            title = series.title,
+            coverUrl = series.coverUrl,
+            description = series.description,
+            favorite = favorite,
+            updatedAtMillis = now,
+        )
+        if (updated == 0) {
+            bookmarkDao.upsert(series.toBookmarkEntity(favorite = favorite, subscribed = false, now = now))
+        }
+    }
+
+    suspend fun setSubscribed(
+        series: MangaSeriesDetails,
+        subscribed: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val updated = bookmarkDao.setSubscribed(
+            sourceId = series.sourceId,
+            seriesId = series.seriesId,
+            title = series.title,
+            coverUrl = series.coverUrl,
+            description = series.description,
+            subscribed = subscribed,
+            updatedAtMillis = now,
+        )
+        if (updated == 0) {
+            bookmarkDao.upsert(series.toBookmarkEntity(favorite = false, subscribed = subscribed, now = now))
+        }
+    }
+
+    suspend fun checkSubscriptions(): List<MangaSubscriptionCheckResult> = withContext(Dispatchers.IO) {
+        val downloadedStableKeys = historyDao.downloadedStableKeys().toSet()
+        val checkedAtMillis = System.currentTimeMillis()
+        bookmarkDao.subscribedSeries().mapNotNull { saved ->
+            runCatching {
+                val page = openSeries(saved.sourceId, saved.seriesId)
+                bookmarkDao.markChecked(saved.sourceId, saved.seriesId, checkedAtMillis)
+                val newChapters = page.chapters.filter { chapter ->
+                    chapter.stableKey !in downloadedStableKeys
+                }
+                MangaSubscriptionCheckResult(page = page, newChapters = newChapters)
+            }.getOrNull()
+        }
     }
 
     suspend fun downloadChapters(
@@ -435,6 +530,8 @@ class MangaRepository @Inject constructor(
             ?: throw IllegalArgumentException("Unknown manga source: $sourceId")
 
     private companion object {
+        const val SearchCacheTtlMillis = 5 * 60 * 1000L
+        const val SeriesCacheTtlMillis = 2 * 60 * 1000L
         const val MaxParallelChapters = 2
         const val MaxParallelPages = 6
         const val PageDownloadAttempts = 3
@@ -480,3 +577,57 @@ private data class DownloadedMangaPage(
     val bytes: ByteArray,
     val fileExtension: String,
 )
+
+private data class TimedCacheEntry<T>(
+    val value: T,
+    val createdAtMillis: Long = System.currentTimeMillis(),
+) {
+    fun isFresh(ttlMillis: Long): Boolean =
+        System.currentTimeMillis() - createdAtMillis <= ttlMillis
+}
+
+private fun MangaChapterHistoryEntity.toDownload(): MangaChapterDownload =
+    MangaChapterDownload(
+        sourceId = sourceId,
+        seriesId = seriesId,
+        stableKey = stableKey,
+        seriesTitle = seriesTitle,
+        chapterTitle = chapterTitle,
+        fileName = fileName,
+        downloadedAtMillis = downloadedAtMillis,
+    )
+
+private fun MangaSeriesBookmarkEntity.toBookmark(): MangaSeriesBookmark =
+    MangaSeriesBookmark(
+        sourceId = sourceId,
+        seriesId = seriesId,
+        title = title,
+        coverUrl = coverUrl,
+        description = description,
+        favorite = favorite,
+        subscribed = subscribed,
+        addedAtMillis = addedAtMillis,
+        lastOpenedAtMillis = lastOpenedAtMillis,
+        lastCheckedAtMillis = lastCheckedAtMillis,
+    )
+
+private fun MangaSeriesDetails.toBookmarkEntity(
+    favorite: Boolean,
+    subscribed: Boolean,
+    now: Long,
+): MangaSeriesBookmarkEntity =
+    MangaSeriesBookmarkEntity(
+        sourceId = sourceId,
+        seriesId = seriesId,
+        title = title,
+        coverUrl = coverUrl,
+        description = description,
+        favorite = favorite,
+        subscribed = subscribed,
+        addedAtMillis = now,
+        lastOpenedAtMillis = now,
+        lastCheckedAtMillis = null,
+    )
+
+private fun String.normalizeCacheKey(): String =
+    trim().trimEnd('/').lowercase()

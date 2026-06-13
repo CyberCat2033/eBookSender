@@ -2,6 +2,7 @@ package com.cybercat.pocketbooksender.data.ftp
 
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import java.io.InputStream
+import java.io.OutputStream
 
 interface FtpGateway {
     suspend fun checkConnection(device: PocketBookDevice): Result<FtpSessionInfo>
@@ -10,6 +11,7 @@ interface FtpGateway {
         device: PocketBookDevice,
         remoteRelativePath: String,
         input: InputStream,
+        onProgress: ((Long) -> Unit)? = null,
     ): Result<Unit>
 
     suspend fun listDirectories(
@@ -21,6 +23,12 @@ interface FtpGateway {
         device: PocketBookDevice,
         remoteRelativePath: String,
     ): Result<List<FtpEntry>>
+
+    suspend fun downloadFile(
+        device: PocketBookDevice,
+        remoteRelativePath: String,
+        output: OutputStream,
+    ): Result<Unit>
 }
 
 data class FtpSessionInfo(

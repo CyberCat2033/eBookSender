@@ -49,12 +49,25 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.rotate
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
@@ -86,10 +99,18 @@ fun SendScreen(
     onQueuedMangaSeriesChanged: (String) -> Unit,
     onUploadAll: () -> Unit,
 ) {
-    val activeQueue = state.queue.filterNot { it.status == UploadStatus.Uploaded }
+    val activeQueue = if (state.isTransferActive) {
+        state.queue
+    } else {
+        state.queue.filterNot { it.status == UploadStatus.Uploaded }
+    }
     val activeRows = activeQueue.withStableLazyKeys()
     val activeMangaQueue = activeQueue.filter { it.category == BookCategory.Manga }
-    val uploadedQueue = state.queue.filter { it.status == UploadStatus.Uploaded }
+    val uploadedQueue = if (state.isTransferActive) {
+        emptyList()
+    } else {
+        state.queue.filter { it.status == UploadStatus.Uploaded }
+    }
     val hasUploadableFiles = state.queue.any {
         it.status == UploadStatus.Pending ||
             it.status == UploadStatus.Failed ||
@@ -134,10 +155,16 @@ fun SendScreen(
 
             item {
                 ActionRow(
-                    canUpload = state.isConnected && hasUploadableFiles,
+                    canUpload = state.isConnected && hasUploadableFiles && !state.isTransferActive,
                     onAddFiles = { picker.launch(arrayOf("*/*")) },
                     onUploadAll = onUploadAll,
                 )
+            }
+
+            if (state.isTransferActive) {
+                item {
+                    OverallProgressPanel(queue = state.queue)
+                }
             }
 
             if (activeMangaQueue.size > 1) {
@@ -155,7 +182,11 @@ fun SendScreen(
                 item(key = "uploaded-section") {
                     UploadedSection(
                         items = uploadedQueue,
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = QueueFadeInSpec,
+                            fadeOutSpec = QueueFadeOutSpec,
+                            placementSpec = QueuePlacementSpec
+                        ),
                     )
                 }
             }
@@ -180,13 +211,18 @@ fun SendScreen(
                 }
             } else {
                 itemsIndexed(
-                    activeRows,
+                    items = activeRows,
                     key = { _, row -> row.key },
+                    contentType = { _, _ -> "upload_item" }
                 ) { _, row ->
                     val item = row.item
                     UploadItemRow(
                         item = item,
-                        modifier = Modifier.animateItem(),
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = QueueFadeInSpec,
+                            fadeOutSpec = QueueFadeOutSpec,
+                            placementSpec = QueuePlacementSpec
+                        ),
                         programmingTags = state.programmingTags,
                         mangaSeriesSuggestions = state.mangaSeriesSuggestions,
                         onRemove = { onRemoveItem(item.id) },
@@ -499,87 +535,143 @@ private fun UploadItemRow(
     var detailsExpanded by remember(item.id) { mutableStateOf(false) }
 
     ElevatedCard(modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BookCover(item)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
+        Column {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BookCover(item)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = item.originalName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    IconButton(
+                        onClick = onRemove,
+                        enabled = item.status != UploadStatus.Uploading && item.status != UploadStatus.Uploaded,
+                    ) {
+                        Icon(Icons.Outlined.Delete, contentDescription = "Remove")
+                    }
+                }
+
+                ItemTypeSummary(
+                    item = item,
+                    expanded = detailsExpanded,
+                    onToggle = { detailsExpanded = !detailsExpanded },
+                )
+
+                AnimatedVisibility(
+                    visible = detailsExpanded,
+                    enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                    exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CategorySelector(
+                            selected = item.category,
+                            lockedToManga = item.extension == "cbr" || item.extension == "cbz",
+                            onCategoryChanged = onCategoryChanged,
+                        )
+
+                        if (item.category == BookCategory.Programming) {
+                            ProgrammingTagEditor(
+                                selectedTag = item.programmingTag.orEmpty(),
+                                suggestions = programmingTags,
+                                onTagChanged = onProgrammingTagChanged,
+                            )
+                        }
+
+                        if (item.category == BookCategory.Manga) {
+                            MangaSeriesEditor(
+                                selectedSeries = item.mangaSeries.orEmpty(),
+                                suggestions = mangaSeriesSuggestions,
+                                onSeriesChanged = onMangaSeriesChanged,
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleMedium,
+                        text = item.plannedPath,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
+                    Spacer(Modifier.width(8.dp))
+
+                    val statusColor = when (item.status) {
+                        UploadStatus.Uploaded -> MaterialTheme.colorScheme.primary
+                        UploadStatus.Failed -> MaterialTheme.colorScheme.error
+                        UploadStatus.Uploading -> MaterialTheme.colorScheme.secondary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                    val statusText = when (item.status) {
+                        UploadStatus.Uploading -> "Uploading (${(item.progress * 100).toInt()}%)"
+                        else -> item.status.name
+                    }
+
                     Text(
-                        text = item.originalName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconButton(onClick = onRemove) {
-                    Icon(Icons.Outlined.Delete, contentDescription = "Remove")
-                }
-            }
-
-            ItemTypeSummary(
-                item = item,
-                expanded = detailsExpanded,
-                onToggle = { detailsExpanded = !detailsExpanded },
-            )
-
-            if (detailsExpanded) {
-                CategorySelector(
-                    selected = item.category,
-                    lockedToManga = item.extension == "cbr" || item.extension == "cbz",
-                    onCategoryChanged = onCategoryChanged,
-                )
-
-                if (item.category == BookCategory.Programming) {
-                    ProgrammingTagEditor(
-                        selectedTag = item.programmingTag.orEmpty(),
-                        suggestions = programmingTags,
-                        onTagChanged = onProgrammingTagChanged,
-                    )
-                }
-
-                if (item.category == BookCategory.Manga) {
-                    MangaSeriesEditor(
-                        selectedSeries = item.mangaSeries.orEmpty(),
-                        suggestions = mangaSeriesSuggestions,
-                        onSeriesChanged = onMangaSeriesChanged,
+                        text = statusText,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = statusColor,
                     )
                 }
             }
 
-            HorizontalDivider()
-
-            Text(
-                text = item.plannedPath,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            val isUploading = item.status == UploadStatus.Uploading
+            val progressHeight by animateDpAsState(
+                targetValue = if (isUploading) 4.dp else 0.dp,
+                label = "ProgressHeight"
             )
 
-            if (item.progress > 0f) {
-                LinearProgressIndicator(
-                    progress = { item.progress },
-                    modifier = Modifier.fillMaxWidth(),
+            if (progressHeight > 0.dp) {
+                SmoothProgressIndicator(
+                    progress = item.progress,
+                    modifier = Modifier.fillMaxWidth().height(progressHeight),
                 )
             }
-
-            Text(
-                text = item.status.name.lowercase().replaceFirstChar { it.uppercase() },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
+}
+
+@Composable
+private fun SmoothProgressIndicator(
+    progress: Float,
+    modifier: Modifier = Modifier,
+) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "SmoothProgress"
+    )
+    LinearProgressIndicator(
+        progress = { animatedProgress },
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -607,30 +699,45 @@ private fun UploadedSection(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                val rotationState by animateFloatAsState(
+                    targetValue = if (expanded) 180f else 0f,
+                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                    label = "ChevronRotation"
+                )
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(
-                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        imageVector = Icons.Outlined.ExpandMore,
                         contentDescription = if (expanded) "Collapse uploaded" else "Show uploaded",
+                        modifier = Modifier.rotate(rotationState)
                     )
                 }
             }
 
-            if (expanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+                exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     items.forEach { item ->
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = item.plannedPath,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Column {
+                            Text(
+                                text = item.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = item.plannedPath,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
@@ -676,10 +783,16 @@ private fun ItemTypeSummary(
                     )
                 }
             }
+            val rotationState by animateFloatAsState(
+                targetValue = if (expanded) 180f else 0f,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                label = "ChevronRotation"
+            )
             IconButton(onClick = onToggle) {
                 Icon(
-                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    imageVector = Icons.Outlined.ExpandMore,
                     contentDescription = if (expanded) "Hide item details" else "Edit item details",
+                    modifier = Modifier.rotate(rotationState)
                 )
             }
         }
@@ -830,3 +943,104 @@ private fun List<UploadItem>.commonMangaSeries(): String {
         .distinctBy { it.lowercase() }
     return if (series.size == 1) series.first() else ""
 }
+
+@Composable
+private fun OverallProgressPanel(
+    queue: List<UploadItem>,
+    modifier: Modifier = Modifier,
+) {
+    val uploadingItems = queue.filter { it.status == UploadStatus.Uploading }
+    val uploadedCount = queue.count { it.status == UploadStatus.Uploaded }
+    val totalCount = queue.size
+
+    if (totalCount == 0) return
+
+    val activeProgressSum = uploadingItems.sumOf { it.progress.toDouble() }.toFloat()
+    val overallProgress = (uploadedCount + activeProgressSum) / totalCount
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = overallProgress,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "OverallProgress"
+    )
+
+    ElevatedCard(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (uploadedCount == totalCount) "Upload complete" else "Uploading books...",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = "${(overallProgress * 100).toInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            LinearProgressIndicator(
+                progress = { animatedProgress },
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Uploaded $uploadedCount of $totalCount files",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                )
+                if (uploadingItems.isNotEmpty()) {
+                    Text(
+                        text = uploadingItems.first().title,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false).padding(start = 16.dp),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val QueueFadeInSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow
+)
+
+private val QueueFadeOutSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMedium
+)
+
+private val QueuePlacementSpec = spring<IntOffset>(
+    dampingRatio = Spring.DampingRatioLowBouncy,
+    stiffness = Spring.StiffnessMediumLow
+)

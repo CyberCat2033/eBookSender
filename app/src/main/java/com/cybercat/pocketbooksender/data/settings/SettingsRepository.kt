@@ -21,6 +21,11 @@ class SettingsRepository @Inject constructor(
     val settings: Flow<AppSettings> = context.settingsDataStore.data.map { preferences ->
         AppSettings(
             rootPath = preferences[ROOT_PATH] ?: "/mnt/ext1",
+            defaultProgrammingTag = preferences[DEFAULT_PROGRAMMING_TAG] ?: "Untagged",
+            defaultMangaSeries = preferences[DEFAULT_MANGA_SERIES] ?: "Unknown_Series",
+            bookFileNameTemplate = preferences[BOOK_FILE_NAME_TEMPLATE] ?: "{title}",
+            programmingFileNameTemplate = preferences[PROGRAMMING_FILE_NAME_TEMPLATE] ?: "{title}",
+            mangaFileNameTemplate = preferences[MANGA_FILE_NAME_TEMPLATE] ?: "{volume}",
             useDynamicColor = preferences[USE_DYNAMIC_COLOR] ?: true,
         )
     }
@@ -37,8 +42,43 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setDefaultProgrammingTag(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[DEFAULT_PROGRAMMING_TAG] = value.ifBlank { "Untagged" }
+        }
+    }
+
+    suspend fun setDefaultMangaSeries(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[DEFAULT_MANGA_SERIES] = value.ifBlank { "Unknown_Series" }
+        }
+    }
+
+    suspend fun setBookFileNameTemplate(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[BOOK_FILE_NAME_TEMPLATE] = value.ifBlank { "{title}" }
+        }
+    }
+
+    suspend fun setProgrammingFileNameTemplate(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[PROGRAMMING_FILE_NAME_TEMPLATE] = value.ifBlank { "{title}" }
+        }
+    }
+
+    suspend fun setMangaFileNameTemplate(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[MANGA_FILE_NAME_TEMPLATE] = value.ifBlank { "{volume}" }
+        }
+    }
+
     private companion object {
         val ROOT_PATH = stringPreferencesKey("root_path")
+        val DEFAULT_PROGRAMMING_TAG = stringPreferencesKey("default_programming_tag")
+        val DEFAULT_MANGA_SERIES = stringPreferencesKey("default_manga_series")
+        val BOOK_FILE_NAME_TEMPLATE = stringPreferencesKey("book_file_name_template")
+        val PROGRAMMING_FILE_NAME_TEMPLATE = stringPreferencesKey("programming_file_name_template")
+        val MANGA_FILE_NAME_TEMPLATE = stringPreferencesKey("manga_file_name_template")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
     }
 }

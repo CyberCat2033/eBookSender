@@ -36,6 +36,28 @@ object DatabaseModule {
         }
     }
 
+    private val Migration2To3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `manga_series_bookmarks` (
+                    `sourceId` TEXT NOT NULL,
+                    `seriesId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `coverUrl` TEXT,
+                    `description` TEXT,
+                    `favorite` INTEGER NOT NULL,
+                    `subscribed` INTEGER NOT NULL,
+                    `addedAtMillis` INTEGER NOT NULL,
+                    `lastOpenedAtMillis` INTEGER NOT NULL,
+                    `lastCheckedAtMillis` INTEGER,
+                    PRIMARY KEY(`sourceId`, `seriesId`)
+                )
+                """.trimIndent(),
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -46,7 +68,7 @@ object DatabaseModule {
             PocketBookSenderDatabase::class.java,
             "pocketbook_sender.db",
         )
-            .addMigrations(Migration1To2)
+            .addMigrations(Migration1To2, Migration2To3)
             .build()
 
     @Provides
@@ -61,4 +83,8 @@ object DatabaseModule {
     @Provides
     fun provideMangaChapterHistoryDao(database: PocketBookSenderDatabase) =
         database.mangaChapterHistoryDao()
+
+    @Provides
+    fun provideMangaSeriesBookmarkDao(database: PocketBookSenderDatabase) =
+        database.mangaSeriesBookmarkDao()
 }
