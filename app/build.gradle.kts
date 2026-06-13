@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,23 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.isFile) {
+        localPropertiesFile.inputStream().use(::load)
+    }
+}
+
+fun releaseSigningProperty(name: String): String? =
+    localProperties.getProperty(name)
+        ?: providers.gradleProperty(name).orNull
+        ?: providers.environmentVariable(name).orNull
+
+val releaseStoreFile = releaseSigningProperty("RELEASE_STORE_FILE") ?: "release.keystore"
+val releaseStorePassword = releaseSigningProperty("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningProperty("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningProperty("RELEASE_KEY_PASSWORD")
 
 android {
     namespace = "com.cybercat.pocketbooksender"
@@ -25,10 +44,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("RELEASE_STORE_FILE") ?: "../release.keystore")
-            storePassword = System.getenv("RELEASE_STORE_PASSWORD")
-            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "pocketbooksender"
-            keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            storeFile = rootProject.file(releaseStoreFile)
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
         }
     }
 

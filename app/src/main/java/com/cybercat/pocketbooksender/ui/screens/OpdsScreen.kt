@@ -216,7 +216,9 @@ fun OpdsScreen(
         },
         floatingActionButton = {
             AnimatedVisibility(
-                visible = webMode == WebContentMode.Manga && selectedMangaChapterCount > 0,
+                visible = webMode == WebContentMode.Manga &&
+                    selectedMangaChapterCount > 0 &&
+                    !mangaState.isDownloading,
                 enter = fadeIn() + slideInVertically { height -> height },
                 exit = fadeOut() + slideOutVertically { height -> height },
             ) {

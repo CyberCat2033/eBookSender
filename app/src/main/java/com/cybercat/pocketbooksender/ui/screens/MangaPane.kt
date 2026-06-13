@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,7 +29,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Image
@@ -62,10 +60,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -77,15 +75,14 @@ import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.ui.MangaUiState
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import org.json.JSONArray
+import java.net.URLEncoder
 
 @Composable
 fun MangaPane(
@@ -122,138 +119,139 @@ fun MangaPane(
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier
-            .fillMaxSize()
-            .pointerInput(state.chapters, state.isDownloading) {
-                if (state.isDownloading || state.chapters.isEmpty()) return@pointerInput
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(state.chapters, state.isDownloading) {
+                    if (state.isDownloading || state.chapters.isEmpty()) return@pointerInput
 
-                coroutineScope {
-                    var selectionActive = false
-                    var targetSelected = true
-                    var currentY = 0f
-                    var anchorIndex: Int? = null
-                    var baselineSelectedIds = emptySet<String>()
-                    var autoScrollJob: Job? = null
-                    val appliedSelectedById = mutableMapOf<String, Boolean>()
+                    coroutineScope {
+                        var selectionActive = false
+                        var targetSelected = true
+                        var currentY = 0f
+                        var anchorIndex: Int? = null
+                        var baselineSelectedIds = emptySet<String>()
+                        var autoScrollJob: Job? = null
+                        val appliedSelectedById = mutableMapOf<String, Boolean>()
 
-                    fun chapterTargetAt(y: Float): ChapterPointerTarget? {
-                        val pointerY = y.toInt()
-                        return listState.layoutInfo.visibleItemsInfo
-                            .firstOrNull { item ->
-                                pointerY >= item.offset && pointerY <= item.offset + item.size
-                            }
-                            ?.key
-                            ?.let { key -> chapterTargets[key] }
-                    }
+                        fun chapterTargetAt(y: Float): ChapterPointerTarget? {
+                            val pointerY = y.toInt()
+                            return listState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { item ->
+                                    pointerY >= item.offset && pointerY <= item.offset + item.size
+                                }
+                                ?.key
+                                ?.let { key -> chapterTargets[key] }
+                        }
 
-                    fun applySelectionAt(y: Float) {
-                        val target = chapterTargetAt(y) ?: return
-                        val anchor = anchorIndex ?: target.index
-                        val startIndex = anchor.coerceAtMost(target.index)
-                        val endIndex = anchor.coerceAtLeast(target.index)
+                        fun applySelectionAt(y: Float) {
+                            val target = chapterTargetAt(y) ?: return
+                            val anchor = anchorIndex ?: target.index
+                            val startIndex = anchor.coerceAtMost(target.index)
+                            val endIndex = anchor.coerceAtLeast(target.index)
 
-                        state.chapters.forEachIndexed { index, chapter ->
-                            val desiredSelected = if (index in startIndex..endIndex) {
-                                targetSelected
-                            } else {
-                                chapter.chapterId in baselineSelectedIds
-                            }
-                            val currentSelected = appliedSelectedById[chapter.chapterId]
-                                ?: (chapter.chapterId in baselineSelectedIds)
-                            if (currentSelected != desiredSelected) {
-                                appliedSelectedById[chapter.chapterId] = desiredSelected
-                                onToggleChapterState.value(chapter.chapterId, desiredSelected)
+                            state.chapters.forEachIndexed { index, chapter ->
+                                val desiredSelected = if (index in startIndex..endIndex) {
+                                    targetSelected
+                                } else {
+                                    chapter.chapterId in baselineSelectedIds
+                                }
+                                val currentSelected = appliedSelectedById[chapter.chapterId]
+                                    ?: (chapter.chapterId in baselineSelectedIds)
+                                if (currentSelected != desiredSelected) {
+                                    appliedSelectedById[chapter.chapterId] = desiredSelected
+                                    onToggleChapterState.value(chapter.chapterId, desiredSelected)
+                                }
                             }
                         }
-                    }
 
-                    fun autoScrollDelta(): Float {
-                        val edgeSize = 84.dp.toPx()
-                        val viewportHeight = size.height.toFloat()
-                        if (viewportHeight <= 0f) return 0f
+                        fun autoScrollDelta(): Float {
+                            val edgeSize = 84.dp.toPx()
+                            val viewportHeight = size.height.toFloat()
+                            if (viewportHeight <= 0f) return 0f
 
-                        return when {
-                            currentY < edgeSize -> {
-                                val distance = edgeSize - currentY
-                                val ratio = distance / edgeSize
-                                val maxSpeed = 120f
-                                val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
-                                -speed
+                            return when {
+                                currentY < edgeSize -> {
+                                    val distance = edgeSize - currentY
+                                    val ratio = distance / edgeSize
+                                    val maxSpeed = 120f
+                                    val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
+                                    -speed
+                                }
+                                currentY > viewportHeight - edgeSize -> {
+                                    val distance = currentY - (viewportHeight - edgeSize)
+                                    val ratio = distance / edgeSize
+                                    val maxSpeed = 120f
+                                    val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
+                                    speed
+                                }
+                                else -> 0f
                             }
-                            currentY > viewportHeight - edgeSize -> {
-                                val distance = currentY - (viewportHeight - edgeSize)
-                                val ratio = distance / edgeSize
-                                val maxSpeed = 120f
-                                val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
-                                speed
-                            }
-                            else -> 0f
                         }
-                    }
 
-                    fun startAutoScroll() {
-                        autoScrollJob?.cancel()
-                        autoScrollJob = launch {
-                            while (isActive) {
-                                val delta = autoScrollDelta()
-                                if (delta != 0f) {
-                                    listState.scrollBy(delta)
+                        fun startAutoScroll() {
+                            autoScrollJob?.cancel()
+                            autoScrollJob = launch {
+                                while (isActive) {
+                                    val delta = autoScrollDelta()
+                                    if (delta != 0f) {
+                                        listState.scrollBy(delta)
+                                        applySelectionAt(currentY)
+                                    }
+                                    delay(16L)
+                                }
+                            }
+                        }
+
+                        fun stopSelection() {
+                            selectionActive = false
+                            autoScrollJob?.cancel()
+                            autoScrollJob = null
+                            anchorIndex = null
+                            baselineSelectedIds = emptySet()
+                            appliedSelectedById.clear()
+                        }
+
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                currentY = offset.y
+                                val target = chapterTargetAt(currentY)
+                                if (target == null) {
+                                    stopSelection()
+                                } else {
+                                    selectionActive = true
+                                    baselineSelectedIds = selectedChapterIdsState.value
+                                    targetSelected = target.chapterId !in baselineSelectedIds
+                                    anchorIndex = target.index
+                                    appliedSelectedById.clear()
+                                    applySelectionAt(currentY)
+                                    startAutoScroll()
+                                }
+                            },
+                            onDrag = { change, _ ->
+                                currentY = change.position.y
+                                if (selectionActive) {
+                                    change.consume()
                                     applySelectionAt(currentY)
                                 }
-                                delay(16L)
-                            }
-                        }
+                            },
+                            onDragEnd = { stopSelection() },
+                            onDragCancel = { stopSelection() },
+                        )
                     }
-
-                    fun stopSelection() {
-                        selectionActive = false
-                        autoScrollJob?.cancel()
-                        autoScrollJob = null
-                        anchorIndex = null
-                        baselineSelectedIds = emptySet()
-                        appliedSelectedById.clear()
-                    }
-
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { offset ->
-                            currentY = offset.y
-                            val target = chapterTargetAt(currentY)
-                            if (target == null) {
-                                stopSelection()
-                            } else {
-                                selectionActive = true
-                                baselineSelectedIds = selectedChapterIdsState.value
-                                targetSelected = target.chapterId !in baselineSelectedIds
-                                anchorIndex = target.index
-                                appliedSelectedById.clear()
-                                applySelectionAt(currentY)
-                                startAutoScroll()
-                            }
-                        },
-                        onDrag = { change, _ ->
-                            currentY = change.position.y
-                            if (selectionActive) {
-                                change.consume()
-                                applySelectionAt(currentY)
-                            }
-                        },
-                        onDragEnd = { stopSelection() },
-                        onDragCancel = { stopSelection() },
-                    )
-                }
-            },
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        item {
-            MangaSearchPanel(
-                state = state,
-                onSearchChanged = onSearchChanged,
-                onSearch = onSearch,
-                onOpenBrowser = onOpenBrowser,
-            )
-        }
+                },
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item {
+                MangaSearchPanel(
+                    state = state,
+                    onSearchChanged = onSearchChanged,
+                    onSearch = onSearch,
+                    onOpenBrowser = onOpenBrowser,
+                )
+            }
 
         if (state.savedSeries.isNotEmpty()) {
             item {
@@ -267,16 +265,6 @@ fun MangaPane(
             }
         }
 
-        if (state.browserVisible) {
-            item {
-                MangaBrowserCard(
-                    url = state.browserUrl,
-                    currentUrl = state.currentWebUrl,
-                    onClose = onCloseBrowser,
-                    onWebPageLoaded = onWebPageLoaded,
-                )
-            }
-        }
 
         state.errorMessage?.let { message ->
             item {
@@ -320,7 +308,6 @@ fun MangaPane(
                         chapter.stableKey !in state.downloadedStableKeys
                     },
                     isDownloading = state.isDownloading,
-                    downloadProgressText = state.downloadProgressText,
                     onSetFavorite = onSetSeriesFavorite,
                     onSetSubscribed = onSetSeriesSubscribed,
                 )
@@ -358,9 +345,29 @@ fun MangaPane(
             }
         }
 
-        item {
-            Spacer(Modifier.height(8.dp))
+            item {
+                Spacer(Modifier.height(if (state.isDownloading) 104.dp else 8.dp))
+            }
         }
+
+        if (state.isDownloading) {
+            MangaDownloadProgressOverlay(
+                progressText = state.downloadProgressText,
+                selectedCount = state.selectedChapterIds.size,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp),
+            )
+        }
+    }
+
+    if (state.browserVisible) {
+        MangaBrowserCard(
+            url = state.browserUrl,
+            currentUrl = state.currentWebUrl,
+            onClose = onCloseBrowser,
+            onWebPageLoaded = onWebPageLoaded,
+        )
     }
 }
 
@@ -491,6 +498,66 @@ private fun MangaLoginButton(
 }
 
 @Composable
+private fun MangaDownloadProgressOverlay(
+    progressText: String?,
+    selectedCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val detailText = progressText ?: when (selectedCount) {
+        0 -> "Preparing chapters"
+        1 -> "Preparing 1 chapter"
+        else -> "Preparing $selectedCount chapters"
+    }
+    val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .widthIn(max = 560.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = contentColor,
+        tonalElevation = 8.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = contentColor,
+                    strokeWidth = 3.dp,
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "Downloading manga",
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = detailText,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            LinearProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
+                color = contentColor,
+                trackColor = contentColor.copy(alpha = 0.24f),
+            )
+        }
+    }
+}
+
+@Composable
 private fun SavedMangaPanel(
     savedSeries: List<MangaSeriesBookmark>,
     isCheckingSubscriptions: Boolean,
@@ -561,66 +628,191 @@ private fun MangaBrowserCard(
     onClose: () -> Unit,
     onWebPageLoaded: (String, String) -> Unit,
 ) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 14.dp, top = 10.dp, end = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var showLoginDialog by remember { mutableStateOf(false) }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        androidx.compose.material3.Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, top = 16.dp, end = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = currentUrl ?: url,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    TextButton(onClick = { showLoginDialog = true }) {
+                        Text("Login")
+                    }
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Close browser")
+                    }
+                }
+
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    factory = { context ->
+                        WebView(context).apply {
+                            webViewRef = this
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.databaseEnabled = true
+                            settings.loadsImagesAutomatically = true
+                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                            settings.useWideViewPort = true
+                            settings.loadWithOverviewMode = true
+                            settings.userAgentString = com.cybercat.pocketbooksender.data.manga.ComxMangaAdapter.UserAgent
+                            CookieManager.getInstance().setAcceptCookie(true)
+                            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                            webViewClient = object : WebViewClient() {
+                                override fun onPageFinished(view: WebView, loadedUrl: String) {
+                                    super.onPageFinished(view, loadedUrl)
+                                    CookieManager.getInstance().flush()
+
+                                    view.postDelayed(
+                                        {
+                                            view.extractHtml { html ->
+                                                onWebPageLoaded(loadedUrl, html)
+                                            }
+                                        },
+                                        HtmlExtractDelayMillis,
+                                    )
+                                }
+                            }
+                            loadUrl(url)
+                        }
+                    },
+                    update = { webView ->
+                        if (url.isNotBlank() && webView.url != url) {
+                            webView.loadUrl(url)
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    if (showLoginDialog) {
+        ComxNativeLoginDialog(
+            onDismiss = { showLoginDialog = false },
+            onSubmit = { loginName, loginPassword, doNotRemember ->
+                val targetUrl = webViewRef?.url
+                    ?.takeIf { loadedUrl -> loadedUrl.startsWith(com.cybercat.pocketbooksender.data.manga.ComxMangaAdapter.HomeUrl) }
+                    ?: com.cybercat.pocketbooksender.data.manga.ComxMangaAdapter.HomeUrl
+                webViewRef?.postUrl(
+                    targetUrl,
+                    buildComxLoginPostBody(loginName, loginPassword, doNotRemember),
+                )
+                showLoginDialog = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun ComxNativeLoginDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String, String, Boolean) -> Unit,
+) {
+    var loginName by remember { mutableStateOf("") }
+    var loginPassword by remember { mutableStateOf("") }
+    var doNotRemember by remember { mutableStateOf(false) }
+    val canSubmit = loginName.isNotBlank() && loginPassword.isNotBlank()
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 420.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = currentUrl ?: url,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    text = "Com-X login",
+                    style = MaterialTheme.typography.titleMedium,
                 )
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Close browser")
+                OutlinedTextField(
+                    value = loginName,
+                    onValueChange = { loginName = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Username") },
+                )
+                OutlinedTextField(
+                    value = loginPassword,
+                    onValueChange = { loginPassword = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Password") },
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = doNotRemember,
+                        onCheckedChange = { doNotRemember = it },
+                    )
+                    Text("Do not remember me")
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { onSubmit(loginName.trim(), loginPassword, doNotRemember) },
+                        enabled = canSubmit,
+                    ) {
+                        Text("Login")
+                    }
                 }
             }
-
-            AndroidView(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 360.dp, max = 520.dp),
-                factory = { context ->
-                    WebView(context).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.databaseEnabled = true
-                        settings.loadsImagesAutomatically = true
-                        settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                        CookieManager.getInstance().setAcceptCookie(true)
-                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageFinished(view: WebView, loadedUrl: String) {
-                                super.onPageFinished(view, loadedUrl)
-                                CookieManager.getInstance().flush()
-                                view.postDelayed(
-                                    {
-                                        view.extractHtml { html ->
-                                            onWebPageLoaded(loadedUrl, html)
-                                        }
-                                    },
-                                    HtmlExtractDelayMillis,
-                                )
-                            }
-                        }
-                        loadUrl(url)
-                    }
-                },
-                update = { webView ->
-                    if (url.isNotBlank() && webView.url != url) {
-                        webView.loadUrl(url)
-                    }
-                },
-            )
         }
     }
 }
+
+private fun buildComxLoginPostBody(
+    loginName: String,
+    loginPassword: String,
+    doNotRemember: Boolean,
+): ByteArray {
+    val fields = buildList {
+        add("login_name" to loginName)
+        add("login_password" to loginPassword)
+        if (doNotRemember) add("login_not_save" to "1")
+        add("login" to "submit")
+    }
+    return fields.joinToString("&") { (key, value) ->
+        "${key.formEncode()}=${value.formEncode()}"
+    }.toByteArray(Charsets.UTF_8)
+}
+
+private fun String.formEncode(): String =
+    URLEncoder.encode(this, Charsets.UTF_8.name())
 
 @Composable
 private fun MangaSearchResultCard(
@@ -684,7 +876,6 @@ private fun SelectedSeriesCard(
     selectedCount: Int,
     newCount: Int,
     isDownloading: Boolean,
-    downloadProgressText: String?,
     onSetFavorite: (Boolean) -> Unit,
     onSetSubscribed: (Boolean) -> Unit,
 ) {
@@ -769,21 +960,6 @@ private fun SelectedSeriesCard(
                     Spacer(Modifier.width(8.dp))
                     Text(if (isSubscribed) "Subscribed" else "Subscribe")
                 }
-            }
-
-
-
-            if (isDownloading) {
-                downloadProgressText?.let { text ->
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
     }
@@ -975,7 +1151,6 @@ private fun chapterItemKey(chapter: MangaChapter): String =
 
 internal fun MangaUiState.selectedSeriesItemIndex(): Int {
     var index = 1 // Search panel is always the first list item.
-    if (browserVisible) index++
     if (errorMessage != null) index++
     if (statusMessage != null) index++
     if (isLoading) index++

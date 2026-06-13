@@ -28,11 +28,11 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         MangaSourceCapabilities(authMode = MangaAuthMode.WebLogin)
 
     override suspend fun authState(): MangaAuthState = withContext(Dispatchers.IO) {
-        val cookies = CookieManager.getInstance().getCookie(HomeUrl)
-        if (cookies.isNullOrBlank()) {
-            MangaAuthState.Required
-        } else {
+        val cookies = cookiesFor(HomeUrl)
+        if (cookies?.hasAuthenticatedCookies() == true) {
             MangaAuthState.Authenticated(accountLabel = "WebView session")
+        } else {
+            MangaAuthState.Required
         }
     }
 
@@ -743,6 +743,16 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         return cookies.joinToString("; ").takeIf { it.isNotBlank() }
     }
 
+    private fun String.hasAuthenticatedCookies(): Boolean {
+        val cookieNames = split(';')
+            .map { cookie -> cookie.substringBefore('=').trim().lowercase() }
+            .filter { name -> name.isNotBlank() }
+            .toSet()
+
+        return DleUserIdCookieName in cookieNames &&
+            DlePasswordCookieName in cookieNames
+    }
+
     private fun HttpURLConnection.readTextBody(): String {
         val stream = if (responseCode in 200..399) {
             inputStream
@@ -1074,7 +1084,7 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         private const val MaxSmallTextBytes = 4096L
         private const val MaxErrorSnippetLength = 180
 
-        private const val UserAgent =
+        const val UserAgent =
             "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36"
 
@@ -1111,5 +1121,7 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         private val GuardTokenRegex = Regex("""token:\s*["']([^"']+)["']""")
         private val ImageUrlRegex =
             Regex("""https?:\\?/\\?/[^\s"'<>]+?\.(?:jpe?g|png|webp|gif)(?:\?[^\s"'<>]*)?""")
+        private const val DleUserIdCookieName = "dle_user_id"
+        private const val DlePasswordCookieName = "dle_password"
     }
 }

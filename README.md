@@ -88,13 +88,15 @@ Important packages:
   - add the downloaded file to the same upload queue as local files;
   - tolerate duplicate OPDS entry ids from catalogs such as Flibusta by generating unique list keys locally.
 - The `Web` tab also contains native Com-X manga search/download:
-  - the embedded browser is only for login/session cookies;
+  - the embedded browser is only for login/session cookies and closes automatically after successful login cookie detection;
+  - Com-X login state requires DLE auth cookies instead of treating any guest/session cookie as authenticated;
   - series pages are fetched once per open and cached briefly in memory to avoid duplicate network + HTML parse work;
   - search results are cached briefly in memory for fast repeat/back flows;
   - favorite and subscribed manga series are stored in Room;
   - subscribed manga can be checked for new chapters, opening the first updated series and selecting new chapters automatically;
   - selected series details show the latest downloaded chapter and best-effort latest read chapter from the PocketBook catalog when available, with the static download button removed;
-  - a floating action button (FAB) is displayed at the bottom of the screen at all times when at least one manga chapter is selected;
+  - a floating action button (FAB) is displayed at the bottom of the screen when at least one manga chapter is selected and no download is active;
+  - active manga download progress is shown as a persistent bottom overlay so it stays visible while scrolling through chapter lists;
   - search results and chapter rows are clickable across the full card/row, not only on the trailing button/checkbox;
   - chapter rows support long-press drag selection with edge autoscroll;
   - dragging back shrinks the live selection range and restores chapters outside the range to their pre-gesture state;
@@ -119,7 +121,7 @@ CBR handling:
   - default Manga series
   - Books/Programming/Manga filename templates
   - dynamic color toggle
-- Launcher icon is a custom adaptive icon with foreground and monochrome layers for Android themed icons.
+- Launcher icon is a custom adaptive icon with foreground and monochrome layers for Android themed icons, and Android 12+ launcher colors are backed by system Material colors.
 - Settings screen is scrollable on short screens.
 
 ## Build Requirements
@@ -161,6 +163,17 @@ Install on an attached phone:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+Release signing is read from ignored local configuration or environment, not from tracked Gradle files. Add these values to `local.properties`, pass them as Gradle properties, or export matching environment variables:
+
+```properties
+RELEASE_STORE_FILE=release.keystore
+RELEASE_STORE_PASSWORD=<store password>
+RELEASE_KEY_ALIAS=<key alias>
+RELEASE_KEY_PASSWORD=<key password>
+```
+
+`local.properties` and `*.keystore` are ignored by git. Keep real passwords and keystore files out of commits.
+
 ## Verified Builds & Verification
 
 Both debug and optimized/signed release versions are verified:
@@ -173,7 +186,8 @@ Both debug and optimized/signed release versions are verified:
 ```
 
 ### Release Build (Optimized & Signed)
-Builds with R8 full minification and resource shrinking enabled, signed with a valid release keystore (`release.keystore`), and optimized with Proguard rules:
+Builds with R8 full minification and resource shrinking enabled, signed with a valid release keystore configured through ignored release signing properties, and optimized with Proguard rules:
+
 ```sh
 ./gradlew :app:assembleRelease
 # APK size: ~2.3 MB (significant reduction from 43 MB via R8/proguard optimization!)

@@ -513,15 +513,25 @@ class SenderViewModel @Inject constructor(
         refreshMangaAuthState()
     }
 
-    private fun refreshMangaAuthState() {
+    private fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) {
         viewModelScope.launch {
             val sourceId = _state.value.manga.selectedSourceId
             val authState = mangaRepository.authState(sourceId)
             val isAuth = authState is MangaAuthState.Authenticated || authState is MangaAuthState.NotRequired
             _state.update { state ->
+                val closeBrowser = closeBrowserOnAuthenticated &&
+                    authState is MangaAuthState.Authenticated &&
+                    state.manga.browserVisible &&
+                    !state.manga.isAuthorized
                 state.copy(
                     manga = state.manga.copy(
-                        isAuthorized = isAuth
+                        isAuthorized = isAuth,
+                        browserVisible = if (closeBrowser) false else state.manga.browserVisible,
+                        statusMessage = if (closeBrowser) {
+                            "Com-X login complete"
+                        } else {
+                            state.manga.statusMessage
+                        },
                     )
                 )
             }
@@ -572,7 +582,7 @@ class SenderViewModel @Inject constructor(
                 ),
             )
         }
-        refreshMangaAuthState()
+        refreshMangaAuthState(closeBrowserOnAuthenticated = true)
     }
 
     fun searchManga() {
