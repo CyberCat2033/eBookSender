@@ -40,7 +40,7 @@ Important packages:
   - `pdf` -> `Documents`
   - `cbr`, `cbz` -> `Manga`
 - Treat wrapped book names like `Book_Name.fb2.zip` by the inner book extension instead of plain `zip`.
-- Extract metadata from supported files, including wrapped `fb2.zip` books.
+- Extract metadata from supported files, including wrapped `fb2.zip` books. For EPUB and FB2, extracts details such as title, authors, series, series index (book number), publisher, and publication year.
 - Show previews in the queue when extraction is available:
   - FB2 embedded cover.
   - EPUB cover image from OPF/manifest, or a fallback large image if the book has no explicit cover metadata.
@@ -54,7 +54,7 @@ Important packages:
   - Books default: `{title}`
   - Documents default: `{title}`
   - Manga default: `{volume}`
-  - Supported tokens: `{title}`, `{author}`, `{tag}`, `{series}`, `{volume}`.
+  - Supported tokens: `{title}`, `{author}`, `{tag}`, `{series}`, `{volume}`, `{year}`, `{index}`, `{publisher}`.
 - Edit `Documents` tags directly in queue items. Suggestions are loaded only from PocketBook folders under `/Documents`.
 - Edit Manga series directly in queue items. Suggestions are loaded only from PocketBook folders under `/Manga`.
 - Per-item category/tag/series editors are collapsed by default. Queue items show only a compact type summary until expanded.
@@ -122,12 +122,25 @@ CBR handling:
 - Upload over FTP using temp file + rename:
   - `.Title.epub.uploading`
   - `Title.epub`
+- Folder renaming on the device is validated before execution:
+  - Checks if the source folder exists on the device (using CWD and PWD). If it does not exist (e.g. for a new user), the rename operation is skipped on the device and treated as successful, allowing new folders to be created dynamically on the fly during upload.
+  - Detects name conflict errors (like FTP `550`) and presents a user-friendly error message rather than a generic failure alert.
 - Persist settings in DataStore:
   - root path
   - default Documents tag
   - default Manga series
   - Books/Documents/Manga filename templates
   - dynamic color toggle
+  - warn on disconnected folder rename toggle
+- Disconnected folder rename warnings:
+  - Changing folder settings while disconnected displays a warning dialog prompting the user to either force save locally or cancel.
+  - This warning can be disabled globally from the interface settings menu.
+- Full `BackHandler` support in the Web (OPDS/Manga) tab to prevent unexpected app closes:
+  - Dismisses the login browser if open.
+  - Clears manga chapter selection if active.
+  - Exits manga series detail view to return to list.
+  - Clears manga search results.
+  - Pops catalog browsing history levels.
 - Launcher icon is a custom adaptive icon with foreground and monochrome layers for Android themed icons, and Android 12+ launcher colors are backed by system Material colors.
 - Settings screen is scrollable on short screens.
 

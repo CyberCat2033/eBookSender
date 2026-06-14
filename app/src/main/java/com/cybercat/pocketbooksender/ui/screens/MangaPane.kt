@@ -13,6 +13,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image as ComposeImage
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -36,6 +38,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Favorite
@@ -297,16 +300,12 @@ fun MangaPane(
             }
 
 
-        state.errorMessage?.let { message ->
-            item(key = "manga-error") {
-                MangaStatusMessage(text = message, isError = true)
-            }
+        item(key = "manga-error-host") {
+            MangaStatusMessageHost(text = state.errorMessage, isError = true)
         }
 
-        state.statusMessage?.let { message ->
-            item(key = "manga-status") {
-                MangaStatusMessage(text = message, isError = false)
-            }
+        item(key = "manga-status-host") {
+            MangaStatusMessageHost(text = state.statusMessage, isError = false)
         }
 
         if (state.isLoading) {
@@ -1315,23 +1314,66 @@ private fun MangaStatusMessage(
     isError: Boolean,
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         shape = MaterialTheme.shapes.medium,
         color = if (isError) {
             MaterialTheme.colorScheme.errorContainer
         } else {
             MaterialTheme.colorScheme.secondaryContainer
         },
+        tonalElevation = 2.dp,
     ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(14.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isError) {
-                MaterialTheme.colorScheme.onErrorContainer
-            } else {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            },
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = if (isError) Icons.Outlined.Close else Icons.Outlined.CheckCircle,
+                contentDescription = null,
+                tint = if (isError) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                },
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isError) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MangaStatusMessageHost(
+    text: String?,
+    isError: Boolean,
+) {
+    var lastText by remember { mutableStateOf(text.orEmpty()) }
+
+    LaunchedEffect(text) {
+        if (!text.isNullOrBlank()) {
+            lastText = text
+        }
+    }
+
+    AnimatedVisibility(
+        visible = text != null,
+        enter = fadeIn() + expandVertically() + slideInVertically { height -> -height / 4 },
+        exit = fadeOut() + shrinkVertically() + slideOutVertically { height -> -height / 4 },
+    ) {
+        MangaStatusMessage(
+            text = lastText,
+            isError = isError,
         )
     }
 }

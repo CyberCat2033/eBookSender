@@ -40,12 +40,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import com.cybercat.pocketbooksender.ui.FolderType
+import com.cybercat.pocketbooksender.ui.PendingRename
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -237,9 +241,47 @@ fun SettingsScreen(
     onClearDownloadCache: () -> Unit,
     onClearStatusMessage: () -> Unit,
     onThemeChanged: (AppTheme) -> Unit,
+    onWarnOnDisconnectedRenameChanged: (Boolean) -> Unit,
+    onConfirmPendingRename: () -> Unit,
+    onCancelPendingRename: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+
+    state.pendingRename?.let { pending ->
+        AlertDialog(
+            onDismissRequest = onCancelPendingRename,
+            title = { Text("Device Disconnected") },
+            text = {
+                val folderDescription = when (pending.folderType) {
+                    FolderType.Books -> "Books"
+                    FolderType.Documents -> "Documents"
+                    FolderType.Manga -> "Manga"
+                }
+                Text("You are not connected to the device. Change the local setting for '$folderDescription' folder to '${pending.newName}' anyway?\n\n(This will not rename the directory on the device.)")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.CONFIRM)
+                        onConfirmPendingRename()
+                    }
+                ) {
+                    Text("Change anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        onCancelPendingRename()
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -428,6 +470,23 @@ fun SettingsScreen(
                         onCheckedChange = {
                             view.performHapticIfAllowed(context, true, HapticFeedbackConstants.VIRTUAL_KEY)
                             onHapticFeedbackEnabledChanged(it)
+                        }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Warn on disconnected rename", style = MaterialTheme.typography.bodyLarge)
+                        Text("Warn when changing folder names while disconnected", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = state.settings.warnOnDisconnectedRename,
+                        onCheckedChange = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onWarnOnDisconnectedRenameChanged(it)
                         }
                     )
                 }

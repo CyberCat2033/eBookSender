@@ -33,6 +33,7 @@ class SettingsRepository @Inject constructor(
             useDynamicColor = preferences[USE_DYNAMIC_COLOR] ?: true,
             enableHaptics = preferences[ENABLE_HAPTICS] ?: true,
             theme = preferences[THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() } ?: AppTheme.System,
+            warnOnDisconnectedRename = preferences[WARN_ON_DISCONNECTED_RENAME] ?: true,
         )
     }
 
@@ -75,6 +76,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setTheme(value: AppTheme) {
         context.settingsDataStore.edit { preferences ->
             preferences[THEME] = value.name
+        }
+    }
+
+    suspend fun setWarnOnDisconnectedRename(value: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[WARN_ON_DISCONNECTED_RENAME] = value
         }
     }
 
@@ -121,5 +128,6 @@ class SettingsRepository @Inject constructor(
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")
         val THEME = stringPreferencesKey("theme")
+        val WARN_ON_DISCONNECTED_RENAME = booleanPreferencesKey("warn_on_disconnected_rename")
     }
 }

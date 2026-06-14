@@ -134,17 +134,26 @@ fun OpdsScreen(
     val webMode = state.webMode
     val selectedMangaChapterCount = mangaState.selectedChapterIds.size
     val mangaSelectionActive = webMode == WebContentMode.Manga && selectedMangaChapterCount > 0
+    val mangaSearchActive = webMode == WebContentMode.Manga && mangaState.searchResults.isNotEmpty()
 
     BackHandler(enabled = webMode == WebContentMode.Opds && state.canGoBack) {
         onBack()
     }
 
-    BackHandler(enabled = webMode == WebContentMode.Manga && mangaState.selectedSeries != null) {
+    BackHandler(enabled = webMode == WebContentMode.Manga && mangaState.browserVisible) {
+        onCloseMangaBrowser()
+    }
+
+    BackHandler(enabled = mangaSelectionActive && !mangaState.isDownloading && !mangaState.browserVisible) {
+        onClearMangaChapterSelection()
+    }
+
+    BackHandler(enabled = webMode == WebContentMode.Manga && mangaState.selectedSeries != null && !mangaSelectionActive && !mangaState.browserVisible) {
         onMangaBack()
     }
 
-    BackHandler(enabled = mangaSelectionActive && !mangaState.isDownloading) {
-        onClearMangaChapterSelection()
+    BackHandler(enabled = mangaSearchActive && mangaState.selectedSeries == null && !mangaSelectionActive && !mangaState.browserVisible) {
+        onMangaSearchChanged("")
     }
 
     if (showAddSourceDialog) {

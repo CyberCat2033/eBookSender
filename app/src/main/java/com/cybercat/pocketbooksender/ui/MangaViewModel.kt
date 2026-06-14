@@ -519,20 +519,22 @@ class MangaViewModel @Inject constructor(
             val sourceId = _mangaState.value.selectedSourceId
             val authState = mangaRepository.authState(sourceId)
             val isAuth = authState is MangaAuthState.Authenticated || authState is MangaAuthState.NotRequired
+            var shouldShowLoginSuccess = false
             _mangaState.update { state ->
                 val closeBrowser = closeBrowserOnAuthenticated &&
                     authState is MangaAuthState.Authenticated &&
                     state.browserVisible &&
                     !state.isAuthorized
+                if (closeBrowser) {
+                    shouldShowLoginSuccess = true
+                }
                 state.copy(
                     isAuthorized = isAuth,
                     browserVisible = if (closeBrowser) false else state.browserVisible,
-                    statusMessage = if (closeBrowser) {
-                        "Com-X login complete"
-                    } else {
-                        state.statusMessage
-                    },
                 )
+            }
+            if (shouldShowLoginSuccess) {
+                showMangaStatus("Successfully signed in to com-x.life")
             }
         }
     }

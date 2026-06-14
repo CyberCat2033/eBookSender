@@ -30,12 +30,18 @@ class SettingsViewModel @Inject constructor(
     private val ftpGateway: FtpGateway,
 ) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
+    private val _pendingRename = MutableStateFlow<PendingRename?>(null)
 
     val uiState: StateFlow<SettingsUiState> = combine(
         settingsRepository.settings,
-        _statusMessage
-    ) { settings, status ->
-        SettingsUiState(settings = settings, settingsStatusMessage = status)
+        _statusMessage,
+        _pendingRename
+    ) { settings, status, pending ->
+        SettingsUiState(
+            settings = settings,
+            settingsStatusMessage = status,
+            pendingRename = pending
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -48,46 +54,106 @@ class SettingsViewModel @Inject constructor(
 
     fun setBooksFolderName(value: String) {
         viewModelScope.launch {
-            val oldName = settingsRepository.settings.first().booksFolderName
+            val settings = settingsRepository.settings.first()
+            val oldName = settings.booksFolderName
             val newName = value.ifBlank { "Books" }
             if (oldName != newName) {
-                renameFolderOnDevice(oldName, newName)
-                settingsRepository.setBooksFolderName(newName)
+                val device = connectionManager.connectedDevice.value
+                if (device == null) {
+                    if (settings.warnOnDisconnectedRename) {
+                        _pendingRename.value = PendingRename(FolderType.Books, oldName, newName)
+                    } else {
+                        settingsRepository.setBooksFolderName(newName)
+                    }
+                } else {
+                    if (renameFolderOnDevice(oldName, newName)) {
+                        settingsRepository.setBooksFolderName(newName)
+                    }
+                }
             }
         }
     }
 
     fun setDocumentsFolderName(value: String) {
         viewModelScope.launch {
-            val oldName = settingsRepository.settings.first().documentsFolderName
+            val settings = settingsRepository.settings.first()
+            val oldName = settings.documentsFolderName
             val newName = value.ifBlank { "Documents" }
             if (oldName != newName) {
-                renameFolderOnDevice(oldName, newName)
-                settingsRepository.setDocumentsFolderName(newName)
+                val device = connectionManager.connectedDevice.value
+                if (device == null) {
+                    if (settings.warnOnDisconnectedRename) {
+                        _pendingRename.value = PendingRename(FolderType.Documents, oldName, newName)
+                    } else {
+                        settingsRepository.setDocumentsFolderName(newName)
+                    }
+                } else {
+                    if (renameFolderOnDevice(oldName, newName)) {
+                        settingsRepository.setDocumentsFolderName(newName)
+                    }
+                }
             }
         }
     }
 
     fun setMangaFolderName(value: String) {
         viewModelScope.launch {
-            val oldName = settingsRepository.settings.first().mangaFolderName
+            val settings = settingsRepository.settings.first()
+            val oldName = settings.mangaFolderName
             val newName = value.ifBlank { "Manga" }
             if (oldName != newName) {
-                renameFolderOnDevice(oldName, newName)
-                settingsRepository.setMangaFolderName(newName)
+                val device = connectionManager.connectedDevice.value
+                if (device == null) {
+                    if (settings.warnOnDisconnectedRename) {
+                        _pendingRename.value = PendingRename(FolderType.Manga, oldName, newName)
+                    } else {
+                        settingsRepository.setMangaFolderName(newName)
+                    }
+                } else {
+                    if (renameFolderOnDevice(oldName, newName)) {
+                        settingsRepository.setMangaFolderName(newName)
+                    }
+                }
             }
         }
     }
 
-    private suspend fun renameFolderOnDevice(oldName: String, newName: String) {
-        val device = connectionManager.connectedDevice.value ?: return
-        ftpGateway.rename(device, oldName, newName)
+    fun confirmPendingRename() {
+        val pending = _pendingRename.value ?: return
+        viewModelScope.launch {
+            when (pending.folderType) {
+                FolderType.Books -> settingsRepository.setBooksFolderName(pending.newName)
+                FolderType.Documents -> settingsRepository.setDocumentsFolderName(pending.newName)
+                FolderType.Manga -> settingsRepository.setMangaFolderName(pending.newName)
+            }
+            _pendingRename.value = null
+        }
+    }
+
+    fun cancelPendingRename() {
+        _pendingRename.value = null
+    }
+
+    fun setWarnOnDisconnectedRename(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setWarnOnDisconnectedRename(value) }
+    }
+
+    private suspend fun renameFolderOnDevice(oldName: String, newName: String): Boolean {
+        val device = connectionManager.connectedDevice.value ?: return false
+        return ftpGateway.rename(device, oldName, newName)
             .onSuccess {
                 showTemporaryStatus("Renamed '$oldName' to '$newName' on device")
             }
-            .onFailure {
-                showTemporaryStatus("Could not rename folder on device")
+            .onFailure { error ->
+                val errorMsg = error.message.orEmpty()
+                val statusText = when {
+                    errorMsg.contains("550") || errorMsg.contains("exist", ignoreCase = true) ->
+                        "Could not rename: folder '$newName' already exists"
+                    else -> "Could not rename folder on device: ${error.localizedMessage ?: "unknown error"}"
+                }
+                showTemporaryStatus(statusText)
             }
+            .isSuccess
     }
 
     fun setBookFileNameTemplate(value: String) {

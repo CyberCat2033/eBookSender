@@ -151,8 +151,20 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
         runCatching {
             val normalizedFrom = fromPath.toSafeRelativeFtpPath()
             val normalizedTo = toPath.toSafeRelativeFtpPath()
-            check(client.rename(normalizedFrom, normalizedTo)) {
-                "FTP rename failed from $normalizedFrom to $normalizedTo: ${client.replyString}"
+
+            val pwd = client.printWorkingDirectory()
+            var fromExists = false
+            if (client.changeWorkingDirectory(normalizedFrom)) {
+                fromExists = true
+                if (pwd != null) {
+                    client.changeWorkingDirectory(pwd)
+                }
+            }
+
+            if (fromExists) {
+                check(client.rename(normalizedFrom, normalizedTo)) {
+                    "FTP rename failed from $normalizedFrom to $normalizedTo: ${client.replyString}"
+                }
             }
         }
     }

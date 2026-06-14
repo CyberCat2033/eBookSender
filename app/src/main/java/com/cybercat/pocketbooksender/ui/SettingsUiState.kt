@@ -5,4 +5,17 @@ import com.cybercat.pocketbooksender.model.AppSettings
 data class SettingsUiState(
     val settings: AppSettings = AppSettings(),
     val settingsStatusMessage: String? = null,
+    val pendingRename: PendingRename? = null,
 )
+
+data class PendingRename(
+    val folderType: FolderType,
+    val oldName: String,
+    val newName: String,
+)
+
+enum class FolderType {
+    Books,
+    Documents,
+    Manga,
+}

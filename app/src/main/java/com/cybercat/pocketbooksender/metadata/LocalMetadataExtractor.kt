@@ -70,17 +70,24 @@ class LocalMetadataExtractor @Inject constructor(
     private fun parseFb2(bytes: ByteArray, fallbackTitle: String): BookMetadata {
         val parser = newParser(ByteArrayInputStream(bytes))
         var inTitleInfo = false
+        var inPublishInfo = false
         var inAuthor = false
         var title: String? = null
         var coverId: String? = null
         val authors = mutableListOf<String>()
         val authorParts = mutableListOf<String>()
         var preview: Bitmap? = null
+        
+        var series: String? = null
+        var seriesIndex: String? = null
+        var publisher: String? = null
+        var year: String? = null
 
         while (parser.next() != XmlPullParser.END_DOCUMENT) {
             when (parser.eventType) {
                 XmlPullParser.START_TAG -> when (parser.name) {
                     "title-info" -> inTitleInfo = true
+                    "publish-info" -> inPublishInfo = true
                     "author" -> if (inTitleInfo) {
                         inAuthor = true
                         authorParts.clear()
@@ -88,6 +95,34 @@ class LocalMetadataExtractor @Inject constructor(
                     "book-title" -> if (inTitleInfo) title = parser.nextTextSafe()
                     "first-name", "middle-name", "last-name", "nickname" -> {
                         if (inTitleInfo && inAuthor) authorParts += parser.nextTextSafe()
+                    }
+                    "sequence" -> {
+                        if (inTitleInfo && series == null) {
+                            series = parser.getAttributeValue(null, "name")?.trim()
+                            seriesIndex = parser.getAttributeValue(null, "number")?.trim()
+                        }
+                    }
+                    "publisher" -> {
+                        if (inPublishInfo) {
+                            publisher = parser.nextTextSafe().trim()
+                        }
+                    }
+                    "year" -> {
+                        if (inPublishInfo) {
+                            year = parser.nextTextSafe().trim()
+                        }
+                    }
+                    "date" -> {
+                        val valueAttr = parser.getAttributeValue(null, "value")?.trim()
+                        val dateText = parser.nextTextSafe().trim()
+                        val extracted = valueAttr ?: dateText
+                        val regex = Regex("""\b\d{4}\b""")
+                        val maybeYear = regex.find(extracted)?.value
+                        if (maybeYear != null) {
+                            if (inPublishInfo || (inTitleInfo && year == null)) {
+                                year = maybeYear
+                            }
+                        }
                     }
                     "image" -> if (inTitleInfo && coverId == null) {
                         coverId = parser.getAttributeValue("http://www.w3.org/1999/xlink", "href")
@@ -117,6 +152,7 @@ class LocalMetadataExtractor @Inject constructor(
                         inAuthor = false
                     }
                     "title-info" -> inTitleInfo = false
+                    "publish-info" -> inPublishInfo = false
                 }
             }
         }
@@ -125,6 +161,10 @@ class LocalMetadataExtractor @Inject constructor(
             title = title?.ifBlank { fallbackTitle } ?: fallbackTitle,
             authors = authors.distinct(),
             preview = preview,
+            series = series,
+            seriesIndex = seriesIndex,
+            publisher = publisher,
+            year = year,
         )
     }
 
@@ -186,6 +226,10 @@ class LocalMetadataExtractor @Inject constructor(
             title = parsed.title,
             authors = parsed.authors,
             preview = coverBytes?.let(::decodeBitmap),
+            series = parsed.series,
+            seriesIndex = parsed.seriesIndex,
+            publisher = parsed.publisher,
+            year = parsed.year,
         )
     }
 
@@ -209,15 +253,56 @@ class LocalMetadataExtractor @Inject constructor(
         val manifest = mutableMapOf<String, String>()
         var propertiesCoverHref: String? = null
 
+        var series: String? = null
+        var seriesIndex: String? = null
+        var publisher: String? = null
+        var year: String? = null
+
         while (parser.next() != XmlPullParser.END_DOCUMENT) {
             if (parser.eventType != XmlPullParser.START_TAG) continue
 
-            when (parser.name.substringAfter(':')) {
+            val localName = parser.name.substringAfter(':')
+            when (localName) {
                 "title" -> if (title == null) title = parser.nextTextSafe()
                 "creator" -> authors += parser.nextTextSafe()
+                "publisher" -> if (publisher == null) publisher = parser.nextTextSafe().trim()
+                "date" -> {
+                    val dateText = parser.nextTextSafe()
+                    val regex = Regex("""\b\d{4}\b""")
+                    val maybeYear = regex.find(dateText)?.value
+                    if (maybeYear != null && year == null) {
+                        year = maybeYear
+                    }
+                }
                 "meta" -> {
-                    if (parser.getAttributeValue(null, "name") == "cover") {
-                        coverId = parser.getAttributeValue(null, "content")
+                    val nameAttr = parser.getAttributeValue(null, "name")
+                    val contentAttr = parser.getAttributeValue(null, "content")
+                    val propertyAttr = parser.getAttributeValue(null, "property")
+
+                    if (nameAttr == "cover") {
+                        coverId = contentAttr
+                    }
+
+                    // Calibre EPUB 2 series tags
+                    if (nameAttr == "calibre:series" && !contentAttr.isNullOrBlank()) {
+                        series = contentAttr.trim()
+                    }
+                    if (nameAttr == "calibre:series_index" && !contentAttr.isNullOrBlank()) {
+                        seriesIndex = contentAttr.trim()
+                    }
+
+                    // EPUB 3 series tags
+                    if (propertyAttr == "belongs-to-collection") {
+                        val collectionName = parser.nextTextSafe().trim()
+                        if (collectionName.isNotBlank()) {
+                            series = collectionName
+                        }
+                    }
+                    if (propertyAttr == "group-position") {
+                        val position = parser.nextTextSafe().trim()
+                        if (position.isNotBlank()) {
+                            seriesIndex = position
+                        }
                     }
                 }
                 "item" -> {
@@ -236,6 +321,10 @@ class LocalMetadataExtractor @Inject constructor(
             title = title?.ifBlank { fallbackTitle } ?: fallbackTitle,
             authors = authors.filter { it.isNotBlank() }.distinct(),
             coverHref = propertiesCoverHref ?: coverId?.let(manifest::get),
+            series = series,
+            seriesIndex = seriesIndex,
+            publisher = publisher,
+            year = year,
         )
     }
 
@@ -440,6 +529,10 @@ class LocalMetadataExtractor @Inject constructor(
         val title: String,
         val authors: List<String>,
         val coverHref: String?,
+        val series: String? = null,
+        val seriesIndex: String? = null,
+        val publisher: String? = null,
+        val year: String? = null,
     )
 
     private companion object {

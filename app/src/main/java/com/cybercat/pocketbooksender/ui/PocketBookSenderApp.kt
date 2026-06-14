@@ -325,6 +325,9 @@ private fun AppNavHost(
                 onClearDownloadCache = settingsViewModel::clearDownloadCache,
                 onClearStatusMessage = settingsViewModel::clearStatusMessage,
                 onThemeChanged = settingsViewModel::setTheme,
+                onWarnOnDisconnectedRenameChanged = settingsViewModel::setWarnOnDisconnectedRename,
+                onConfirmPendingRename = settingsViewModel::confirmPendingRename,
+                onCancelPendingRename = settingsViewModel::cancelPendingRename,
             )
         }
     }
