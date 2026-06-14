@@ -2,11 +2,15 @@ package com.cybercat.pocketbooksender.transfer
 
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
-object TransferCoordinator {
-    private var request: TransferRequest? = null
+@Singleton
+class TransferCoordinator @Inject constructor() {
+    private val pendingRequest = AtomicReference<TransferRequest?>(null)
 
     private val _events = MutableSharedFlow<TransferEvent>(
         extraBufferCapacity = 64,
@@ -18,19 +22,20 @@ object TransferCoordinator {
         items: List<TransferUploadItem>,
     ): String {
         val id = UUID.randomUUID().toString()
-        request = TransferRequest(
-            id = id,
-            device = device,
-            items = items,
+        pendingRequest.set(
+            TransferRequest(
+                id = id,
+                device = device,
+                items = items,
+            ),
         )
         return id
     }
 
     fun takeRequest(id: String?): TransferRequest? {
-        val current = request ?: return null
+        val current = pendingRequest.get() ?: return null
         if (current.id != id) return null
-        request = null
-        return current
+        return if (pendingRequest.compareAndSet(current, null)) current else null
     }
 
     fun emit(event: TransferEvent) {

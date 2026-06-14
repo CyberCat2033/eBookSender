@@ -24,6 +24,7 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
     override val id: String = SourceId
     override val title: String = "Com-X"
     override val homeUrl: String = HomeUrl
+    override val browserUserAgent: String = UserAgent
     override val capabilities: MangaSourceCapabilities =
         MangaSourceCapabilities(authMode = MangaAuthMode.WebLogin)
 
@@ -94,6 +95,7 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
     override suspend fun downloadChapterArchive(
         chapter: MangaChapter,
         outputFile: File,
+        onProgress: suspend (bytesRead: Long, totalBytes: Long?) -> Unit,
     ): MangaDownloadedArchive? = withContext(Dispatchers.IO) {
         val originalDownloadUrl = chapter.downloadUrl?.takeIf { it.isNotBlank() } ?: return@withContext null
         val downloadUrl = requestAuthorizedArchiveUrl(chapter, originalDownloadUrl)
@@ -118,9 +120,28 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
             }
 
             outputFile.parentFile?.mkdirs()
+            val totalBytes = connection.contentLengthLong
+                .takeIf { length -> length > 0L }
             connection.inputStream.use { input ->
                 outputFile.outputStream().use { output ->
-                    input.copyTo(output)
+                    val buffer = ByteArray(DefaultArchiveBufferSize)
+                    var bytesRead = 0L
+                    var lastReportedBytes = -ArchiveProgressReportBytes
+                    onProgress(0L, totalBytes)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        bytesRead += read
+                        if (
+                            bytesRead - lastReportedBytes >= ArchiveProgressReportBytes ||
+                            bytesRead == totalBytes
+                        ) {
+                            lastReportedBytes = bytesRead
+                            onProgress(bytesRead, totalBytes)
+                        }
+                    }
+                    onProgress(bytesRead, totalBytes)
                 }
             }
 
@@ -1078,6 +1099,8 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         private const val ArchiveAuthReadTimeoutMillis = 20_000
         private const val ArchiveConnectTimeoutMillis = 12_000
         private const val ArchiveReadTimeoutMillis = 45_000
+        private const val DefaultArchiveBufferSize = 64 * 1024
+        private const val ArchiveProgressReportBytes = 256L * 1024L
         private const val DefaultImageBufferSize = 32 * 1024
         private const val MaxImageBytes = 50L * 1024L * 1024L
         private const val MinArchiveBytes = 512L

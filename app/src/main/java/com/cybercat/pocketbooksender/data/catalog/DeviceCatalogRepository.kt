@@ -5,6 +5,8 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.cybercat.pocketbooksender.data.ftp.FtpEntry
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.domain.AllSupportedExtensions
+import com.cybercat.pocketbooksender.domain.MangaArchiveExtensions
 import com.cybercat.pocketbooksender.domain.NaturalSort
 import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
 import com.cybercat.pocketbooksender.domain.contentExtension
@@ -39,7 +41,7 @@ class DeviceCatalogRepository @Inject constructor(
     private suspend fun loadFromPocketBookDatabase(device: PocketBookDevice): DeviceCatalog {
         val dbFile = downloadDatabaseSnapshot(device)
         val files = readDatabaseFiles(dbFile)
-            .filter { it.path.contentExtension() in SupportedExtensions }
+            .filter { it.path.contentExtension() in AllSupportedExtensions }
 
         return DeviceCatalog(
             books = files.toBookGroups(),
@@ -59,20 +61,24 @@ class DeviceCatalogRepository @Inject constructor(
         }
 
         val dbFile = File(directory, DatabaseName)
-        ftpGateway.downloadFile(
-            device = device,
-            remoteRelativePath = "$RemoteDatabaseDirectory/$DatabaseName",
-            output = dbFile.outputStream(),
-        ).getOrThrow()
+        dbFile.outputStream().use { outputStream ->
+            ftpGateway.downloadFile(
+                device = device,
+                remoteRelativePath = "$RemoteDatabaseDirectory/$DatabaseName",
+                output = outputStream,
+            ).getOrThrow()
+        }
 
         OptionalDatabaseFiles.forEach { name ->
             val file = File(directory, name)
-            ftpGateway.downloadFile(
-                device = device,
-                remoteRelativePath = "$RemoteDatabaseDirectory/$name",
-                output = file.outputStream(),
-            ).onFailure {
-                file.delete()
+            file.outputStream().use { outputStream ->
+                ftpGateway.downloadFile(
+                    device = device,
+                    remoteRelativePath = "$RemoteDatabaseDirectory/$name",
+                    output = outputStream,
+                ).onFailure {
+                    file.delete()
+                }
             }
         }
 
@@ -83,12 +89,17 @@ class DeviceCatalogRepository @Inject constructor(
         val database = SQLiteDatabase.openDatabase(
             dbFile.absolutePath,
             null,
-            SQLiteDatabase.OPEN_READWRITE,
+            SQLiteDatabase.OPEN_READONLY,
         )
 
         return database.use { db ->
             db.execSQL("PRAGMA query_only = ON")
-            db.rawQuery(CatalogQuery, null).use { cursor ->
+            val args = arrayOf(
+                "$PocketBookStoragePrefix$BooksRoot%",
+                "$PocketBookStoragePrefix$ProgrammingRoot%",
+                "$PocketBookStoragePrefix$MangaRoot%",
+            )
+            db.rawQuery(CatalogQuery, args).use { cursor ->
                 buildList {
                     while (cursor.moveToNext()) {
                         cursor.toDbCatalogFile()?.let(::add)
@@ -268,7 +279,7 @@ class DeviceCatalogRepository @Inject constructor(
                 val files = ftpGateway.listEntries(device, series.path)
                     .getOrDefault(emptyList())
                     .filterNot(FtpEntry::isDirectory)
-                    .filter { it.name.contentExtension() in MangaExtensions }
+                    .filter { it.name.contentExtension() in MangaArchiveExtensions }
                     .map { it.toCatalogFile() }
                     .sortedWith(NaturalSort.by { it.path })
 
@@ -296,7 +307,7 @@ class DeviceCatalogRepository @Inject constructor(
         )
 
     private fun FtpEntry.isKnownBookFile(): Boolean =
-        name.contentExtension() in SupportedExtensions
+        name.contentExtension() in AllSupportedExtensions
 
     private fun DbCatalogFile.toCatalogFile(): CatalogFile =
         CatalogFile(
@@ -341,18 +352,6 @@ class DeviceCatalogRepository @Inject constructor(
 
         val OptionalDatabaseFiles = listOf("$DatabaseName-wal", "$DatabaseName-shm")
         val DatabaseFiles = listOf(DatabaseName) + OptionalDatabaseFiles
-        val BookExtensions = setOf(
-            "epub",
-            "fb2",
-            "mobi",
-            "azw3",
-            "pdf",
-            "djvu",
-            "txt",
-            "rtf",
-        )
-        val MangaExtensions = setOf("cbz", "cbr")
-        val SupportedExtensions = BookExtensions + MangaExtensions
 
         val CatalogQuery = """
             SELECT
@@ -378,9 +377,9 @@ class DeviceCatalogRepository @Inject constructor(
                     (SELECT id FROM profiles WHERE name = 'default' LIMIT 1),
                     (SELECT MIN(id) FROM profiles)
                 )
-            WHERE d.name LIKE '/mnt/ext1/Books%'
-                OR d.name LIKE '/mnt/ext1/Programming%'
-                OR d.name LIKE '/mnt/ext1/Manga%'
+            WHERE d.name LIKE ?
+                OR d.name LIKE ?
+                OR d.name LIKE ?
             ORDER BY d.name, f.filename
         """.trimIndent()
     }

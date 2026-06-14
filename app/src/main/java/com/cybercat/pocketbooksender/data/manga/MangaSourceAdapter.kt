@@ -21,11 +21,14 @@ interface MangaSourceAdapter {
     suspend fun downloadChapterArchive(
         chapter: MangaChapter,
         outputFile: File,
+        onProgress: suspend (bytesRead: Long, totalBytes: Long?) -> Unit = { _, _ -> },
     ): MangaDownloadedArchive? = null
 }
 
 interface HtmlMangaSourceAdapter : MangaSourceAdapter {
     val homeUrl: String
+    val browserUserAgent: String?
+        get() = null
 
     fun buildSearchUrl(query: String): String
     fun ownsUrl(url: String): Boolean
@@ -116,6 +119,7 @@ data class MangaSourceSummary(
     val id: String,
     val title: String,
     val homeUrl: String,
+    val browserUserAgent: String?,
 )
 
 data class MangaSeriesBookmark(

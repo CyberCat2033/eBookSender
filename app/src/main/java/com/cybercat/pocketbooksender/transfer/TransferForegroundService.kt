@@ -8,7 +8,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.cybercat.pocketbooksender.MainActivity
@@ -25,6 +24,7 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class TransferForegroundService : Service() {
     @Inject lateinit var ftpGateway: FtpGateway
+    @Inject lateinit var transferCoordinator: TransferCoordinator
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -33,7 +33,7 @@ class TransferForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureNotificationChannel()
 
-        val request = TransferCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
+        val request = transferCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
         if (request == null) {
             startForeground(NOTIFICATION_ID, buildProgressNotification("Nothing to upload", 0, 0))
             stopSelf(startId)
@@ -65,7 +65,7 @@ class TransferForegroundService : Service() {
 
         try {
             request.items.forEachIndexed { index, item ->
-                TransferCoordinator.emit(
+                transferCoordinator.emit(
                     TransferEvent.ItemStarted(
                         itemId = item.id,
                         completed = index,
@@ -78,7 +78,7 @@ class TransferForegroundService : Service() {
                 result
                     .onSuccess {
                         uploaded += 1
-                        TransferCoordinator.emit(
+                        transferCoordinator.emit(
                             TransferEvent.ItemUploaded(
                                 itemId = item.id,
                                 completed = uploaded + failed,
@@ -88,7 +88,7 @@ class TransferForegroundService : Service() {
                     }
                     .onFailure { error ->
                         failed += 1
-                        TransferCoordinator.emit(
+                        transferCoordinator.emit(
                             TransferEvent.ItemFailed(
                                 itemId = item.id,
                                 message = error.message ?: "FTP upload failed",
@@ -99,7 +99,7 @@ class TransferForegroundService : Service() {
                 notifyProgress("Uploaded $uploaded, failed $failed", uploaded + failed, total)
             }
         } finally {
-            TransferCoordinator.emit(
+            transferCoordinator.emit(
                 TransferEvent.Completed(
                     uploaded = uploaded,
                     failed = failed,
@@ -127,7 +127,7 @@ class TransferForegroundService : Service() {
                 onProgress = { bytesRead ->
                     if (fileSize > 0) {
                         val progress = (bytesRead.toFloat() / fileSize.toFloat()).coerceIn(0f, 0.99f)
-                        TransferCoordinator.emit(
+                        transferCoordinator.emit(
                             TransferEvent.ItemProgress(
                                 itemId = item.id,
                                 progress = progress,
@@ -192,12 +192,7 @@ class TransferForegroundService : Service() {
             "Uploaded $uploaded, failed $failed"
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_DETACH)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(false)
-        }
+        stopForeground(STOP_FOREGROUND_DETACH)
 
         notificationManager().notify(
             NOTIFICATION_ID,
@@ -228,13 +223,7 @@ class TransferForegroundService : Service() {
             .build()
 
     private fun contentIntent(): PendingIntent {
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_IMMUTABLE
-            } else {
-                0
-            }
-
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         return PendingIntent.getActivity(
             this,
             0,
@@ -244,8 +233,6 @@ class TransferForegroundService : Service() {
     }
 
     private fun ensureNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Book transfers",

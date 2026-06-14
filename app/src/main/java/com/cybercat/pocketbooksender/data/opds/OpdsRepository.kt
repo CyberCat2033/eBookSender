@@ -4,6 +4,8 @@ import android.content.Context
 import com.cybercat.pocketbooksender.data.database.dao.OpdsSourceDao
 import com.cybercat.pocketbooksender.data.database.entity.OpdsSourceEntity
 import com.cybercat.pocketbooksender.domain.bookExtension
+import com.cybercat.pocketbooksender.util.AppConstants
+import com.cybercat.pocketbooksender.util.TimedCacheEntry
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
@@ -200,7 +202,7 @@ class OpdsRepository @Inject constructor(
             connectTimeout = ConnectTimeoutMillis
             readTimeout = ReadTimeoutMillis
             setRequestProperty("Accept", accept)
-            setRequestProperty("User-Agent", UserAgent)
+            setRequestProperty("User-Agent", AppConstants.UserAgent)
         }
 
         val code = connection.responseCode
@@ -350,7 +352,6 @@ class OpdsRepository @Inject constructor(
         const val ReadTimeoutMillis = 45_000
         const val CatalogCacheTtlMillis = 5 * 60 * 1000L
         const val MaxRedirects = 5
-        const val UserAgent = "PocketBookSender/0.1"
         const val SearchTermsPlaceholder = "{searchTerms"
         const val LegacyProjectGutenbergSourceId = "project-gutenberg"
 
@@ -404,11 +405,3 @@ private fun String.cleanAuthorSearchQuery(): String =
 private fun String.urlPathEncode(): String =
     URLEncoder.encode(this, Charsets.UTF_8.name())
         .replace("+", "%20")
-
-private data class TimedCacheEntry<T>(
-    val value: T,
-    val createdAtMillis: Long = System.currentTimeMillis(),
-) {
-    fun isFresh(ttlMillis: Long): Boolean =
-        System.currentTimeMillis() - createdAtMillis <= ttlMillis
-}

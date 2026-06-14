@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
+import com.cybercat.pocketbooksender.util.AppConstants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Semaphore
@@ -136,7 +137,7 @@ suspend fun loadCachedRemoteBitmap(
                 connectTimeout = 8_000
                 readTimeout = 15_000
                 setRequestProperty("Accept", "image/*")
-                setRequestProperty("User-Agent", "PocketBookSender/0.1")
+                setRequestProperty("User-Agent", AppConstants.UserAgent)
                 if (cookie != null) {
                     setRequestProperty("Cookie", cookie)
                 }

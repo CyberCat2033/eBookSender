@@ -2,11 +2,15 @@ package com.cybercat.pocketbooksender.ui
 
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -18,6 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,6 +46,8 @@ import com.cybercat.pocketbooksender.ui.screens.OpdsScreen
 import com.cybercat.pocketbooksender.ui.screens.SendScreen
 import com.cybercat.pocketbooksender.ui.screens.SettingsScreen
 import com.cybercat.pocketbooksender.ui.theme.PocketBookSenderTheme
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 @Composable
 fun PocketBookSenderApp(
@@ -48,12 +58,37 @@ fun PocketBookSenderApp(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route ?: MainDestination.Send.route
+    val currentRoute = backStackEntry?.destination?.route
+    val coroutineScope = rememberCoroutineScope()
+    val sendListState = rememberLazyListState()
+    val catalogListState = rememberLazyListState()
+    val opdsListState = rememberLazyListState()
+    val mangaListState = rememberLazyListState()
+    val settingsScrollState = rememberScrollState()
+    var topScrollJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(sharedUris) {
         if (sharedUris.isNotEmpty()) {
             viewModel.addUris(sharedUris)
             onSharedUrisConsumed()
+        }
+    }
+
+    fun scrollDestinationToTop(route: String) {
+        topScrollJob?.cancel()
+        topScrollJob = coroutineScope.launch {
+            when (route) {
+                MainDestination.Send.route -> sendListState.animateScrollToTop()
+                MainDestination.Catalog.route -> catalogListState.animateScrollToTop()
+                MainDestination.Opds.route -> {
+                    if (state.opds.webMode == WebContentMode.Manga) {
+                        mangaListState.animateScrollToTop()
+                    } else {
+                        opdsListState.animateScrollToTop()
+                    }
+                }
+                MainDestination.Settings.route -> settingsScrollState.animateScrollTo(0)
+            }
         }
     }
 
@@ -74,6 +109,7 @@ fun PocketBookSenderApp(
                     AppNavigationRail(
                         currentRoute = currentRoute,
                         onNavigate = { route -> navController.navigateSingleTop(route) },
+                        onReselect = ::scrollDestinationToTop,
                     )
                     Box(
                         Modifier
@@ -85,6 +121,11 @@ fun PocketBookSenderApp(
                             navController = navController,
                             state = state,
                             viewModel = viewModel,
+                            sendListState = sendListState,
+                            catalogListState = catalogListState,
+                            opdsListState = opdsListState,
+                            mangaListState = mangaListState,
+                            settingsScrollState = settingsScrollState,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -95,6 +136,7 @@ fun PocketBookSenderApp(
                         AppNavigationBar(
                             currentRoute = currentRoute,
                             onNavigate = { route -> navController.navigateSingleTop(route) },
+                            onReselect = ::scrollDestinationToTop,
                         )
                     },
                     containerColor = MaterialTheme.colorScheme.background,
@@ -103,6 +145,11 @@ fun PocketBookSenderApp(
                         navController = navController,
                         state = state,
                         viewModel = viewModel,
+                        sendListState = sendListState,
+                        catalogListState = catalogListState,
+                        opdsListState = opdsListState,
+                        mangaListState = mangaListState,
+                        settingsScrollState = settingsScrollState,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(innerPadding),
@@ -113,11 +160,23 @@ fun PocketBookSenderApp(
     }
 }
 
+private suspend fun LazyListState.animateScrollToTop() {
+    animateScrollToItem(index = 0, scrollOffset = 0)
+    if (firstVisibleItemIndex != 0 || firstVisibleItemScrollOffset != 0) {
+        scrollToItem(index = 0, scrollOffset = 0)
+    }
+}
+
 @Composable
 private fun AppNavHost(
     navController: NavHostController,
     state: SenderUiState,
     viewModel: SenderViewModel,
+    sendListState: LazyListState,
+    catalogListState: LazyListState,
+    opdsListState: LazyListState,
+    mangaListState: LazyListState,
+    settingsScrollState: ScrollState,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -142,6 +201,7 @@ private fun AppNavHost(
         composable(MainDestination.Send.route) {
             SendScreen(
                 state = state,
+                listState = sendListState,
                 onFtpInputChanged = viewModel::onFtpInputChanged,
                 onConnect = viewModel::connect,
                 onQrScanned = viewModel::connectTo,
@@ -160,6 +220,8 @@ private fun AppNavHost(
             CatalogScreen(
                 catalog = state.deviceCatalog,
                 isConnected = state.isConnected,
+                enableHaptics = state.settings.enableHaptics,
+                listState = catalogListState,
                 onRefresh = viewModel::refreshDeviceCatalog,
             )
         }
@@ -167,6 +229,8 @@ private fun AppNavHost(
             OpdsScreen(
                 state = state.opds,
                 mangaState = state.manga,
+                opdsListState = opdsListState,
+                mangaListState = mangaListState,
                 onSearchChanged = viewModel::onOpdsSearchChanged,
                 onWebModeSelected = viewModel::selectWebMode,
                 onSaveSource = viewModel::saveOpdsSource,
@@ -191,11 +255,13 @@ private fun AppNavHost(
                 onSelectAllMangaChapters = viewModel::selectAllMangaChapters,
                 onClearMangaChapterSelection = viewModel::clearMangaChapterSelection,
                 onDownloadSelectedMangaChapters = viewModel::downloadSelectedMangaChapters,
+                enableHaptics = state.settings.enableHaptics,
             )
         }
         composable(MainDestination.Settings.route) {
             SettingsScreen(
                 state = state,
+                scrollState = settingsScrollState,
                 onRootPathChanged = viewModel::updateRootPath,
                 onDefaultProgrammingTagChanged = viewModel::updateDefaultProgrammingTag,
                 onDefaultMangaSeriesChanged = viewModel::updateDefaultMangaSeries,
@@ -203,6 +269,7 @@ private fun AppNavHost(
                 onProgrammingFileNameTemplateChanged = viewModel::updateProgrammingFileNameTemplate,
                 onMangaFileNameTemplateChanged = viewModel::updateMangaFileNameTemplate,
                 onDynamicColorChanged = viewModel::updateDynamicColor,
+                onHapticFeedbackEnabledChanged = viewModel::updateHapticFeedbackEnabled,
                 onClearDownloadCache = viewModel::clearDownloadCache,
             )
         }
@@ -211,16 +278,24 @@ private fun AppNavHost(
 
 @Composable
 private fun AppNavigationBar(
-    currentRoute: String,
+    currentRoute: String?,
     onNavigate: (String) -> Unit,
+    onReselect: (String) -> Unit,
 ) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         MainDestinations.forEach { destination ->
+            val selected = currentRoute == destination.route
             NavigationBarItem(
-                selected = currentRoute == destination.route,
-                onClick = { onNavigate(destination.route) },
+                selected = selected,
+                onClick = {
+                    if (selected) {
+                        onReselect(destination.route)
+                    } else {
+                        onNavigate(destination.route)
+                    }
+                },
                 icon = { Icon(destination.icon, contentDescription = destination.label) },
                 label = { Text(destination.label) },
             )
@@ -230,16 +305,24 @@ private fun AppNavigationBar(
 
 @Composable
 private fun AppNavigationRail(
-    currentRoute: String,
+    currentRoute: String?,
     onNavigate: (String) -> Unit,
+    onReselect: (String) -> Unit,
 ) {
     NavigationRail(
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
         MainDestinations.forEach { destination ->
+            val selected = currentRoute == destination.route
             NavigationRailItem(
-                selected = currentRoute == destination.route,
-                onClick = { onNavigate(destination.route) },
+                selected = selected,
+                onClick = {
+                    if (selected) {
+                        onReselect(destination.route)
+                    } else {
+                        onNavigate(destination.route)
+                    }
+                },
                 icon = { Icon(destination.icon, contentDescription = destination.label) },
                 label = { Text(destination.label) },
             )

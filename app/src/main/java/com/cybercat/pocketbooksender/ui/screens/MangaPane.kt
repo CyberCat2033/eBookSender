@@ -5,11 +5,20 @@ import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image as ComposeImage
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,10 +34,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Image
@@ -57,10 +66,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -70,15 +84,20 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 import com.cybercat.pocketbooksender.ui.BitmapCache
 import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
+import androidx.compose.ui.platform.LocalView
+import android.view.HapticFeedbackConstants
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.data.manga.MangaChapter
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
+import com.cybercat.pocketbooksender.ui.MangaDownloadUiProgress
 import com.cybercat.pocketbooksender.ui.MangaUiState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import org.json.JSONArray
@@ -96,14 +115,18 @@ fun MangaPane(
     onWebPageLoaded: (String, String) -> Unit,
     onOpenSeries: (String) -> Unit,
     onToggleChapter: (String, Boolean) -> Unit,
-    onSetSeriesFavorite: (Boolean) -> Unit,
-    onSetSeriesSubscribed: (Boolean) -> Unit,
+    onSetMangaSeriesFavorite: (Boolean) -> Unit,
+    onSetMangaSeriesSubscribed: (Boolean) -> Unit,
     onCheckSubscriptions: () -> Unit,
     onDownloadSelected: () -> Unit,
+    enableHaptics: Boolean,
 ) {
+    val view = LocalView.current
+    val context = LocalContext.current
     val selectedChapterIdsState = rememberUpdatedState(state.selectedChapterIds)
     val onToggleChapterState = rememberUpdatedState(onToggleChapter)
     val selectedSeriesId = state.selectedSeries?.seriesId
+    var handledSeriesScrollRequest by rememberSaveable { mutableStateOf(state.selectedSeriesScrollRequest) }
     val chapterTargets = remember(state.chapters) {
         state.chapters.mapIndexed { index, chapter ->
             chapterItemKey(chapter) to ChapterPointerTarget(
@@ -113,8 +136,12 @@ fun MangaPane(
         }.toMap()
     }
 
-    LaunchedEffect(selectedSeriesId) {
-        if (selectedSeriesId != null) {
+    LaunchedEffect(state.selectedSeriesScrollRequest) {
+        if (
+            selectedSeriesId != null &&
+            state.selectedSeriesScrollRequest > handledSeriesScrollRequest
+        ) {
+            handledSeriesScrollRequest = state.selectedSeriesScrollRequest
             listState.animateScrollToItem(state.selectedSeriesItemIndex())
         }
     }
@@ -163,6 +190,7 @@ fun MangaPane(
                                 if (currentSelected != desiredSelected) {
                                     appliedSelectedById[chapter.chapterId] = desiredSelected
                                     onToggleChapterState.value(chapter.chapterId, desiredSelected)
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CLOCK_TICK, ignoreDnd = true)
                                 }
                             }
                         }
@@ -214,7 +242,7 @@ fun MangaPane(
                             appliedSelectedById.clear()
                         }
 
-                        detectDragGesturesAfterLongPress(
+                        detectDragGesturesAfterQuickLongPress(
                             onDragStart = { offset ->
                                 currentY = offset.y
                                 val target = chapterTargetAt(currentY)
@@ -226,6 +254,7 @@ fun MangaPane(
                                     targetSelected = target.chapterId !in baselineSelectedIds
                                     anchorIndex = target.index
                                     appliedSelectedById.clear()
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.LONG_PRESS, ignoreDnd = true)
                                     applySelectionAt(currentY)
                                     startAutoScroll()
                                 }
@@ -244,42 +273,44 @@ fun MangaPane(
                 },
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            item {
-                MangaSearchPanel(
-                    state = state,
-                    onSearchChanged = onSearchChanged,
-                    onSearch = onSearch,
-                    onOpenBrowser = onOpenBrowser,
-                )
-            }
+            item(key = "manga-top") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MangaSearchPanel(
+                        state = state,
+                        onSearchChanged = onSearchChanged,
+                        onSearch = onSearch,
+                        onOpenBrowser = onOpenBrowser,
+                        enableHaptics = enableHaptics,
+                    )
 
-        if (state.savedSeries.isNotEmpty()) {
-            item {
-                SavedMangaPanel(
-                    savedSeries = state.savedSeries,
-                    isCheckingSubscriptions = state.isCheckingSubscriptions,
-                    enabled = !state.isLoading && !state.isDownloading,
-                    onOpenSeries = onOpenSeries,
-                    onCheckSubscriptions = onCheckSubscriptions,
-                )
+                    if (state.savedSeries.isNotEmpty()) {
+                        SavedMangaPanel(
+                            savedSeries = state.savedSeries,
+                            isCheckingSubscriptions = state.isCheckingSubscriptions,
+                            enabled = !state.isLoading && !state.isDownloading,
+                            enableHaptics = enableHaptics,
+                            onOpenSeries = onOpenSeries,
+                            onCheckSubscriptions = onCheckSubscriptions,
+                        )
+                    }
+                }
             }
-        }
 
 
         state.errorMessage?.let { message ->
-            item {
+            item(key = "manga-error") {
                 MangaStatusMessage(text = message, isError = true)
             }
         }
 
         state.statusMessage?.let { message ->
-            item {
+            item(key = "manga-status") {
                 MangaStatusMessage(text = message, isError = false)
             }
         }
 
         if (state.isLoading) {
-            item {
+            item(key = "manga-loading") {
                 MangaLoadingCard("Loading manga source")
             }
         }
@@ -293,7 +324,7 @@ fun MangaPane(
                 downloaded.sourceId == series.sourceId && downloaded.seriesId == series.seriesId
             }?.chapterTitle
 
-            item {
+            item(key = "manga-selected-series") {
                 SelectedSeriesCard(
                     title = series.title,
                     description = series.description,
@@ -308,8 +339,9 @@ fun MangaPane(
                         chapter.stableKey !in state.downloadedStableKeys
                     },
                     isDownloading = state.isDownloading,
-                    onSetFavorite = onSetSeriesFavorite,
-                    onSetSubscribed = onSetSeriesSubscribed,
+                    enableHaptics = enableHaptics,
+                    onSetFavorite = onSetMangaSeriesFavorite,
+                    onSetSubscribed = onSetMangaSeriesSubscribed,
                 )
             }
 
@@ -323,7 +355,12 @@ fun MangaPane(
                     selected = chapter.chapterId in state.selectedChapterIds,
                     downloaded = chapter.stableKey in state.downloadedStableKeys,
                     enabled = !state.isDownloading,
-                    onToggle = onToggleChapter,
+                    enableHaptics = enableHaptics,
+                    modifier = Modifier.animateItem(),
+                    onToggle = { id, selected ->
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.LONG_PRESS)
+                        onToggleChapter(id, selected)
+                    },
                 )
             }
         }
@@ -340,6 +377,8 @@ fun MangaPane(
                 MangaSearchResultCard(
                     result = result,
                     enabled = !state.isLoading && !state.isDownloading,
+                    enableHaptics = enableHaptics,
+                    modifier = Modifier.animateItem(),
                     onOpenSeries = onOpenSeries,
                 )
             }
@@ -350,13 +389,17 @@ fun MangaPane(
             }
         }
 
-        if (state.isDownloading) {
+        AnimatedVisibility(
+            visible = state.isDownloading,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(12.dp),
+            enter = fadeIn() + slideInVertically { height -> height / 2 },
+            exit = fadeOut() + slideOutVertically { height -> height / 2 },
+        ) {
             MangaDownloadProgressOverlay(
-                progressText = state.downloadProgressText,
+                progressInfo = state.downloadProgress,
                 selectedCount = state.selectedChapterIds.size,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(12.dp),
             )
         }
     }
@@ -365,6 +408,14 @@ fun MangaPane(
         MangaBrowserCard(
             url = state.browserUrl,
             currentUrl = state.currentWebUrl,
+            sourceHomeUrl = state.sources
+                .firstOrNull { source -> source.id == state.selectedSourceId }
+                ?.homeUrl
+                ?: state.browserUrl,
+            userAgent = state.sources
+                .firstOrNull { source -> source.id == state.selectedSourceId }
+                ?.browserUserAgent,
+            enableHaptics = enableHaptics,
             onClose = onCloseBrowser,
             onWebPageLoaded = onWebPageLoaded,
         )
@@ -377,6 +428,7 @@ private fun MangaSearchPanel(
     onSearchChanged: (String) -> Unit,
     onSearch: () -> Unit,
     onOpenBrowser: () -> Unit,
+    enableHaptics: Boolean,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -387,51 +439,63 @@ private fun MangaSearchPanel(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                if (maxWidth >= 640.dp) {
+            val configuration = LocalConfiguration.current
+            val isWideScreen = configuration.screenWidthDp >= 640
+
+            if (isWideScreen) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MangaSearchField(
+                        state = state,
+                        onSearchChanged = onSearchChanged,
+                        enableHaptics = enableHaptics,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MangaSearchButton(
+                        state = state,
+                        onSearch = onSearch,
+                        enableHaptics = enableHaptics,
+                        modifier = Modifier.width(180.dp),
+                    )
+                    if (!state.isAuthorized) {
+                        MangaLoginButton(
+                            state = state,
+                            enableHaptics = enableHaptics,
+                            onOpenBrowser = onOpenBrowser,
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MangaSearchField(
+                        state = state,
+                        onSearchChanged = onSearchChanged,
+                        enableHaptics = enableHaptics,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        MangaSearchField(
-                            state = state,
-                            onSearchChanged = onSearchChanged,
-                            modifier = Modifier.weight(1f),
-                        )
                         MangaSearchButton(
                             state = state,
                             onSearch = onSearch,
-                            modifier = Modifier.width(180.dp),
+                            enableHaptics = enableHaptics,
+                            modifier = Modifier.weight(1f),
                         )
                         if (!state.isAuthorized) {
                             MangaLoginButton(
                                 state = state,
+                                enableHaptics = enableHaptics,
                                 onOpenBrowser = onOpenBrowser,
                             )
-                        }
-                    }
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        MangaSearchField(
-                            state = state,
-                            onSearchChanged = onSearchChanged,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            MangaSearchButton(
-                                state = state,
-                                onSearch = onSearch,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (!state.isAuthorized) {
-                                MangaLoginButton(
-                                    state = state,
-                                    onOpenBrowser = onOpenBrowser,
-                                )
-                            }
                         }
                     }
                 }
@@ -444,8 +508,11 @@ private fun MangaSearchPanel(
 private fun MangaSearchField(
     state: MangaUiState,
     onSearchChanged: (String) -> Unit,
+    enableHaptics: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     val enabled = !state.isLoading && !state.isDownloading
     OutlinedTextField(
         value = state.searchInput,
@@ -457,7 +524,10 @@ private fun MangaSearchField(
         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
         trailingIcon = {
             if (state.searchInput.isNotEmpty() && enabled) {
-                IconButton(onClick = { onSearchChanged("") }) {
+                IconButton(onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    onSearchChanged("")
+                }) {
                     Icon(Icons.Outlined.Close, contentDescription = "Clear")
                 }
             }
@@ -469,10 +539,16 @@ private fun MangaSearchField(
 private fun MangaSearchButton(
     state: MangaUiState,
     onSearch: () -> Unit,
+    enableHaptics: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     Button(
-        onClick = onSearch,
+        onClick = {
+            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+            onSearch()
+        },
         enabled = state.searchInput.isNotBlank() && !state.isLoading && !state.isDownloading,
         modifier = modifier,
     ) {
@@ -485,10 +561,16 @@ private fun MangaSearchButton(
 @Composable
 private fun MangaLoginButton(
     state: MangaUiState,
+    enableHaptics: Boolean,
     onOpenBrowser: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     OutlinedButton(
-        onClick = onOpenBrowser,
+        onClick = {
+            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            onOpenBrowser()
+        },
         enabled = !state.isDownloading,
     ) {
         Icon(Icons.Outlined.OpenInBrowser, contentDescription = null)
@@ -499,15 +581,26 @@ private fun MangaLoginButton(
 
 @Composable
 private fun MangaDownloadProgressOverlay(
-    progressText: String?,
+    progressInfo: MangaDownloadUiProgress?,
     selectedCount: Int,
     modifier: Modifier = Modifier,
 ) {
-    val detailText = progressText ?: when (selectedCount) {
+    val titleText = progressInfo?.title ?: "Preparing manga download"
+    val detailText = progressInfo?.detail ?: when (selectedCount) {
         0 -> "Preparing chapters"
-        1 -> "Preparing 1 chapter"
-        else -> "Preparing $selectedCount chapters"
+        1 -> "1 chapter selected"
+        else -> "$selectedCount chapters selected"
     }
+    val chapterText = progressInfo?.currentChapterTitle
+    val progress = progressInfo?.progress
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress ?: 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow,
+        ),
+        label = "MangaDownloadProgress",
+    )
     val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
 
     Surface(
@@ -528,14 +621,23 @@ private fun MangaDownloadProgressOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = contentColor,
-                    strokeWidth = 3.dp,
-                )
+                if (progress == null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = contentColor,
+                        strokeWidth = 3.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = contentColor,
+                    )
+                }
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Downloading manga",
+                        text = titleText,
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -546,13 +648,31 @@ private fun MangaDownloadProgressOverlay(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (!chapterText.isNullOrBlank()) {
+                        Text(
+                            text = chapterText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = contentColor.copy(alpha = 0.78f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth(),
-                color = contentColor,
-                trackColor = contentColor.copy(alpha = 0.24f),
-            )
+            if (progress == null) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = contentColor,
+                    trackColor = contentColor.copy(alpha = 0.24f),
+                )
+            } else {
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = contentColor,
+                    trackColor = contentColor.copy(alpha = 0.24f),
+                )
+            }
         }
     }
 }
@@ -562,9 +682,12 @@ private fun SavedMangaPanel(
     savedSeries: List<MangaSeriesBookmark>,
     isCheckingSubscriptions: Boolean,
     enabled: Boolean,
+    enableHaptics: Boolean,
     onOpenSeries: (String) -> Unit,
     onCheckSubscriptions: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     val subscribedCount = savedSeries.count { series -> series.subscribed }
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
@@ -581,7 +704,10 @@ private fun SavedMangaPanel(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 OutlinedButton(
-                    onClick = onCheckSubscriptions,
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        onCheckSubscriptions()
+                    },
                     enabled = enabled && subscribedCount > 0 && !isCheckingSubscriptions,
                 ) {
                     Icon(Icons.Outlined.Refresh, contentDescription = null)
@@ -596,7 +722,12 @@ private fun SavedMangaPanel(
             ) {
                 savedSeries.forEach { series ->
                     AssistChip(
-                        onClick = { if (enabled) onOpenSeries(series.seriesId) },
+                        onClick = {
+                            if (enabled) {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onOpenSeries(series.seriesId)
+                            }
+                        },
                         modifier = Modifier.widthIn(max = 280.dp),
                         label = {
                             Text(
@@ -625,9 +756,14 @@ private fun SavedMangaPanel(
 private fun MangaBrowserCard(
     url: String,
     currentUrl: String?,
+    sourceHomeUrl: String,
+    userAgent: String?,
+    enableHaptics: Boolean,
     onClose: () -> Unit,
     onWebPageLoaded: (String, String) -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var showLoginDialog by remember { mutableStateOf(false) }
 
@@ -654,10 +790,16 @@ private fun MangaBrowserCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    TextButton(onClick = { showLoginDialog = true }) {
+                    TextButton(onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        showLoginDialog = true
+                    }) {
                         Text("Login")
                     }
-                    IconButton(onClick = onClose) {
+                    IconButton(onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        onClose()
+                    }) {
                         Icon(Icons.Outlined.Close, contentDescription = "Close browser")
                     }
                 }
@@ -676,7 +818,9 @@ private fun MangaBrowserCard(
                             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                             settings.useWideViewPort = true
                             settings.loadWithOverviewMode = true
-                            settings.userAgentString = com.cybercat.pocketbooksender.data.manga.ComxMangaAdapter.UserAgent
+                            userAgent?.takeIf { it.isNotBlank() }?.let { value ->
+                                settings.userAgentString = value
+                            }
                             CookieManager.getInstance().setAcceptCookie(true)
                             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                             webViewClient = object : WebViewClient() {
@@ -712,8 +856,8 @@ private fun MangaBrowserCard(
             onDismiss = { showLoginDialog = false },
             onSubmit = { loginName, loginPassword, doNotRemember ->
                 val targetUrl = webViewRef?.url
-                    ?.takeIf { loadedUrl -> loadedUrl.startsWith(com.cybercat.pocketbooksender.data.manga.ComxMangaAdapter.HomeUrl) }
-                    ?: com.cybercat.pocketbooksender.data.manga.ComxMangaAdapter.HomeUrl
+                    ?.takeIf { loadedUrl -> loadedUrl.startsWith(sourceHomeUrl) }
+                    ?: sourceHomeUrl
                 webViewRef?.postUrl(
                     targetUrl,
                     buildComxLoginPostBody(loginName, loginPassword, doNotRemember),
@@ -814,16 +958,74 @@ private fun buildComxLoginPostBody(
 private fun String.formEncode(): String =
     URLEncoder.encode(this, Charsets.UTF_8.name())
 
+private suspend fun PointerInputScope.detectDragGesturesAfterQuickLongPress(
+    onDragStart: (Offset) -> Unit,
+    onDrag: (PointerInputChange, Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        var currentChange = down
+        val touchSlop = viewConfiguration.touchSlop
+
+        val longPressReached: Boolean = withTimeoutOrNull<Boolean>(MangaLongPressMillis) {
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == down.id }
+                    ?: return@withTimeoutOrNull false
+                if (!change.pressed || change.isConsumed) return@withTimeoutOrNull false
+                if ((change.position - down.position).getDistance() > touchSlop) {
+                    return@withTimeoutOrNull false
+                }
+                currentChange = change
+            }
+            true
+        } ?: true
+
+        if (!longPressReached) return@awaitEachGesture
+
+        onDragStart(currentChange.position)
+        currentChange.consume()
+
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id }
+            if (change == null) {
+                onDragCancel()
+                break
+            }
+            if (!change.pressed) {
+                onDragEnd()
+                break
+            }
+
+            val dragAmount = change.positionChange()
+            if (dragAmount != Offset.Zero) {
+                onDrag(change, dragAmount)
+                change.consume()
+            }
+        }
+    }
+}
+
 @Composable
 private fun MangaSearchResultCard(
     result: MangaSeriesSearchResult,
     enabled: Boolean,
+    enableHaptics: Boolean,
+    modifier: Modifier = Modifier,
     onOpenSeries: (String) -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     ElevatedCard(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled) { onOpenSeries(result.seriesId) },
+            .clickable(enabled = enabled) {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                onOpenSeries(result.seriesId)
+            },
     ) {
         Row(
             modifier = Modifier
@@ -876,9 +1078,12 @@ private fun SelectedSeriesCard(
     selectedCount: Int,
     newCount: Int,
     isDownloading: Boolean,
+    enableHaptics: Boolean,
     onSetFavorite: (Boolean) -> Unit,
     onSetSubscribed: (Boolean) -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -935,7 +1140,10 @@ private fun SelectedSeriesCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedButton(
-                    onClick = { onSetFavorite(!isFavorite) },
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        onSetFavorite(!isFavorite)
+                    },
                     enabled = !isDownloading,
                 ) {
                     Icon(
@@ -946,7 +1154,10 @@ private fun SelectedSeriesCard(
                     Text(if (isFavorite) "Favorite" else "Favorite")
                 }
                 OutlinedButton(
-                    onClick = { onSetSubscribed(!isSubscribed) },
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        onSetSubscribed(!isSubscribed)
+                    },
                     enabled = !isDownloading,
                 ) {
                     Icon(
@@ -971,12 +1182,19 @@ private fun MangaChapterRow(
     selected: Boolean,
     downloaded: Boolean,
     enabled: Boolean,
+    enableHaptics: Boolean,
+    modifier: Modifier = Modifier,
     onToggle: (String, Boolean) -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     ElevatedCard(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled) { onToggle(chapter.chapterId, !selected) },
+            .clickable(enabled = enabled) {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                onToggle(chapter.chapterId, !selected)
+            },
     ) {
         Row(
             modifier = Modifier
@@ -986,7 +1204,10 @@ private fun MangaChapterRow(
         ) {
             Checkbox(
                 checked = selected,
-                onCheckedChange = { onToggle(chapter.chapterId, it) },
+                onCheckedChange = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    onToggle(chapter.chapterId, it)
+                },
                 enabled = enabled,
             )
             Column(Modifier.weight(1f)) {
@@ -1150,7 +1371,7 @@ private fun chapterItemKey(chapter: MangaChapter): String =
     "chapter:${chapter.stableKey}"
 
 internal fun MangaUiState.selectedSeriesItemIndex(): Int {
-    var index = 1 // Search panel is always the first list item.
+    var index = 1
     if (errorMessage != null) index++
     if (statusMessage != null) index++
     if (isLoading) index++

@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.ui
 
-import com.cybercat.pocketbooksender.data.manga.ComxMangaAdapter
 import com.cybercat.pocketbooksender.data.manga.MangaChapter
 import com.cybercat.pocketbooksender.data.manga.MangaChapterDownload
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
@@ -10,16 +9,17 @@ import com.cybercat.pocketbooksender.data.manga.MangaSourceSummary
 
 data class MangaUiState(
     val sources: List<MangaSourceSummary> = emptyList(),
-    val selectedSourceId: String = ComxMangaAdapter.SourceId,
+    val selectedSourceId: String = "",
     val searchInput: String = "",
     val isLoading: Boolean = false,
     val isDownloading: Boolean = false,
-    val downloadProgressText: String? = null,
+    val downloadProgress: MangaDownloadUiProgress? = null,
     val browserVisible: Boolean = false,
-    val browserUrl: String = ComxMangaAdapter.HomeUrl,
+    val browserUrl: String = "",
     val currentWebUrl: String? = null,
     val searchResults: List<MangaSeriesSearchResult> = emptyList(),
     val selectedSeries: MangaSeriesDetails? = null,
+    val selectedSeriesScrollRequest: Long = 0L,
     val chapters: List<MangaChapter> = emptyList(),
     val selectedChapterIds: Set<String> = emptySet(),
     val downloadedStableKeys: Set<String> = emptySet(),
@@ -37,3 +37,10 @@ data class MangaUiState(
     val hasNewChapters: Boolean =
         chapters.any { chapter -> chapter.stableKey !in downloadedStableKeys }
 }
+
+data class MangaDownloadUiProgress(
+    val title: String,
+    val detail: String,
+    val currentChapterTitle: String?,
+    val progress: Float?,
+)

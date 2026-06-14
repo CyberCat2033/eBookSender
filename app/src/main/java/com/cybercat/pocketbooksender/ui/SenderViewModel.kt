@@ -46,6 +46,9 @@ import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,19 +66,24 @@ class SenderViewModel @Inject constructor(
     private val opdsRepository: OpdsRepository,
     private val mangaRepository: MangaRepository,
     private val deviceCatalogRepository: DeviceCatalogRepository,
+    private val transferCoordinator: TransferCoordinator,
+    private val classifier: FileClassifier,
+    private val pathPlanner: PathPlanner,
 ) : ViewModel() {
-    private val classifier = FileClassifier()
-    private val pathPlanner = PathPlanner()
 
     private val _state = MutableStateFlow(SenderUiState())
     val state: StateFlow<SenderUiState> = _state.asStateFlow()
 
     init {
         _state.update { state ->
+            val selectedSourceId = state.manga.selectedSourceId.ifBlank {
+                mangaRepository.sources.firstOrNull()?.id.orEmpty()
+            }
             state.copy(
                 manga = state.manga.copy(
                     sources = mangaRepository.sources,
-                    browserUrl = mangaRepository.homeUrl(state.manga.selectedSourceId),
+                    selectedSourceId = selectedSourceId,
+                    browserUrl = mangaRepository.homeUrl(selectedSourceId),
                 ),
             )
         }
@@ -118,7 +126,10 @@ class SenderViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            TransferCoordinator.events.collect { event ->
+            mangaRepository.normalizeFavoriteSubscribedState()
+        }
+        viewModelScope.launch {
+            transferCoordinator.events.collect { event ->
                 handleTransferEvent(event)
             }
         }
@@ -446,17 +457,21 @@ class SenderViewModel @Inject constructor(
                 )
             }
 
-            val downloadedFiles = mutableListOf<File>()
-            var failedCount = 0
-            downloadable.forEach { (entry, acquisition) ->
-                runCatching {
-                    opdsRepository.downloadPublication(baseUrl, entry, acquisition)
-                }.onSuccess { file ->
-                    downloadedFiles += file
-                }.onFailure {
-                    failedCount += 1
-                }
+            data class DownloadOutcome(val file: File?, val failed: Boolean)
+            val outcomes = coroutineScope {
+                downloadable.map { (entry, acquisition) ->
+                    async {
+                        runCatching {
+                            opdsRepository.downloadPublication(baseUrl, entry, acquisition)
+                        }.fold(
+                            onSuccess = { file -> DownloadOutcome(file = file, failed = false) },
+                            onFailure = { DownloadOutcome(file = null, failed = true) },
+                        )
+                    }
+                }.awaitAll()
             }
+            val downloadedFiles = outcomes.mapNotNull { it.file }
+            val failedCount = outcomes.count { it.failed }
 
             if (downloadedFiles.isNotEmpty()) {
                 addUris(downloadedFiles.map { file -> Uri.fromFile(file) })
@@ -672,6 +687,7 @@ class SenderViewModel @Inject constructor(
                     state.copy(
                         manga = state.manga.copy(
                             selectedSeries = seriesPage.details,
+                            selectedSeriesScrollRequest = state.manga.selectedSeriesScrollRequest + 1,
                             chapters = seriesPage.chapters,
                             selectedChapterIds = emptySet(),
                             lastReadChapterText = lastRead,
@@ -814,6 +830,7 @@ class SenderViewModel @Inject constructor(
                         opds = state.opds.copy(webMode = WebContentMode.Manga),
                         manga = state.manga.copy(
                             selectedSeries = page.details,
+                            selectedSeriesScrollRequest = state.manga.selectedSeriesScrollRequest + 1,
                             chapters = page.chapters,
                             selectedChapterIds = selectedIds,
                             isCheckingSubscriptions = false,
@@ -869,7 +886,15 @@ class SenderViewModel @Inject constructor(
             state.copy(
                 manga = state.manga.copy(
                     isDownloading = true,
-                    downloadProgressText = "Preparing ${selectedChapters.size} chapters",
+                    downloadProgress = MangaDownloadUiProgress(
+                        title = "Preparing manga download",
+                        detail = when (selectedChapters.size) {
+                            1 -> "1 chapter selected"
+                            else -> "${selectedChapters.size} chapters selected"
+                        },
+                        currentChapterTitle = null,
+                        progress = null,
+                    ),
                     errorMessage = null,
                     statusMessage = null,
                 ),
@@ -886,7 +911,9 @@ class SenderViewModel @Inject constructor(
                         _state.update { state ->
                             state.copy(
                                 manga = state.manga.copy(
-                                    downloadProgressText = progress.toUiText(),
+                                    downloadProgress = progress.toUiProgress(
+                                        previousProgress = state.manga.downloadProgress?.progress,
+                                    ),
                                 ),
                             )
                         }
@@ -904,7 +931,7 @@ class SenderViewModel @Inject constructor(
                     state.copy(
                         manga = state.manga.copy(
                             isDownloading = false,
-                            downloadProgressText = null,
+                            downloadProgress = null,
                             selectedChapterIds = state.manga.selectedChapterIds - downloadedIds,
                             errorMessage = formatMangaFailures(result.failedMessages),
                         ),
@@ -919,7 +946,7 @@ class SenderViewModel @Inject constructor(
                     state.copy(
                         manga = state.manga.copy(
                             isDownloading = false,
-                            downloadProgressText = null,
+                            downloadProgress = null,
                             errorMessage = error.message ?: "Cannot download manga chapters",
                         ),
                     )
@@ -928,14 +955,63 @@ class SenderViewModel @Inject constructor(
         }
     }
 
-    private fun MangaDownloadProgress.toUiText(): String {
-        val chapterPart = "Chapter ${completedChapters + 1}/$totalChapters"
-        val pagePart = when {
-            !detail.isNullOrBlank() -> ", $detail"
-            totalPages > 0 -> ", page $completedPages/$totalPages"
-            else -> ""
+    private fun MangaDownloadProgress.toUiProgress(
+        previousProgress: Float?,
+    ): MangaDownloadUiProgress {
+        val safeTotalChapters = totalChapters.coerceAtLeast(1)
+        val completedChapterCount = completedChapters.coerceIn(0, safeTotalChapters)
+        val allChaptersComplete = completedChapterCount >= safeTotalChapters
+        val archiveTotal = archiveTotalBytes?.takeIf { it > 0L }
+        val archiveFraction = archiveTotal?.let { total ->
+            archiveBytesRead.toFloat() / total.toFloat()
         }
-        return "$chapterPart$pagePart: $chapterTitle"
+        val pageFraction = when {
+            allChaptersComplete -> 0f
+            archiveFraction != null -> archiveFraction
+            totalPages > 0 -> completedPages.toFloat() / totalPages.toFloat()
+            else -> 0f
+        }.coerceIn(0f, 1f)
+        val progressCap = if (allChaptersComplete) 1f else 0.99f
+        val previousSafeProgress = previousProgress?.coerceAtMost(progressCap) ?: 0f
+        val progress = ((completedChapterCount + pageFraction) / safeTotalChapters)
+            .coerceIn(0f, 1f)
+            .coerceAtMost(progressCap)
+            .coerceAtLeast(previousSafeProgress)
+
+        val step = when {
+            detail.equals("Preparing", ignoreCase = true) -> "Preparing chapter"
+            detail.equals("Downloading archive", ignoreCase = true) -> "Downloading archive"
+            detail.equals("Archive downloaded", ignoreCase = true) -> "Archive saved"
+            detail.equals("Archive unavailable, downloading pages", ignoreCase = true) ->
+                "Archive unavailable, switching to pages"
+            !detail.isNullOrBlank() -> detail
+            totalPages > 0 -> "Downloading pages"
+            else -> "Downloading chapter"
+        }
+        val chapterProgressText = if (allChaptersComplete) {
+            "All chapters saved"
+        } else {
+            "$completedChapterCount of $safeTotalChapters done"
+        }
+        val detailText = when {
+            allChaptersComplete ->
+                chapterProgressText
+            archiveTotal != null && detail.equals("Downloading archive", ignoreCase = true) ->
+                "$chapterProgressText - archive ${archiveBytesRead.formatBytes()} of ${archiveTotal.formatBytes()}"
+            totalPages > 0 && completedPages >= totalPages ->
+                "$chapterProgressText - finalizing chapter"
+            totalPages > 0 && detail.isNullOrBlank() ->
+                "$chapterProgressText - page $completedPages of $totalPages"
+            else ->
+                "$chapterProgressText - $step"
+        }
+
+        return MangaDownloadUiProgress(
+            title = "${(progress * 100).toInt()}% downloaded",
+            detail = detailText,
+            currentChapterTitle = chapterTitle,
+            progress = progress,
+        )
     }
 
     private fun formatMangaFailures(failedMessages: List<String>): String? {
@@ -1207,6 +1283,15 @@ class SenderViewModel @Inject constructor(
         }
     }
 
+    fun updateHapticFeedbackEnabled(enabled: Boolean) {
+        _state.update { state ->
+            state.copy(settings = state.settings.copy(enableHaptics = enabled))
+        }
+        viewModelScope.launch {
+            settingsRepository.setEnableHaptics(enabled)
+        }
+    }
+
     fun clearDownloadCache() {
         viewModelScope.launch {
             val deletedBytes = withContext(Dispatchers.IO) {
@@ -1249,7 +1334,7 @@ class SenderViewModel @Inject constructor(
             return
         }
 
-        val requestId = TransferCoordinator.submit(
+        val requestId = transferCoordinator.submit(
             device = device,
             items = uploadableItems.map { item ->
                 TransferUploadItem(
@@ -1359,48 +1444,69 @@ class SenderViewModel @Inject constructor(
         }
     }
 
-    private fun showOpdsStatus(message: String) {
-        _state.update { state ->
-            state.copy(
-                opds = state.opds.copy(
-                    statusMessage = message,
-                    errorMessage = null,
-                ),
-            )
-        }
-
+    private fun showTemporaryStatus(
+        delayMillis: Long,
+        setMessage: (String) -> Unit,
+        clearIfStillCurrent: (String) -> Unit,
+        message: String,
+    ) {
+        setMessage(message)
         viewModelScope.launch {
-            delay(OpdsStatusMessageMillis)
-            _state.update { state ->
-                if (state.opds.statusMessage == message) {
-                    state.copy(opds = state.opds.copy(statusMessage = null))
-                } else {
-                    state
-                }
-            }
+            delay(delayMillis)
+            clearIfStillCurrent(message)
         }
     }
 
-    private fun showMangaStatus(message: String) {
-        _state.update { state ->
-            state.copy(
-                manga = state.manga.copy(
-                    statusMessage = message,
-                    errorMessage = null,
-                ),
-            )
-        }
-
-        viewModelScope.launch {
-            delay(StatusMessageMillis)
-            _state.update { state ->
-                if (state.manga.statusMessage == message) {
-                    state.copy(manga = state.manga.copy(statusMessage = null))
-                } else {
-                    state
+    private fun showOpdsStatus(message: String) {
+        showTemporaryStatus(
+            delayMillis = OpdsStatusMessageMillis,
+            setMessage = { msg ->
+                _state.update { state ->
+                    state.copy(
+                        opds = state.opds.copy(
+                            statusMessage = msg,
+                            errorMessage = null,
+                        ),
+                    )
                 }
-            }
-        }
+            },
+            clearIfStillCurrent = { msg ->
+                _state.update { state ->
+                    if (state.opds.statusMessage == msg) {
+                        state.copy(opds = state.opds.copy(statusMessage = null))
+                    } else {
+                        state
+                    }
+                }
+            },
+            message = message,
+        )
+    }
+
+    private fun showMangaStatus(message: String) {
+        showTemporaryStatus(
+            delayMillis = StatusMessageMillis,
+            setMessage = { msg ->
+                _state.update { state ->
+                    state.copy(
+                        manga = state.manga.copy(
+                            statusMessage = msg,
+                            errorMessage = null,
+                        ),
+                    )
+                }
+            },
+            clearIfStillCurrent = { msg ->
+                _state.update { state ->
+                    if (state.manga.statusMessage == msg) {
+                        state.copy(manga = state.manga.copy(statusMessage = null))
+                    } else {
+                        state
+                    }
+                }
+            },
+            message = message,
+        )
     }
 
     private fun loadOpdsCatalog(
@@ -1767,18 +1873,6 @@ class SenderViewModel @Inject constructor(
         }?.first
 
     private companion object {
-        val BookExtensions = setOf(
-            "epub",
-            "fb2",
-            "mobi",
-            "azw3",
-            "pdf",
-            "djvu",
-            "txt",
-            "rtf",
-            "cbz",
-            "cbr",
-        )
         const val StatusMessageMillis = 5_000L
         const val OpdsStatusMessageMillis = 2_300L
     }

@@ -7,6 +7,7 @@ import com.cybercat.pocketbooksender.data.database.dao.MangaSeriesBookmarkDao
 import com.cybercat.pocketbooksender.data.database.entity.MangaChapterHistoryEntity
 import com.cybercat.pocketbooksender.data.database.entity.MangaSeriesBookmarkEntity
 import com.cybercat.pocketbooksender.domain.FilenameSanitizer
+import com.cybercat.pocketbooksender.util.TimedCacheEntry
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
@@ -24,7 +25,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Semaphore
@@ -48,6 +48,7 @@ class MangaRepository @Inject constructor(
                 id = adapter.id,
                 title = adapter.title,
                 homeUrl = adapter.homeUrl,
+                browserUserAgent = adapter.browserUserAgent,
             )
         }
 
@@ -61,16 +62,21 @@ class MangaRepository @Inject constructor(
 
     val savedSeries: Flow<List<MangaSeriesBookmark>> =
         bookmarkDao.observeSavedSeries()
-            .onStart { bookmarkDao.normalizeMutualExclusion() }
             .map { items ->
                 items.map { item -> item.toBookmark() }
             }
+
+    suspend fun normalizeFavoriteSubscribedState() = withContext(Dispatchers.IO) {
+        bookmarkDao.normalizeMutualExclusion()
+    }
 
     suspend fun authState(sourceId: String): MangaAuthState =
         adapter(sourceId).authState()
 
     fun homeUrl(sourceId: String): String =
-        adapter(sourceId).homeUrl
+        adapters.firstOrNull { adapter -> adapter.id == sourceId }?.homeUrl
+            ?: adapters.firstOrNull()?.homeUrl
+            ?: ""
 
     fun buildSearchUrl(sourceId: String, query: String): String =
         adapter(sourceId).buildSearchUrl(query)
@@ -275,18 +281,21 @@ class MangaRepository @Inject constructor(
                 chapter = chapter,
                 outputDir = outputDir,
                 baseFileName = baseFileName,
-            ) { detail ->
-                onProgress(
-                    MangaDownloadProgress(
-                        chapterTitle = chapter.title,
-                        totalChapters = totalChapters,
-                        completedChapters = completedChapters.get(),
-                        totalPages = 0,
-                        completedPages = 0,
-                        detail = detail,
-                    ),
-                )
-            }
+                onProgress = { detail, bytesRead, totalBytes ->
+                    onProgress(
+                        MangaDownloadProgress(
+                            chapterTitle = chapter.title,
+                            totalChapters = totalChapters,
+                            completedChapters = completedChapters.get(),
+                            totalPages = 0,
+                            completedPages = 0,
+                            detail = detail,
+                            archiveBytesRead = bytesRead,
+                            archiveTotalBytes = totalBytes,
+                        ),
+                    )
+                },
+            )
 
             var fallbackPageCount = 0
             val outputFile = directArchive ?: downloadChapterFromPages(
@@ -326,7 +335,7 @@ class MangaRepository @Inject constructor(
                 MangaDownloadProgress(
                     chapterTitle = chapter.title,
                     totalChapters = totalChapters,
-                    completedChapters = completed.coerceAtMost(totalChapters - 1),
+                    completedChapters = completed.coerceAtMost(totalChapters),
                     totalPages = pageCount,
                     completedPages = completedPages,
                     detail = progressDetail,
@@ -455,7 +464,7 @@ class MangaRepository @Inject constructor(
         chapter: MangaChapter,
         outputDir: File,
         baseFileName: String,
-        onProgress: suspend (String) -> Unit,
+        onProgress: suspend (detail: String, bytesRead: Long, totalBytes: Long?) -> Unit,
     ): File? {
         if (chapter.downloadUrl.isNullOrBlank()) return null
 
@@ -464,8 +473,14 @@ class MangaRepository @Inject constructor(
         }
 
         try {
-            onProgress("Downloading archive")
-            val archive = adapter.downloadChapterArchive(chapter, tempFile) ?: run {
+            onProgress("Downloading archive", 0L, null)
+            val archive = adapter.downloadChapterArchive(
+                chapter = chapter,
+                outputFile = tempFile,
+                onProgress = { bytesRead, totalBytes ->
+                    onProgress("Downloading archive", bytesRead, totalBytes)
+                },
+            ) ?: run {
                 tempFile.delete()
                 return null
             }
@@ -476,7 +491,7 @@ class MangaRepository @Inject constructor(
             )
         } catch (error: IOException) {
             tempFile.delete()
-            onProgress("Archive unavailable, downloading pages")
+            onProgress("Archive unavailable, downloading pages", 0L, null)
             return null
         }
     }
@@ -564,6 +579,8 @@ data class MangaDownloadProgress(
     val totalPages: Int,
     val completedPages: Int,
     val detail: String? = null,
+    val archiveBytesRead: Long = 0L,
+    val archiveTotalBytes: Long? = null,
 )
 
 private data class ChapterDownloadOutcome(
@@ -578,13 +595,6 @@ private data class DownloadedMangaPage(
     val fileExtension: String,
 )
 
-private data class TimedCacheEntry<T>(
-    val value: T,
-    val createdAtMillis: Long = System.currentTimeMillis(),
-) {
-    fun isFresh(ttlMillis: Long): Boolean =
-        System.currentTimeMillis() - createdAtMillis <= ttlMillis
-}
 
 private fun MangaChapterHistoryEntity.toDownload(): MangaChapterDownload =
     MangaChapterDownload(

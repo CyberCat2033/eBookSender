@@ -3,8 +3,11 @@ package com.cybercat.pocketbooksender.domain
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class PathPlanner {
+@Singleton
+class PathPlanner @Inject constructor() {
     fun plan(item: UploadItem, settings: AppSettings): String {
         val finalExtension = item.extension.lowercase()
         val title = FilenameSanitizer.fileTitle(item.title, "Untitled")

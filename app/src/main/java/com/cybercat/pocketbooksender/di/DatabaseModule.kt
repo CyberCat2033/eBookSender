@@ -58,6 +58,13 @@ object DatabaseModule {
         }
     }
 
+    private val Migration3To4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `devices`")
+            db.execSQL("DROP TABLE IF EXISTS `upload_queue`")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -68,17 +75,11 @@ object DatabaseModule {
             PocketBookSenderDatabase::class.java,
             "pocketbook_sender.db",
         )
-            .addMigrations(Migration1To2, Migration2To3)
+            .addMigrations(Migration1To2, Migration2To3, Migration3To4)
             .build()
 
     @Provides
-    fun provideDeviceDao(database: PocketBookSenderDatabase) = database.deviceDao()
-
-    @Provides
     fun provideOpdsSourceDao(database: PocketBookSenderDatabase) = database.opdsSourceDao()
-
-    @Provides
-    fun provideUploadQueueDao(database: PocketBookSenderDatabase) = database.uploadQueueDao()
 
     @Provides
     fun provideMangaChapterHistoryDao(database: PocketBookSenderDatabase) =

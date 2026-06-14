@@ -9,6 +9,7 @@ data class AppSettings(
     val mangaFileNameTemplate: String = "{volume}",
     val conflictStrategy: ConflictStrategy = ConflictStrategy.Ask,
     val useDynamicColor: Boolean = true,
+    val enableHaptics: Boolean = true,
 )
 
 enum class ConflictStrategy {

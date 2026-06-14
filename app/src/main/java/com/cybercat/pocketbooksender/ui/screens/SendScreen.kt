@@ -2,8 +2,10 @@ package com.cybercat.pocketbooksender.ui.screens
 
 import android.net.Uri
 import android.content.Context
+import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import androidx.compose.foundation.Image as ComposeImage
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -27,16 +31,17 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.WifiTethering
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -48,44 +53,52 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.layout.Box
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.ui.draw.rotate
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.ui.SenderUiState
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendScreen(
     state: SenderUiState,
+    listState: LazyListState,
     onFtpInputChanged: (String) -> Unit,
     onConnect: () -> Unit,
     onQrScanned: (String) -> Unit,
@@ -99,6 +112,9 @@ fun SendScreen(
     onQueuedMangaSeriesChanged: (String) -> Unit,
     onUploadAll: () -> Unit,
 ) {
+    var clearTrigger by remember { mutableStateOf(0) }
+    var clearInProgress by remember { mutableStateOf(false) }
+    var clearAnimatedRowCount by remember { mutableStateOf(0) }
     val activeQueue = if (state.isTransferActive) {
         state.queue
     } else {
@@ -106,11 +122,14 @@ fun SendScreen(
     }
     val activeRows = activeQueue.withStableLazyKeys()
     val activeMangaQueue = activeQueue.filter { it.category == BookCategory.Manga }
+    val canBatchRenameManga = activeMangaQueue.size > 1 && !state.isTransferActive && !clearInProgress
+    var showMangaBatchEditor by remember { mutableStateOf(false) }
     val uploadedQueue = if (state.isTransferActive) {
         emptyList()
     } else {
         state.queue.filter { it.status == UploadStatus.Uploaded }
     }
+    val animatedUploadedSectionCount = if (uploadedQueue.isNotEmpty()) 1 else 0
     val hasUploadableFiles = state.queue.any {
         it.status == UploadStatus.Pending ||
             it.status == UploadStatus.Failed ||
@@ -121,6 +140,39 @@ fun SendScreen(
         onResult = onAddUris,
     )
 
+    LaunchedEffect(canBatchRenameManga) {
+        if (!canBatchRenameManga) {
+            showMangaBatchEditor = false
+        }
+    }
+
+    if (showMangaBatchEditor && canBatchRenameManga) {
+        MangaBatchEditorDialog(
+            count = activeMangaQueue.size,
+            currentSeries = activeMangaQueue.commonMangaSeries(),
+            suggestions = state.mangaSeriesSuggestions,
+            onDismiss = { showMangaBatchEditor = false },
+            onApply = { series ->
+                onQueuedMangaSeriesChanged(series)
+                showMangaBatchEditor = false
+            },
+        )
+    }
+
+    LaunchedEffect(clearTrigger) {
+        if (clearTrigger > 0) {
+            delay(queueClearDelayMillis(clearAnimatedRowCount))
+            onClearQueue()
+            clearInProgress = false
+        }
+    }
+
+    LaunchedEffect(state.queue.isEmpty()) {
+        if (state.queue.isEmpty()) {
+            clearInProgress = false
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -128,7 +180,19 @@ fun SendScreen(
                 windowInsets = WindowInsets(0.dp),
                 actions = {
                     if (state.queue.isNotEmpty()) {
-                        IconButton(onClick = onClearQueue) {
+                        val context = LocalContext.current
+                        val view = LocalView.current
+                        IconButton(
+                            onClick = {
+                                if (!clearInProgress && !state.isTransferActive) {
+                                    view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.LONG_PRESS)
+                                    clearAnimatedRowCount = animatedUploadedSectionCount + activeRows.size
+                                    clearInProgress = true
+                                    clearTrigger++
+                                }
+                            },
+                            enabled = !clearInProgress && !state.isTransferActive,
+                        ) {
                             Icon(Icons.Outlined.Delete, contentDescription = "Clear queue")
                         }
                     }
@@ -136,108 +200,251 @@ fun SendScreen(
             )
         },
     ) { innerPadding ->
-        LazyColumn(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(innerPadding),
         ) {
-            item {
-                ConnectionPanel(
-                    state = state,
-                    onFtpInputChanged = onFtpInputChanged,
-                    onConnect = onConnect,
-                    onQrScanned = onQrScanned,
-                    onDisconnect = onDisconnect,
-                )
-            }
-
-            item {
-                ActionRow(
-                    canUpload = state.isConnected && hasUploadableFiles && !state.isTransferActive,
-                    onAddFiles = { picker.launch(arrayOf("*/*")) },
-                    onUploadAll = onUploadAll,
-                )
-            }
-
-            if (state.isTransferActive) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 item {
-                    OverallProgressPanel(queue = state.queue)
-                }
-            }
-
-            if (activeMangaQueue.size > 1) {
-                item {
-                    MangaBatchEditor(
-                        count = activeMangaQueue.size,
-                        currentSeries = activeMangaQueue.commonMangaSeries(),
-                        suggestions = state.mangaSeriesSuggestions,
-                        onApply = onQueuedMangaSeriesChanged,
+                    ConnectionPanel(
+                        state = state,
+                        onFtpInputChanged = onFtpInputChanged,
+                        onConnect = onConnect,
+                        onQrScanned = onQrScanned,
+                        onDisconnect = onDisconnect,
                     )
                 }
-            }
 
-            if (uploadedQueue.isNotEmpty()) {
-                item(key = "uploaded-section") {
-                    UploadedSection(
-                        items = uploadedQueue,
-                        modifier = Modifier.animateItem(
-                            fadeInSpec = QueueFadeInSpec,
-                            fadeOutSpec = QueueFadeOutSpec,
-                            placementSpec = QueuePlacementSpec
-                        ),
-                    )
-                }
-            }
-
-            if (state.errorMessage != null) {
                 item {
-                    Text(
-                        text = state.errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
+                    ActionRow(
+                        canAddFiles = !clearInProgress,
+                        canUpload = state.isConnected && hasUploadableFiles && !state.isTransferActive && !clearInProgress,
+                        enableHaptics = state.settings.enableHaptics,
+                        onAddFiles = { picker.launch(arrayOf("*/*")) },
+                        onUploadAll = onUploadAll,
                     )
                 }
-            }
 
-            item {
-                QueueHeader(count = activeQueue.size)
-            }
+                if (uploadedQueue.isNotEmpty()) {
+                    item(key = "uploaded-section") {
+                        AnimatedRemovalItem(
+                            clearTrigger = clearTrigger,
+                            clearInProgress = clearInProgress,
+                            staggerIndex = 0,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = QueueFadeInSpec,
+                                fadeOutSpec = QueueFadeOutSpec,
+                                placementSpec = QueuePlacementSpec
+                            ),
+                            onRemoved = {},
+                        ) {
+                            UploadedSection(
+                                items = uploadedQueue,
+                                enableHaptics = state.settings.enableHaptics,
+                            )
+                        }
+                    }
+                }
 
-            if (activeQueue.isEmpty()) {
+                if (state.errorMessage != null) {
+                    item {
+                        Text(
+                            text = state.errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+
                 item {
-                    EmptyQueue()
-                }
-            } else {
-                itemsIndexed(
-                    items = activeRows,
-                    key = { _, row -> row.key },
-                    contentType = { _, _ -> "upload_item" }
-                ) { _, row ->
-                    val item = row.item
-                    UploadItemRow(
-                        item = item,
-                        modifier = Modifier.animateItem(
-                            fadeInSpec = QueueFadeInSpec,
-                            fadeOutSpec = QueueFadeOutSpec,
-                            placementSpec = QueuePlacementSpec
-                        ),
-                        programmingTags = state.programmingTags,
-                        mangaSeriesSuggestions = state.mangaSeriesSuggestions,
-                        onRemove = { onRemoveItem(item.id) },
-                        onCategoryChanged = { category -> onCategoryChanged(item.id, category) },
-                        onProgrammingTagChanged = { tag -> onProgrammingTagChanged(item.id, tag) },
-                        onMangaSeriesChanged = { series -> onMangaSeriesChanged(item.id, series) },
+                    QueueHeader(
+                        count = activeQueue.size,
+                        canBatchRenameManga = canBatchRenameManga,
+                        onBatchRenameManga = { showMangaBatchEditor = true },
                     )
+                }
+
+                if (activeQueue.isEmpty()) {
+                    item {
+                        EmptyQueue()
+                    }
+                } else {
+                    itemsIndexed(
+                        items = activeRows,
+                        key = { _, row -> row.key },
+                        contentType = { _, _ -> "upload_item" }
+                    ) { index, row ->
+                        val item = row.item
+                        AnimatedRemovalItem(
+                            clearTrigger = clearTrigger,
+                            clearInProgress = clearInProgress,
+                            staggerIndex = animatedUploadedSectionCount + index,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = QueueFadeInSpec,
+                                fadeOutSpec = QueueFadeOutSpec,
+                                placementSpec = QueuePlacementSpec
+                            ),
+                            onRemoved = { onRemoveItem(item.id) },
+                        ) { triggerRemove ->
+                            UploadItemRow(
+                                item = item,
+                                programmingTags = state.programmingTags,
+                                mangaSeriesSuggestions = state.mangaSeriesSuggestions,
+                                enableHaptics = state.settings.enableHaptics,
+                                onRemove = triggerRemove,
+                                onCategoryChanged = { category -> onCategoryChanged(item.id, category) },
+                                onProgrammingTagChanged = { tag -> onProgrammingTagChanged(item.id, tag) },
+                                onMangaSeriesChanged = { series -> onMangaSeriesChanged(item.id, series) },
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Spacer(Modifier.height(if (state.isTransferActive) 112.dp else 8.dp))
                 }
             }
 
-            item {
-                Spacer(Modifier.height(8.dp))
+            AnimatedVisibility(
+                visible = state.isTransferActive,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(12.dp),
+                enter = fadeIn() + slideInVertically { height -> height / 2 },
+                exit = fadeOut() + slideOutVertically { height -> height / 2 },
+            ) {
+                UploadProgressOverlay(queue = state.queue)
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Анимация удаления: slide вправо + collapse + fade
+// Режим каскада (clearTrigger): все элементы анимируются без вызова onRemoved —
+// ViewModel не трогается во время анимации, что избегает recomposition-помех.
+// onClearQueue() вызывается один раз из SendScreen после последней exit-анимации.
+// Режим одиночного удаления: onRemoved() вызывается после окончания анимации.
+// ---------------------------------------------------------------------------
+@Composable
+private fun AnimatedRemovalItem(
+    modifier: Modifier = Modifier,
+    clearTrigger: Int = 0,
+    clearInProgress: Boolean = false,
+    staggerIndex: Int = 0,
+    onRemoved: () -> Unit,
+    content: @Composable (() -> Unit) -> Unit,
+) {
+    var visible by remember { mutableStateOf(!clearInProgress) }
+    var lastSeenClearTrigger by remember { mutableStateOf(clearTrigger) }
+    var triggeredByClear by remember { mutableStateOf(clearInProgress) }
+
+    LaunchedEffect(clearTrigger, clearInProgress) {
+        if (clearTrigger > lastSeenClearTrigger && visible && clearInProgress) {
+            lastSeenClearTrigger = clearTrigger
+            delay(minOf(staggerIndex, QueueClearMaxStaggeredRows).toLong() * QueueClearStaggerMillis)
+            triggeredByClear = true
+            visible = false
+        } else if (clearInProgress && !visible) {
+            triggeredByClear = true
+        }
+    }
+
+    // Одиночное удаление: ждём конца анимации, затем уведомляем родителя.
+    LaunchedEffect(visible) {
+        if (!visible && !triggeredByClear) {
+            delay(QueueSingleRemoveMillis)
+            onRemoved()
+        }
+    }
+
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(spring(stiffness = Spring.StiffnessMediumLow)),
+        exit = slideOutHorizontally(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessLow,
+            ),
+            targetOffsetX = { it },
+        ) + shrinkVertically(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessLow,
+            ),
+            shrinkTowards = Alignment.Top,
+        ) + fadeOut(tween(300)),
+    ) {
+        content { visible = false }
+    }
+}
+
+@Composable
+private fun MangaBatchEditorDialog(
+    count: Int,
+    currentSeries: String,
+    suggestions: List<String>,
+    onDismiss: () -> Unit,
+    onApply: (String) -> Unit,
+) {
+    var series by remember(currentSeries) { mutableStateOf(currentSeries) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Batch rename manga") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Apply one manga series name to $count queued files.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = series,
+                    onValueChange = { series = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Manga series") },
+                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    suggestions
+                        .filter { it.isNotBlank() }
+                        .distinctBy { it.lowercase() }
+                        .forEach { suggestion ->
+                            FilterChip(
+                                selected = series.equals(suggestion, ignoreCase = true),
+                                onClick = { series = suggestion },
+                                label = { Text(suggestion) },
+                            )
+                        }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onApply(series.trim()) },
+                enabled = series.isNotBlank(),
+            ) {
+                Text("Apply")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 @Composable
@@ -249,6 +456,7 @@ private fun ConnectionPanel(
     onDisconnect: () -> Unit,
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
 
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
@@ -284,7 +492,10 @@ private fun ConnectionPanel(
                     )
                 }
                 if (state.isConnected) {
-                    IconButton(onClick = onDisconnect) {
+                    IconButton(onClick = {
+                        view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.REJECT)
+                        onDisconnect()
+                    }) {
                         Icon(Icons.Outlined.Close, contentDescription = "Disconnect")
                     }
                 }
@@ -305,6 +516,7 @@ private fun ConnectionPanel(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
                         onClick = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                             startQrScan(context, onQrScanned)
                         },
                         enabled = !state.isConnecting,
@@ -316,6 +528,7 @@ private fun ConnectionPanel(
                     }
                     Button(
                         onClick = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.CONFIRM)
                             if (state.ftpInput.isBlank()) {
                                 startQrScan(context, onQrScanned)
                             } else {
@@ -370,24 +583,35 @@ private fun startQrScan(
 
 @Composable
 private fun ActionRow(
+    canAddFiles: Boolean,
     canUpload: Boolean,
+    enableHaptics: Boolean,
     onAddFiles: () -> Unit,
     onUploadAll: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Button(
-            onClick = onAddFiles,
+        OutlinedButton(
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                onAddFiles()
+            },
+            enabled = canAddFiles,
             modifier = Modifier.weight(1f),
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("Add files")
         }
-        OutlinedButton(
-            onClick = onUploadAll,
+        Button(
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                onUploadAll()
+            },
             enabled = canUpload,
             modifier = Modifier.weight(1f),
         ) {
@@ -399,80 +623,11 @@ private fun ActionRow(
 }
 
 @Composable
-private fun MangaBatchEditor(
+private fun QueueHeader(
     count: Int,
-    currentSeries: String,
-    suggestions: List<String>,
-    onApply: (String) -> Unit,
+    canBatchRenameManga: Boolean,
+    onBatchRenameManga: () -> Unit,
 ) {
-    var series by remember(currentSeries) { mutableStateOf(currentSeries) }
-
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.Image,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = "Manga batch",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "$count files",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            OutlinedTextField(
-                value = series,
-                onValueChange = { series = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Series for all manga files") },
-            )
-
-            Button(
-                onClick = { onApply(series) },
-                enabled = series.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Apply to $count files")
-            }
-
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                suggestions
-                    .filter { it.isNotBlank() }
-                    .distinctBy { it.lowercase() }
-                    .forEach { suggestion ->
-                        FilterChip(
-                            selected = series.equals(suggestion, ignoreCase = true),
-                            onClick = {
-                                series = suggestion
-                                onApply(suggestion)
-                            },
-                            label = { Text(suggestion) },
-                        )
-                    }
-            }
-        }
-    }
-}
-
-@Composable
-private fun QueueHeader(count: Int) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -493,6 +648,12 @@ private fun QueueHeader(count: Int) {
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
+        }
+        Spacer(Modifier.weight(1f))
+        if (canBatchRenameManga) {
+            IconButton(onClick = onBatchRenameManga) {
+                Icon(Icons.Outlined.Edit, contentDescription = "Batch rename manga")
+            }
         }
     }
 }
@@ -521,24 +682,27 @@ private fun EmptyQueue() {
     }
 }
 
+
 @Composable
 private fun UploadItemRow(
     item: UploadItem,
     modifier: Modifier = Modifier,
     programmingTags: List<String>,
     mangaSeriesSuggestions: List<String>,
+    enableHaptics: Boolean,
     onRemove: () -> Unit,
     onCategoryChanged: (BookCategory) -> Unit,
     onProgrammingTagChanged: (String) -> Unit,
     onMangaSeriesChanged: (String) -> Unit,
 ) {
     var detailsExpanded by remember(item.id) { mutableStateOf(false) }
+    val context = LocalContext.current
+    val view = LocalView.current
 
     ElevatedCard(modifier.fillMaxWidth()) {
         Column {
             Column(
                 modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BookCover(item)
@@ -559,29 +723,51 @@ private fun UploadItemRow(
                         )
                     }
                     IconButton(
-                        onClick = onRemove,
+                        onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.REJECT)
+                            onRemove()
+                        },
                         enabled = item.status != UploadStatus.Uploading && item.status != UploadStatus.Uploaded,
                     ) {
                         Icon(Icons.Outlined.Delete, contentDescription = "Remove")
                     }
                 }
 
+                Spacer(Modifier.height(12.dp))
+
                 ItemTypeSummary(
                     item = item,
                     expanded = detailsExpanded,
-                    onToggle = { detailsExpanded = !detailsExpanded },
+                    onToggle = {
+                        detailsExpanded = !detailsExpanded
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    },
                 )
 
+                // Отступ top=12.dp помещён ВНУТРИ AnimatedVisibility: он схлопывается
+                // вместе с контентом — нет резкого прыжка до разделителя.
                 AnimatedVisibility(
                     visible = detailsExpanded,
-                    enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-                    exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+                    enter = expandVertically(
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        expandFrom = Alignment.Top,
+                    ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow)),
+                    exit = shrinkVertically(
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        shrinkTowards = Alignment.Top,
+                    ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow)),
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(
+                        modifier = Modifier.padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         CategorySelector(
                             selected = item.category,
                             lockedToManga = item.extension == "cbr" || item.extension == "cbz",
-                            onCategoryChanged = onCategoryChanged,
+                            onCategoryChanged = { cat ->
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onCategoryChanged(cat)
+                            },
                         )
 
                         if (item.category == BookCategory.Programming) {
@@ -602,7 +788,9 @@ private fun UploadItemRow(
                     }
                 }
 
+                Spacer(Modifier.height(12.dp))
                 HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -677,12 +865,15 @@ private fun SmoothProgressIndicator(
 @Composable
 private fun UploadedSection(
     items: List<UploadItem>,
+    enableHaptics: Boolean,
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val view = LocalView.current
 
     ElevatedCard(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -704,7 +895,10 @@ private fun UploadedSection(
                     animationSpec = spring(stiffness = Spring.StiffnessMedium),
                     label = "ChevronRotation"
                 )
-                IconButton(onClick = { expanded = !expanded }) {
+                IconButton(onClick = {
+                    expanded = !expanded
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                }) {
                     Icon(
                         imageVector = Icons.Outlined.ExpandMore,
                         contentDescription = if (expanded) "Collapse uploaded" else "Show uploaded",
@@ -713,10 +907,17 @@ private fun UploadedSection(
                 }
             }
 
+            // Здесь нет элементов после AnimatedVisibility — gap не прыгает.
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-                exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+                enter = expandVertically(
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    expandFrom = Alignment.Top,
+                ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow)),
+                exit = shrinkVertically(
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    shrinkTowards = Alignment.Top,
+                ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow)),
             ) {
                 Column(
                     modifier = Modifier.padding(top = 10.dp),
@@ -945,12 +1146,13 @@ private fun List<UploadItem>.commonMangaSeries(): String {
 }
 
 @Composable
-private fun OverallProgressPanel(
+private fun UploadProgressOverlay(
     queue: List<UploadItem>,
     modifier: Modifier = Modifier,
 ) {
     val uploadingItems = queue.filter { it.status == UploadStatus.Uploading }
     val uploadedCount = queue.count { it.status == UploadStatus.Uploaded }
+    val failedCount = queue.count { it.status == UploadStatus.Failed }
     val totalCount = queue.size
 
     if (totalCount == 0) return
@@ -966,16 +1168,21 @@ private fun OverallProgressPanel(
         ),
         label = "OverallProgress"
     )
+    val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+    val currentItem = uploadingItems.firstOrNull()
 
-    ElevatedCard(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        )
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .widthIn(max = 560.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = contentColor,
+        tonalElevation = 8.dp,
+        shadowElevation = 8.dp,
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -984,16 +1191,19 @@ private fun OverallProgressPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (uploadedCount == totalCount) "Upload complete" else "Uploading books...",
+                    text = if (uploadedCount == totalCount) "Upload complete" else "Sending to PocketBook",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
                 Text(
                     text = "${(overallProgress * 100).toInt()}%",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = contentColor
                 )
             }
 
@@ -1004,27 +1214,24 @@ private fun OverallProgressPanel(
                 trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Text(
+                text = if (failedCount > 0) {
+                    "Uploaded $uploadedCount of $totalCount files, failed $failedCount"
+                } else {
+                    "Uploaded $uploadedCount of $totalCount files"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = contentColor.copy(alpha = 0.8f),
+            )
+            if (currentItem != null) {
                 Text(
-                    text = "Uploaded $uploadedCount of $totalCount files",
+                    text = currentItem.title,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = contentColor.copy(alpha = 0.8f),
                 )
-                if (uploadingItems.isNotEmpty()) {
-                    Text(
-                        text = uploadingItems.first().title,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false).padding(start = 16.dp),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    )
-                }
             }
         }
     }
@@ -1044,3 +1251,16 @@ private val QueuePlacementSpec = spring<IntOffset>(
     dampingRatio = Spring.DampingRatioLowBouncy,
     stiffness = Spring.StiffnessMediumLow
 )
+
+private fun queueClearDelayMillis(rowCount: Int): Long {
+    if (rowCount <= 0) return 0L
+    val stagger = minOf(rowCount - 1, QueueClearMaxStaggeredRows).toLong() * QueueClearStaggerMillis
+    return stagger + QueueClearExitSettleMillis
+}
+
+private const val QueueClearMaxStaggeredRows = 8
+private const val QueueClearStaggerMillis = 45L
+private const val QueueSingleRemoveMillis = 560L
+private const val QueueClearExitSettleMillis = QueueSingleRemoveMillis + 120L
+
+// File ended here

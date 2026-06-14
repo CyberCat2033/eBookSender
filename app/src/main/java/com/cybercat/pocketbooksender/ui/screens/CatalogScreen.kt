@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -38,6 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import android.view.HapticFeedbackConstants
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,8 +61,12 @@ import com.cybercat.pocketbooksender.model.MangaSeriesGroup
 fun CatalogScreen(
     catalog: DeviceCatalog,
     isConnected: Boolean,
+    enableHaptics: Boolean,
+    listState: LazyListState,
     onRefresh: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     Scaffold(
         topBar = {
             TopAppBar(
@@ -65,7 +74,10 @@ fun CatalogScreen(
                 windowInsets = WindowInsets(0.dp),
                 actions = {
                     IconButton(
-                        onClick = onRefresh,
+                        onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onRefresh()
+                        },
                         enabled = isConnected && !catalog.isLoading,
                     ) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "Refresh catalog")
@@ -75,6 +87,7 @@ fun CatalogScreen(
         },
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -128,7 +141,7 @@ fun CatalogScreen(
                 key = { "books:${it.path}" },
                 contentType = { "catalog_group" }
             ) { group ->
-                CatalogGroupCard(group = group, modifier = Modifier.animateItem())
+                CatalogGroupCard(group = group, enableHaptics = enableHaptics, modifier = Modifier.animateItem())
             }
 
             item {
@@ -139,7 +152,7 @@ fun CatalogScreen(
                 key = { "programming:${it.path}" },
                 contentType = { "catalog_group" }
             ) { group ->
-                CatalogGroupCard(group = group, modifier = Modifier.animateItem())
+                CatalogGroupCard(group = group, enableHaptics = enableHaptics, modifier = Modifier.animateItem())
             }
 
             item {
@@ -150,7 +163,7 @@ fun CatalogScreen(
                 key = { "manga:${it.path}" },
                 contentType = { "manga_series_group" }
             ) { group ->
-                MangaSeriesCard(group = group, modifier = Modifier.animateItem())
+                MangaSeriesCard(group = group, enableHaptics = enableHaptics, modifier = Modifier.animateItem())
             }
         }
     }
@@ -214,6 +227,7 @@ private fun SectionTitle(title: String, count: Int) {
 @Composable
 private fun CatalogGroupCard(
     group: CatalogGroup,
+    enableHaptics: Boolean,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember(group.path) { mutableStateOf(false) }
@@ -224,6 +238,7 @@ private fun CatalogGroupCard(
                 title = group.name,
                 subtitle = group.files.summary(),
                 expanded = expanded,
+                enableHaptics = enableHaptics,
                 onToggle = { expanded = !expanded },
             )
             AnimatedVisibility(
@@ -240,6 +255,7 @@ private fun CatalogGroupCard(
 @Composable
 private fun MangaSeriesCard(
     group: MangaSeriesGroup,
+    enableHaptics: Boolean,
     modifier: Modifier = Modifier
 ) {
     var expanded by remember(group.path) { mutableStateOf(false) }
@@ -253,6 +269,7 @@ private fun MangaSeriesCard(
                 } ?: "No files",
                 subtitleMaxLines = 3,
                 expanded = expanded,
+                enableHaptics = enableHaptics,
                 onToggle = { expanded = !expanded },
             )
             AnimatedVisibility(
@@ -272,8 +289,11 @@ private fun ExpandableHeader(
     subtitle: String,
     subtitleMaxLines: Int = 1,
     expanded: Boolean,
+    enableHaptics: Boolean,
     onToggle: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -298,7 +318,10 @@ private fun ExpandableHeader(
             animationSpec = spring(stiffness = Spring.StiffnessMedium),
             label = "ChevronRotation"
         )
-        IconButton(onClick = onToggle) {
+        IconButton(onClick = {
+            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            onToggle()
+        }) {
             Icon(
                 imageVector = Icons.Outlined.ExpandMore,
                 contentDescription = if (expanded) "Collapse" else "Expand",

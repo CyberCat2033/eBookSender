@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -64,7 +65,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -84,6 +84,9 @@ import com.cybercat.pocketbooksender.ui.MangaUiState
 import com.cybercat.pocketbooksender.ui.OpdsUiState
 import com.cybercat.pocketbooksender.ui.WebContentMode
 import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
+import androidx.compose.ui.platform.LocalView
+import android.view.HapticFeedbackConstants
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +98,8 @@ import kotlinx.coroutines.withContext
 fun OpdsScreen(
     state: OpdsUiState,
     mangaState: MangaUiState,
+    opdsListState: LazyListState,
+    mangaListState: LazyListState,
     onSearchChanged: (String) -> Unit,
     onWebModeSelected: (WebContentMode) -> Unit,
     onSaveSource: (String, String) -> Unit,
@@ -119,11 +124,13 @@ fun OpdsScreen(
     onSelectAllMangaChapters: () -> Unit,
     onClearMangaChapterSelection: () -> Unit,
     onDownloadSelectedMangaChapters: () -> Unit,
+    enableHaptics: Boolean,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     var showAddSourceDialog by remember { mutableStateOf(false) }
     var newSourceUrl by remember { mutableStateOf("") }
     var newSourceTitle by remember { mutableStateOf("") }
-    val mangaListState = rememberLazyListState()
     val webMode = state.webMode
     val selectedMangaChapterCount = mangaState.selectedChapterIds.size
     val mangaSelectionActive = webMode == WebContentMode.Manga && selectedMangaChapterCount > 0
@@ -170,7 +177,10 @@ fun OpdsScreen(
                 navigationIcon = {
                     if (webMode == WebContentMode.Opds && state.canGoBack) {
                         IconButton(
-                            onClick = onBack,
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onBack()
+                            },
                             enabled = !state.isLoading,
                         ) {
                             Icon(
@@ -180,7 +190,10 @@ fun OpdsScreen(
                         }
                     } else if (webMode == WebContentMode.Manga && mangaState.selectedSeries != null) {
                         IconButton(
-                            onClick = onMangaBack,
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onMangaBack()
+                            },
                             enabled = !mangaState.isLoading && !mangaState.isDownloading,
                         ) {
                             Icon(
@@ -196,6 +209,7 @@ fun OpdsScreen(
                             enabled = !mangaState.isDownloading,
                             hasNewChapters = mangaState.hasNewChapters,
                             hasChapters = mangaState.chapters.isNotEmpty(),
+                            enableHaptics = enableHaptics,
                             onSelectNew = onSelectNewMangaChapters,
                             onSelectAll = onSelectAllMangaChapters,
                             onClear = onClearMangaChapterSelection,
@@ -223,7 +237,10 @@ fun OpdsScreen(
                 exit = fadeOut() + slideOutVertically { height -> height },
             ) {
                 androidx.compose.material3.ExtendedFloatingActionButton(
-                    onClick = onDownloadSelectedMangaChapters,
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                        onDownloadSelectedMangaChapters()
+                    },
                     icon = { Icon(Icons.Outlined.Download, contentDescription = null) },
                     text = { Text("Download ($selectedMangaChapterCount)") },
                 )
@@ -245,6 +262,7 @@ fun OpdsScreen(
             ) {
                 WebModeSelector(
                     selectedMode = webMode,
+                    enableHaptics = enableHaptics,
                     onModeSelected = onWebModeSelected,
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
@@ -252,6 +270,7 @@ fun OpdsScreen(
                 if (webMode == WebContentMode.Manga) {
                     MangaPane(
                         state = mangaState,
+                        enableHaptics = enableHaptics,
                         listState = mangaListState,
                         modifier = Modifier.weight(1f),
                         onSearchChanged = onMangaSearchChanged,
@@ -261,8 +280,8 @@ fun OpdsScreen(
                         onWebPageLoaded = onMangaWebPageLoaded,
                         onOpenSeries = onOpenMangaSeries,
                         onToggleChapter = onToggleMangaChapter,
-                        onSetSeriesFavorite = onSetMangaSeriesFavorite,
-                        onSetSeriesSubscribed = onSetMangaSeriesSubscribed,
+                        onSetMangaSeriesFavorite = onSetMangaSeriesFavorite,
+                        onSetMangaSeriesSubscribed = onSetMangaSeriesSubscribed,
                         onCheckSubscriptions = onCheckMangaSubscriptions,
                         onDownloadSelected = onDownloadSelectedMangaChapters,
                     )
@@ -272,12 +291,14 @@ fun OpdsScreen(
                     val feedLinks = remember(catalog) { catalog?.links?.filter(OpdsLink::isBrowsableFeedLink) ?: emptyList() }
                     val hasSearch = remember(catalog) { catalog?.hasSearch() ?: false }
                     LazyColumn(
+                        state = opdsListState,
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         item {
                             SourcePicker(
                                 state = state,
+                                enableHaptics = enableHaptics,
                                 onOpenSource = onOpenSource,
                                 onRemoveSource = onRemoveSource,
                             )
@@ -308,6 +329,7 @@ fun OpdsScreen(
                                     query = state.searchInput,
                                     isSearchAvailable = hasSearch,
                                     enabled = !state.isLoading,
+                                    enableHaptics = enableHaptics,
                                     onSearchChanged = onSearchChanged,
                                     onSearch = onSearch,
                                 )
@@ -318,6 +340,7 @@ fun OpdsScreen(
                                     FeedLinksRow(
                                         links = feedLinks,
                                         enabled = !state.isLoading,
+                                        enableHaptics = enableHaptics,
                                         onOpenLink = onOpenLink,
                                     )
                                 }
@@ -340,6 +363,7 @@ fun OpdsScreen(
                                 OpdsEntryCard(
                                     entry = row.entry,
                                     enabled = !state.isLoading && !state.isDownloading,
+                                    enableHaptics = enableHaptics,
                                     onOpenLink = onOpenLink,
                                     onDownload = onDownload,
                                     modifier = Modifier.animateItem(),
@@ -351,6 +375,7 @@ fun OpdsScreen(
                                     FeedLinksRow(
                                         links = feedLinks,
                                         enabled = !state.isLoading,
+                                        enableHaptics = enableHaptics,
                                         onOpenLink = onOpenLink,
                                         modifier = Modifier.padding(top = 10.dp),
                                     )
@@ -378,24 +403,36 @@ private fun MangaSelectionActions(
     enabled: Boolean,
     hasNewChapters: Boolean,
     hasChapters: Boolean,
+    enableHaptics: Boolean,
     onSelectNew: () -> Unit,
     onSelectAll: () -> Unit,
     onClear: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     IconButton(
-        onClick = onSelectNew,
+        onClick = {
+            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            onSelectNew()
+        },
         enabled = enabled && hasNewChapters,
     ) {
         Icon(Icons.Outlined.Checklist, contentDescription = "Select new chapters")
     }
     IconButton(
-        onClick = onSelectAll,
+        onClick = {
+            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            onSelectAll()
+        },
         enabled = enabled && hasChapters,
     ) {
         Icon(Icons.Outlined.SelectAll, contentDescription = "Select all chapters")
     }
     IconButton(
-        onClick = onClear,
+        onClick = {
+            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            onClear()
+        },
         enabled = enabled,
     ) {
         Icon(Icons.Outlined.Close, contentDescription = "Clear chapter selection")
@@ -433,9 +470,12 @@ private fun List<OpdsEntry>.withStableLazyKeys(): List<OpdsEntryRow> {
 @Composable
 private fun WebModeSelector(
     selectedMode: WebContentMode,
+    enableHaptics: Boolean,
     onModeSelected: (WebContentMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -443,7 +483,10 @@ private fun WebModeSelector(
     ) {
         FilterChip(
             selected = selectedMode == WebContentMode.Opds,
-            onClick = { onModeSelected(WebContentMode.Opds) },
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                onModeSelected(WebContentMode.Opds)
+            },
             modifier = Modifier
                 .width(104.dp)
                 .height(40.dp),
@@ -457,7 +500,10 @@ private fun WebModeSelector(
         )
         FilterChip(
             selected = selectedMode == WebContentMode.Manga,
-            onClick = { onModeSelected(WebContentMode.Manga) },
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                onModeSelected(WebContentMode.Manga)
+            },
             modifier = Modifier
                 .width(116.dp)
                 .height(40.dp),
@@ -523,6 +569,7 @@ private fun AddSourceDialog(
 @Composable
 private fun SourcePicker(
     state: OpdsUiState,
+    enableHaptics: Boolean,
     onOpenSource: (String) -> Unit,
     onRemoveSource: (String) -> Unit,
 ) {
@@ -532,10 +579,15 @@ private fun SourcePicker(
         currentUrl.startsWith(source.url.trimEnd('/'))
     } ?: state.sources.firstOrNull()
     val selectedTitle = selectedSource?.title ?: "No OPDS catalogs"
+    val context = LocalContext.current
+    val view = LocalView.current
 
     Box(Modifier.fillMaxWidth()) {
         OutlinedButton(
-            onClick = { expanded = true },
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                expanded = true
+            },
             enabled = state.sources.isNotEmpty() && !state.isLoading,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -567,6 +619,7 @@ private fun SourcePicker(
                     trailingIcon = {
                         IconButton(
                             onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.REJECT)
                                 expanded = false
                                 onRemoveSource(source.id)
                             },
@@ -575,6 +628,7 @@ private fun SourcePicker(
                         }
                     },
                     onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                         expanded = false
                         onOpenSource(source.url)
                     },
@@ -589,9 +643,12 @@ private fun SearchPanel(
     query: String,
     isSearchAvailable: Boolean,
     enabled: Boolean,
+    enableHaptics: Boolean,
     onSearchChanged: (String) -> Unit,
     onSearch: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -607,14 +664,20 @@ private fun SearchPanel(
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty() && enabled) {
-                        IconButton(onClick = { onSearchChanged("") }) {
+                        IconButton(onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onSearchChanged("")
+                        }) {
                             Icon(Icons.Outlined.Close, contentDescription = "Clear")
                         }
                     }
                 }
             )
             Button(
-                onClick = onSearch,
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                    onSearch()
+                },
                 enabled = isSearchAvailable && enabled && query.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -638,16 +701,22 @@ private fun SearchPanel(
 private fun FeedLinksRow(
     links: List<OpdsLink>,
     enabled: Boolean,
+    enableHaptics: Boolean,
     onOpenLink: (OpdsLink) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     Row(
         modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         links.forEach { link ->
             OutlinedButton(
-                onClick = { onOpenLink(link) },
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    onOpenLink(link)
+                },
                 enabled = enabled,
             ) {
                 Icon(Icons.Outlined.Folder, contentDescription = null)
@@ -662,10 +731,13 @@ private fun FeedLinksRow(
 private fun OpdsEntryCard(
     entry: OpdsEntry,
     enabled: Boolean,
+    enableHaptics: Boolean,
     onOpenLink: (OpdsLink) -> Unit,
     onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     val isNavigation = remember(entry) { entry.acquisitions.isEmpty() && entry.navigation.isNotEmpty() }
 
     ElevatedCard(modifier.fillMaxWidth()) {
@@ -719,7 +791,10 @@ private fun OpdsEntryCard(
                 ) {
                     entry.navigation.forEach { link ->
                         OutlinedButton(
-                            onClick = { onOpenLink(link) },
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onOpenLink(link)
+                            },
                             enabled = enabled,
                         ) {
                             Icon(Icons.Outlined.Folder, contentDescription = null)
@@ -752,7 +827,10 @@ private fun OpdsEntryCard(
                 ) {
                     visibleAcquisitions.forEach { (acquisition, label) ->
                         Button(
-                            onClick = { onDownload(entry, acquisition) },
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                                onDownload(entry, acquisition)
+                            },
                             enabled = enabled,
                         ) {
                             Icon(Icons.Outlined.Download, contentDescription = null)

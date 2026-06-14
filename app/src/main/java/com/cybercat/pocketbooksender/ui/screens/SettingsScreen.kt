@@ -1,5 +1,11 @@
 package com.cybercat.pocketbooksender.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
@@ -25,15 +30,25 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.ui.SenderUiState
+import android.view.HapticFeedbackConstants
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     state: SenderUiState,
+    scrollState: ScrollState,
     onRootPathChanged: (String) -> Unit,
     onDefaultProgrammingTagChanged: (String) -> Unit,
     onDefaultMangaSeriesChanged: (String) -> Unit,
@@ -41,8 +56,19 @@ fun SettingsScreen(
     onProgrammingFileNameTemplateChanged: (String) -> Unit,
     onMangaFileNameTemplateChanged: (String) -> Unit,
     onDynamicColorChanged: (Boolean) -> Unit,
+    onHapticFeedbackEnabledChanged: (Boolean) -> Unit,
     onClearDownloadCache: () -> Unit,
 ) {
+    var latestStatusMessage by remember { mutableStateOf(state.settingsStatusMessage.orEmpty()) }
+    val context = LocalContext.current
+    val view = LocalView.current
+
+    LaunchedEffect(state.settingsStatusMessage) {
+        state.settingsStatusMessage
+            ?.takeIf { it.isNotBlank() }
+            ?.let { latestStatusMessage = it }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -55,7 +81,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -143,7 +169,36 @@ fun SettingsScreen(
                     }
                     Switch(
                         checked = state.settings.useDynamicColor,
-                        onCheckedChange = onDynamicColorChanged,
+                        onCheckedChange = { checked ->
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onDynamicColorChanged(checked)
+                        },
+                    )
+                }
+            }
+
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Haptic feedback", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "Vibrate on key actions, successes, and errors.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = state.settings.enableHaptics,
+                        onCheckedChange = { checked ->
+                            view.performHapticIfAllowed(context, true, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onHapticFeedbackEnabledChanged(checked)
+                        },
                     )
                 }
             }
@@ -160,16 +215,23 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Button(
-                        onClick = onClearDownloadCache,
+                        onClick = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.LONG_PRESS)
+                            onClearDownloadCache()
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(Icons.Outlined.Delete, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Clear downloaded files")
                     }
-                    state.settingsStatusMessage?.let { message ->
+                    AnimatedVisibility(
+                        visible = state.settingsStatusMessage != null,
+                        enter = fadeIn() + slideInVertically { height -> -height / 4 },
+                        exit = fadeOut() + slideOutVertically { height -> -height / 4 },
+                    ) {
                         Text(
-                            text = message,
+                            text = latestStatusMessage,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

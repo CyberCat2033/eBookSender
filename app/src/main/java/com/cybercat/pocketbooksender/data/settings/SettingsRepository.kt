@@ -27,6 +27,7 @@ class SettingsRepository @Inject constructor(
             programmingFileNameTemplate = preferences[PROGRAMMING_FILE_NAME_TEMPLATE] ?: "{title}",
             mangaFileNameTemplate = preferences[MANGA_FILE_NAME_TEMPLATE] ?: "{volume}",
             useDynamicColor = preferences[USE_DYNAMIC_COLOR] ?: true,
+            enableHaptics = preferences[ENABLE_HAPTICS] ?: true,
         )
     }
 
@@ -39,6 +40,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setUseDynamicColor(value: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[USE_DYNAMIC_COLOR] = value
+        }
+    }
+
+    suspend fun setEnableHaptics(value: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[ENABLE_HAPTICS] = value
         }
     }
 
@@ -80,5 +87,6 @@ class SettingsRepository @Inject constructor(
         val PROGRAMMING_FILE_NAME_TEMPLATE = stringPreferencesKey("programming_file_name_template")
         val MANGA_FILE_NAME_TEMPLATE = stringPreferencesKey("manga_file_name_template")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
+        val ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")
     }
 }

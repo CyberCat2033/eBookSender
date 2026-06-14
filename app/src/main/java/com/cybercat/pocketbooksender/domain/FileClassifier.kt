@@ -1,8 +1,11 @@
 package com.cybercat.pocketbooksender.domain
 
 import com.cybercat.pocketbooksender.model.BookCategory
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class FileClassifier {
+@Singleton
+class FileClassifier @Inject constructor() {
     fun classify(fileName: String): BookCategory {
         return when (fileName.bookExtension()) {
             "cbr", "cbz" -> BookCategory.Manga
