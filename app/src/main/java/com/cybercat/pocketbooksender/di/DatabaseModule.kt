@@ -65,6 +65,13 @@ object DatabaseModule {
         }
     }
 
+    private val Migration4To5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `opds_sources` ADD COLUMN `username` TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE `opds_sources` ADD COLUMN `password` TEXT DEFAULT NULL")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -75,7 +82,7 @@ object DatabaseModule {
             PocketBookSenderDatabase::class.java,
             "pocketbook_sender.db",
         )
-            .addMigrations(Migration1To2, Migration2To3, Migration3To4)
+            .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
             .build()
 
     @Provides

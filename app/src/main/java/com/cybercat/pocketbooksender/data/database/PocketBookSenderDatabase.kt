@@ -16,7 +16,7 @@ import com.cybercat.pocketbooksender.data.database.entity.OpdsSourceEntity
         MangaChapterHistoryEntity::class,
         MangaSeriesBookmarkEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 @TypeConverters(AppTypeConverters::class)

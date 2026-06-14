@@ -44,6 +44,8 @@ class OpdsRepository @Inject constructor(
                         id = entity.id,
                         title = entity.title,
                         url = entity.url,
+                        username = entity.username,
+                        password = entity.password,
                     )
                 }
                 .distinctBy { source -> source.url.trimEnd('/').lowercase() }
@@ -66,7 +68,7 @@ class OpdsRepository @Inject constructor(
         }
     }
 
-    suspend fun addSource(title: String, url: String) {
+    suspend fun addSource(title: String, url: String, username: String? = null, password: String? = null) {
         val normalizedUrl = normalizeUrl(url)
         val sourceTitle = title.ifBlank {
             runCatching { URL(normalizedUrl).host.removePrefix("www.") }.getOrDefault("OPDS")
@@ -79,6 +81,8 @@ class OpdsRepository @Inject constructor(
                 url = normalizedUrl,
                 enabled = true,
                 lastSyncedAt = null,
+                username = username,
+                password = password,
             ),
         )
     }
@@ -196,17 +200,63 @@ class OpdsRepository @Inject constructor(
     private fun OpdsLink.resolvedAgainst(baseUrl: String): OpdsLink =
         copy(href = resolveUrl(baseUrl, href))
 
-    private fun openConnection(
+    private suspend fun getCredentialsForUrl(urlStr: String): Pair<String, String>? {
+        val requestHost = runCatching { URL(urlStr).host.lowercase() }.getOrNull() ?: return null
+        val sourcesList = sourceDao.getAllSources()
+        for (source in sourcesList) {
+            val sourceHost = runCatching { URL(source.url).host.lowercase() }.getOrNull()
+            if (sourceHost != null && sourceHost == requestHost) {
+                if (!source.username.isNullOrBlank() && !source.password.isNullOrBlank()) {
+                    return Pair(source.username, source.password)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun getCredentialsFromUrl(urlStr: String): Pair<String, String>? {
+        return runCatching {
+            val uri = URI(urlStr)
+            val userInfo = uri.userInfo
+            if (!userInfo.isNullOrBlank()) {
+                val parts = userInfo.split(':', limit = 2)
+                if (parts.size == 2) {
+                    Pair(parts[0], parts[1])
+                } else null
+            } else null
+        }.getOrNull()
+    }
+
+    private suspend fun openConnection(
         url: String,
         accept: String,
         redirectsLeft: Int = MaxRedirects,
     ): HttpURLConnection {
-        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+        val credentials = getCredentialsFromUrl(url) ?: getCredentialsForUrl(url)
+        val cleanedUrl = if (url.contains("@")) {
+            runCatching {
+                val uri = URI(url)
+                val cleanUri = URI(uri.scheme, null, uri.host, uri.port, uri.path, uri.query, uri.fragment)
+                cleanUri.toString()
+            }.getOrDefault(url)
+        } else {
+            url
+        }
+
+        val connection = (URL(cleanedUrl).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = false
             connectTimeout = ConnectTimeoutMillis
             readTimeout = ReadTimeoutMillis
             setRequestProperty("Accept", accept)
             setRequestProperty("User-Agent", AppConstants.UserAgent)
+            if (credentials != null) {
+                val authString = "${credentials.first}:${credentials.second}"
+                val authHeaderValue = "Basic " + android.util.Base64.encodeToString(
+                    authString.toByteArray(Charsets.UTF_8),
+                    android.util.Base64.NO_WRAP
+                )
+                setRequestProperty("Authorization", authHeaderValue)
+            }
         }
 
         val code = connection.responseCode
@@ -234,7 +284,7 @@ class OpdsRepository @Inject constructor(
         return connection
     }
 
-    private fun loadOpenSearchTemplate(url: String): String {
+    private suspend fun loadOpenSearchTemplate(url: String): String {
         val connection = openConnection(
             url = url,
             accept = "application/opensearchdescription+xml, application/xml, text/xml, */*",

@@ -130,6 +130,8 @@
   "opds_url_field": "OPDS URL",
   "opds_url_placeholder": "https://example.org/opds",
   "opds_title_field": "Source title",
+  "opds_username_field": "Username (optional)",
+  "opds_password_field": "Password (optional)",
   "opds_btn_save": "Save",
   "opds_btn_cancel": "Cancel",
   "opds_btn_download": "Download (%1$d)",

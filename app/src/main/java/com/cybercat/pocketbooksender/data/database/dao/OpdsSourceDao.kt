@@ -11,6 +11,9 @@ interface OpdsSourceDao {
     @Query("SELECT * FROM opds_sources ORDER BY title")
     fun observeSources(): Flow<List<OpdsSourceEntity>>
 
+    @Query("SELECT * FROM opds_sources")
+    suspend fun getAllSources(): List<OpdsSourceEntity>
+
     @Query("SELECT COUNT(*) FROM opds_sources")
     suspend fun count(): Int
 

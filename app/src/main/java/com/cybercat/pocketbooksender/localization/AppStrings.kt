@@ -152,6 +152,8 @@ class AppStrings(
     val opdsUrlField: String get() = get("opds_url_field")
     val opdsUrlPlaceholder: String get() = get("opds_url_placeholder")
     val opdsTitleField: String get() = get("opds_title_field")
+    val opdsUsernameField: String get() = get("opds_username_field")
+    val opdsPasswordField: String get() = get("opds_password_field")
     val opdsBtnSave: String get() = get("opds_btn_save")
     val opdsBtnCancel: String get() = get("opds_btn_cancel")
     val opdsBtnDownload: String get() = get("opds_btn_download")

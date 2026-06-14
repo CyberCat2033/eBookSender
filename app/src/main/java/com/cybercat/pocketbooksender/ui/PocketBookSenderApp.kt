@@ -282,7 +282,7 @@ private fun AppNavHost(
                 mangaListState = mangaListState,
                 onSearchChanged = opdsViewModel::onSearchInputChanged,
                 onWebModeSelected = opdsViewModel::setWebContentMode,
-                onSaveSource = opdsViewModel::saveOpdsSource,
+                onSaveSource = { title, url, username, password -> opdsViewModel.saveOpdsSource(title, url, username, password) },
                 onRemoveSource = opdsViewModel::removeOpdsSource,
                 onOpenSource = opdsViewModel::openOpdsUrl,
                 onOpenLink = opdsViewModel::openOpdsLink,

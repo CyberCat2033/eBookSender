@@ -33,6 +33,8 @@ data class OpdsSource(
     val id: String,
     val title: String,
     val url: String,
+    val username: String? = null,
+    val password: String? = null,
 )
 
 data class OpdsSearchDescription(

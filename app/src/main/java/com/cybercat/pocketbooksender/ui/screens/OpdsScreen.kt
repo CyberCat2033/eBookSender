@@ -78,6 +78,7 @@ import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.downloadFormatLabel
 import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import androidx.compose.ui.platform.LocalContext
 import com.cybercat.pocketbooksender.ui.BitmapCache
@@ -103,7 +104,7 @@ fun OpdsScreen(
     mangaListState: LazyListState,
     onSearchChanged: (String) -> Unit,
     onWebModeSelected: (WebContentMode) -> Unit,
-    onSaveSource: (String, String) -> Unit,
+    onSaveSource: (String, String, String?, String?) -> Unit,
     onRemoveSource: (String) -> Unit,
     onOpenSource: (String) -> Unit,
     onOpenLink: (OpdsLink) -> Unit,
@@ -133,6 +134,8 @@ fun OpdsScreen(
     var showAddSourceDialog by remember { mutableStateOf(false) }
     var newSourceUrl by remember { mutableStateOf("") }
     var newSourceTitle by remember { mutableStateOf("") }
+    var newSourceUsername by remember { mutableStateOf("") }
+    var newSourcePassword by remember { mutableStateOf("") }
     val webMode = state.webMode
     val selectedMangaChapterCount = mangaState.selectedChapterIds.size
     val mangaSelectionActive = webMode == WebContentMode.Manga && selectedMangaChapterCount > 0
@@ -162,11 +165,15 @@ fun OpdsScreen(
         AddSourceDialog(
             url = newSourceUrl,
             title = newSourceTitle,
+            username = newSourceUsername,
+            password = newSourcePassword,
             onUrlChanged = { newSourceUrl = it },
             onTitleChanged = { newSourceTitle = it },
+            onUsernameChanged = { newSourceUsername = it },
+            onPasswordChanged = { newSourcePassword = it },
             onDismiss = { showAddSourceDialog = false },
             onSaveSource = {
-                onSaveSource(newSourceTitle, newSourceUrl)
+                onSaveSource(newSourceTitle, newSourceUrl, newSourceUsername.ifBlank { null }, newSourcePassword.ifBlank { null })
                 showAddSourceDialog = false
             },
         )
@@ -230,6 +237,8 @@ fun OpdsScreen(
                             onClick = {
                                 newSourceUrl = ""
                                 newSourceTitle = ""
+                                newSourceUsername = ""
+                                newSourcePassword = ""
                                 showAddSourceDialog = true
                             },
                         ) {
@@ -533,8 +542,12 @@ private fun WebModeSelector(
 private fun AddSourceDialog(
     url: String,
     title: String,
+    username: String,
+    password: String,
     onUrlChanged: (String) -> Unit,
     onTitleChanged: (String) -> Unit,
+    onUsernameChanged: (String) -> Unit,
+    onPasswordChanged: (String) -> Unit,
     onDismiss: () -> Unit,
     onSaveSource: () -> Unit,
 ) {
@@ -559,6 +572,21 @@ private fun AddSourceDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text(strings.opdsTitleField) },
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = onUsernameChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsUsernameField) },
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = onPasswordChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsPasswordField) },
+                    visualTransformation = PasswordVisualTransformation(),
                 )
             }
         },

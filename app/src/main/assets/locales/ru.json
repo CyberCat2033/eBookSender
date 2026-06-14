@@ -130,6 +130,8 @@
   "opds_url_field": "Ссылка OPDS",
   "opds_url_placeholder": "https://example.org/opds",
   "opds_title_field": "Название источника",
+  "opds_username_field": "Имя пользователя (необязательно)",
+  "opds_password_field": "Пароль (необязательно)",
   "opds_btn_save": "Сохранить",
   "opds_btn_cancel": "Отмена",
   "opds_btn_download": "Скачать (%1$d)",

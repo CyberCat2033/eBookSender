@@ -10,4 +10,6 @@ data class OpdsSourceEntity(
     val url: String,
     val enabled: Boolean,
     val lastSyncedAt: Long?,
+    val username: String? = null,
+    val password: String? = null,
 )

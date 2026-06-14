@@ -101,12 +101,14 @@ class OpdsViewModel @Inject constructor(
         _opdsState.update { it.copy(errorMessage = null) }
     }
 
-    fun saveOpdsSource(title: String, url: String) {
+    fun saveOpdsSource(title: String, url: String, username: String? = null, password: String? = null) {
         viewModelScope.launch {
             runCatching {
                 opdsRepository.addSource(
                     title = title.trim(),
                     url = url.trim(),
+                    username = username?.trim()?.ifBlank { null },
+                    password = password?.trim()?.ifBlank { null },
                 )
             }.onSuccess {
                 showOpdsStatus(localizationManager.currentStrings.value.opdsStatusSourceSaved)
