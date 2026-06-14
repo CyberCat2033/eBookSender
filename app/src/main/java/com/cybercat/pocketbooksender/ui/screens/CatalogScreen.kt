@@ -1,28 +1,47 @@
 package com.cybercat.pocketbooksender.ui.screens
 
 import android.text.format.DateUtils
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -30,140 +49,523 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import android.view.HapticFeedbackConstants
-import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
 import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
+import com.cybercat.pocketbooksender.ui.CatalogUiState
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CatalogScreen(
-    catalog: DeviceCatalog,
+    state: CatalogUiState,
     isConnected: Boolean,
     enableHaptics: Boolean,
     listState: LazyListState,
     onRefresh: () -> Unit,
+    onSetEditMode: (Boolean) -> Unit,
+    onToggleFileSelection: (String) -> Unit,
+    onSetFileSelection: (String, Boolean) -> Unit,
+    onToggleGroupSelection: (List<String>, Boolean) -> Unit,
+    onDeleteSelectedFiles: () -> Unit,
+    onClearDeleteError: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val catalog = state.deviceCatalog
+    val selectedFilePathsState = rememberUpdatedState(state.selectedFilePaths)
+    val isEditModeState = rememberUpdatedState(state.isEditMode)
+    val onSetEditModeState = rememberUpdatedState(onSetEditMode)
+    val onSetFileSelectionState = rememberUpdatedState(onSetFileSelection)
+    val expandedGroupPaths = remember { mutableStateMapOf<String, Boolean>() }
+    val expandedGroupPathSet = expandedGroupPaths
+        .filterValues { it }
+        .keys
+        .toSet()
+    val fileTargets = remember(catalog, expandedGroupPathSet) {
+        catalog.fileSelectionTargets(expandedGroupPathSet)
+    }
+    val targetByPath = remember(fileTargets) { fileTargets.associateBy { it.path } }
+    val fileRowBounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    var listBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+
+    LaunchedEffect(catalog) {
+        val knownGroupPaths = catalog.groupPaths()
+        (expandedGroupPaths.keys - knownGroupPaths).forEach(expandedGroupPaths::remove)
+    }
+
+    LaunchedEffect(fileTargets) {
+        val visiblePaths = fileTargets.mapTo(mutableSetOf()) { it.path }
+        (fileRowBounds.keys - visiblePaths).forEach(fileRowBounds::remove)
+    }
+
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete selected books?") },
+            text = { Text("This will permanently delete the selected ${state.selectedFilePaths.size} file(s) from your PocketBook device.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                        showDeleteConfirm = false
+                        onDeleteSelectedFiles()
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        showDeleteConfirm = false
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (state.deleteErrorMessage != null) {
+        AlertDialog(
+            onDismissRequest = onClearDeleteError,
+            title = { Text("Error deleting files") },
+            text = { Text(state.deleteErrorMessage) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        onClearDeleteError()
+                    }
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    if (state.isDeleting) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator()
+                    Text("Deleting books...", style = MaterialTheme.typography.titleMedium)
+                }
+            },
+            dismissButton = null
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Catalog") },
+                title = {
+                    AnimatedContent(
+                        targetState = state.isEditMode,
+                        label = "CatalogTopBarTitle",
+                    ) { isEditMode ->
+                        if (isEditMode) {
+                            Text("Selected: ${state.selectedFilePaths.size}")
+                        } else {
+                            Text("Catalog")
+                        }
+                    }
+                },
                 windowInsets = WindowInsets(0.dp),
-                actions = {
-                    IconButton(
-                        onClick = {
-                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                            onRefresh()
-                        },
-                        enabled = isConnected && !catalog.isLoading,
+                navigationIcon = {
+                    AnimatedVisibility(
+                        visible = state.isEditMode,
+                        enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+                        exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
                     ) {
-                        Icon(Icons.Outlined.Refresh, contentDescription = "Refresh catalog")
+                        IconButton(
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onSetEditMode(false)
+                            }
+                        ) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Exit edit mode")
+                        }
+                    }
+                },
+                actions = {
+                    AnimatedContent(
+                        targetState = state.isEditMode,
+                        label = "CatalogTopBarActions",
+                    ) { isEditMode ->
+                        if (isEditMode) {
+                            IconButton(
+                                onClick = {
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.LONG_PRESS)
+                                    showDeleteConfirm = true
+                                },
+                                enabled = state.selectedFilePaths.isNotEmpty() && !catalog.isLoading,
+                            ) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "Delete selected")
+                            }
+                        } else {
+                            IconButton(
+                                onClick = {
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    onSetEditMode(true)
+                                },
+                                enabled = isConnected && !catalog.isEmpty && !catalog.isLoading,
+                            ) {
+                                Icon(Icons.Outlined.Edit, contentDescription = "Enter edit mode")
+                            }
+                        }
                     }
                 },
             )
         },
     ) { innerPadding ->
-        LazyColumn(
-            state = listState,
+        PullToRefreshBox(
+            isRefreshing = catalog.isLoading,
+            onRefresh = {
+                if (isConnected && !state.isEditMode) {
+                    onRefresh()
+                }
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (!isConnected) {
-                item {
-                    CatalogMessage(
-                        title = "PocketBook is not connected",
-                        text = "Connect by QR or FTP link on the Send tab first.",
-                    )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { coordinates ->
+                        listBounds = coordinates.boundsInRoot()
+                    }
+                    .pointerInput(fileTargets, catalog.isLoading, state.isDeleting) {
+                        if (catalog.isLoading || state.isDeleting || fileTargets.isEmpty()) {
+                            return@pointerInput
+                        }
+
+                        coroutineScope {
+                            var selectionActive = false
+                            var targetSelected = true
+                            var currentY = 0f
+                            var anchorIndex: Int? = null
+                            var baselineSelectedPaths = emptySet<String>()
+                            var autoScrollJob: Job? = null
+                            val appliedSelectedByPath = mutableMapOf<String, Boolean>()
+
+                            fun fileTargetAt(y: Float): CatalogPointerTarget? {
+                                val rootY = (listBounds?.top ?: return null) + y
+                                val path = fileRowBounds.entries
+                                    .firstOrNull { (_, bounds) ->
+                                        rootY >= bounds.top && rootY <= bounds.bottom
+                                    }
+                                    ?.key
+                                    ?: return null
+                                return targetByPath[path]
+                            }
+
+                            fun applySelectionAt(y: Float) {
+                                val target = fileTargetAt(y) ?: return
+                                val anchor = anchorIndex ?: target.index
+                                val startIndex = anchor.coerceAtMost(target.index)
+                                val endIndex = anchor.coerceAtLeast(target.index)
+
+                                fileTargets.forEach { fileTarget ->
+                                    val desiredSelected = if (fileTarget.index in startIndex..endIndex) {
+                                        targetSelected
+                                    } else {
+                                        fileTarget.path in baselineSelectedPaths
+                                    }
+                                    val currentSelected = appliedSelectedByPath[fileTarget.path]
+                                        ?: (fileTarget.path in baselineSelectedPaths)
+                                    if (currentSelected != desiredSelected) {
+                                        appliedSelectedByPath[fileTarget.path] = desiredSelected
+                                        onSetFileSelectionState.value(fileTarget.path, desiredSelected)
+                                        view.performHapticIfAllowed(
+                                            context,
+                                            enableHaptics,
+                                            HapticFeedbackConstants.CLOCK_TICK,
+                                            ignoreDnd = true,
+                                        )
+                                    }
+                                }
+                            }
+
+                            fun autoScrollDelta(): Float {
+                                val edgeSize = 84.dp.toPx()
+                                val viewportHeight = size.height.toFloat()
+                                if (viewportHeight <= 0f) return 0f
+
+                                return when {
+                                    currentY < edgeSize -> {
+                                        val distance = edgeSize - currentY
+                                        val ratio = distance / edgeSize
+                                        val maxSpeed = 120f
+                                        val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
+                                        -speed
+                                    }
+                                    currentY > viewportHeight - edgeSize -> {
+                                        val distance = currentY - (viewportHeight - edgeSize)
+                                        val ratio = distance / edgeSize
+                                        val maxSpeed = 120f
+                                        val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
+                                        speed
+                                    }
+                                    else -> 0f
+                                }
+                            }
+
+                            fun startAutoScroll() {
+                                autoScrollJob?.cancel()
+                                autoScrollJob = launch {
+                                    while (isActive) {
+                                        val delta = autoScrollDelta()
+                                        if (delta != 0f) {
+                                            listState.scrollBy(delta)
+                                            applySelectionAt(currentY)
+                                        }
+                                        delay(16L)
+                                    }
+                                }
+                            }
+
+                            fun stopSelection() {
+                                selectionActive = false
+                                autoScrollJob?.cancel()
+                                autoScrollJob = null
+                                anchorIndex = null
+                                baselineSelectedPaths = emptySet()
+                                appliedSelectedByPath.clear()
+                            }
+
+                            detectDragGesturesAfterQuickLongPress(
+                                onDragStart = { offset ->
+                                    currentY = offset.y
+                                    val target = fileTargetAt(currentY)
+                                    if (target == null) {
+                                        stopSelection()
+                                    } else {
+                                        selectionActive = true
+                                        baselineSelectedPaths = selectedFilePathsState.value
+                                        targetSelected = target.path !in baselineSelectedPaths
+                                        anchorIndex = target.index
+                                        appliedSelectedByPath.clear()
+                                        if (!isEditModeState.value) {
+                                            onSetEditModeState.value(true)
+                                        }
+                                        view.performHapticIfAllowed(
+                                            context,
+                                            enableHaptics,
+                                            HapticFeedbackConstants.LONG_PRESS,
+                                            ignoreDnd = true,
+                                        )
+                                        applySelectionAt(currentY)
+                                        startAutoScroll()
+                                    }
+                                },
+                                onDrag = { change, _ ->
+                                    currentY = change.position.y
+                                    if (selectionActive) {
+                                        change.consume()
+                                        applySelectionAt(currentY)
+                                    }
+                                },
+                                onDragEnd = { stopSelection() },
+                                onDragCancel = { stopSelection() },
+                            )
+                        }
+                    }
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (!isConnected) {
+                    item {
+                        CatalogMessage(
+                            title = "PocketBook is not connected",
+                            text = "Connect by QR or FTP link on the Send tab first.",
+                        )
+                    }
+                    return@LazyColumn
                 }
-                return@LazyColumn
-            }
 
-            if (catalog.isLoading) {
-                item {
-                    CatalogMessage(
-                        title = "Reading PocketBook catalog",
-                        text = "Reading PocketBook library database with FTP fallback.",
-                        isLoading = true,
-                    )
+                if (catalog.isLoading && catalog.isEmpty) {
+                    item {
+                        CatalogMessage(
+                            title = "Reading PocketBook catalog",
+                            text = "Reading PocketBook library database with FTP fallback.",
+                            isLoading = true,
+                        )
+                    }
                 }
-            }
 
-            catalog.errorMessage?.let { message ->
-                item {
-                    CatalogMessage(
-                        title = "Cannot read catalog",
-                        text = message,
-                        isError = true,
-                    )
+                catalog.errorMessage?.let { message ->
+                    item {
+                        CatalogMessage(
+                            title = "Cannot read catalog",
+                            text = message,
+                            isError = true,
+                        )
+                    }
                 }
-            }
 
-            if (!catalog.isLoading && catalog.isEmpty) {
-                item {
-                    CatalogMessage(
-                        title = "Catalog is empty",
-                        text = "No books were found under Books, Programming, or Manga.",
-                    )
+                if (!catalog.isLoading && catalog.isEmpty) {
+                    item {
+                        CatalogMessage(
+                            title = "Catalog is empty",
+                            text = "No books were found under Books, Programming, or Manga.",
+                        )
+                    }
                 }
-            }
 
-            item {
-                SectionTitle("Books", catalog.books.sumOf { it.files.size })
-            }
-            items(
-                items = catalog.books,
-                key = { "books:${it.path}" },
-                contentType = { "catalog_group" }
-            ) { group ->
-                CatalogGroupCard(group = group, enableHaptics = enableHaptics, modifier = Modifier.animateItem())
-            }
+                if (catalog.books.isNotEmpty()) {
+                    item {
+                        SectionTitle("Books", catalog.books.sumOf { it.files.size })
+                    }
+                    items(
+                        items = catalog.books,
+                        key = { "books:${it.path}" },
+                        contentType = { "catalog_group" }
+                    ) { group ->
+                        CatalogGroupCard(
+                            group = group,
+                            expanded = group.path in expandedGroupPathSet,
+                            isEditMode = state.isEditMode,
+                            selectedFilePaths = state.selectedFilePaths,
+                            enableHaptics = enableHaptics,
+                            onToggleFileSelection = onToggleFileSelection,
+                            onToggleGroupSelection = onToggleGroupSelection,
+                            onExpandedChange = { expanded ->
+                                if (expanded) {
+                                    expandedGroupPaths[group.path] = true
+                                } else {
+                                    expandedGroupPaths.remove(group.path)
+                                }
+                            },
+                            onFileBoundsChanged = { path, bounds ->
+                                if (bounds == null) {
+                                    fileRowBounds.remove(path)
+                                } else {
+                                    fileRowBounds[path] = bounds
+                                }
+                            },
+                            modifier = Modifier.animateItem()
+                        )
+                    }
+                }
 
-            item {
-                SectionTitle("Programming", catalog.programming.sumOf { it.files.size })
-            }
-            items(
-                items = catalog.programming,
-                key = { "programming:${it.path}" },
-                contentType = { "catalog_group" }
-            ) { group ->
-                CatalogGroupCard(group = group, enableHaptics = enableHaptics, modifier = Modifier.animateItem())
-            }
+                if (catalog.programming.isNotEmpty()) {
+                    item {
+                        SectionTitle("Programming", catalog.programming.sumOf { it.files.size })
+                    }
+                    items(
+                        items = catalog.programming,
+                        key = { "programming:${it.path}" },
+                        contentType = { "catalog_group" }
+                    ) { group ->
+                        CatalogGroupCard(
+                            group = group,
+                            expanded = group.path in expandedGroupPathSet,
+                            isEditMode = state.isEditMode,
+                            selectedFilePaths = state.selectedFilePaths,
+                            enableHaptics = enableHaptics,
+                            onToggleFileSelection = onToggleFileSelection,
+                            onToggleGroupSelection = onToggleGroupSelection,
+                            onExpandedChange = { expanded ->
+                                if (expanded) {
+                                    expandedGroupPaths[group.path] = true
+                                } else {
+                                    expandedGroupPaths.remove(group.path)
+                                }
+                            },
+                            onFileBoundsChanged = { path, bounds ->
+                                if (bounds == null) {
+                                    fileRowBounds.remove(path)
+                                } else {
+                                    fileRowBounds[path] = bounds
+                                }
+                            },
+                            modifier = Modifier.animateItem()
+                        )
+                    }
+                }
 
-            item {
-                SectionTitle("Manga", catalog.manga.size)
-            }
-            items(
-                items = catalog.manga,
-                key = { "manga:${it.path}" },
-                contentType = { "manga_series_group" }
-            ) { group ->
-                MangaSeriesCard(group = group, enableHaptics = enableHaptics, modifier = Modifier.animateItem())
+                if (catalog.manga.isNotEmpty()) {
+                    item {
+                        SectionTitle("Manga", catalog.manga.size)
+                    }
+                    items(
+                        items = catalog.manga,
+                        key = { "manga:${it.path}" },
+                        contentType = { "manga_series_group" }
+                    ) { group ->
+                        MangaSeriesCard(
+                            group = group,
+                            expanded = group.path in expandedGroupPathSet,
+                            isEditMode = state.isEditMode,
+                            selectedFilePaths = state.selectedFilePaths,
+                            enableHaptics = enableHaptics,
+                            onToggleFileSelection = onToggleFileSelection,
+                            onToggleGroupSelection = onToggleGroupSelection,
+                            onExpandedChange = { expanded ->
+                                if (expanded) {
+                                    expandedGroupPaths[group.path] = true
+                                } else {
+                                    expandedGroupPaths.remove(group.path)
+                                }
+                            },
+                            onFileBoundsChanged = { path, bounds ->
+                                if (bounds == null) {
+                                    fileRowBounds.remove(path)
+                                } else {
+                                    fileRowBounds[path] = bounds
+                                }
+                            },
+                            modifier = Modifier.animateItem()
+                        )
+                    }
+                }
             }
         }
     }
@@ -227,26 +629,68 @@ private fun SectionTitle(title: String, count: Int) {
 @Composable
 private fun CatalogGroupCard(
     group: CatalogGroup,
+    expanded: Boolean,
+    isEditMode: Boolean,
+    selectedFilePaths: Set<String>,
     enableHaptics: Boolean,
+    onToggleFileSelection: (String) -> Unit,
+    onToggleGroupSelection: (List<String>, Boolean) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember(group.path) { mutableStateOf(false) }
+    val filePaths = remember(group.files) { group.files.map { it.path } }
+    val isGroupFullySelected = remember(selectedFilePaths, filePaths) {
+        filePaths.isNotEmpty() && filePaths.all { it in selectedFilePaths }
+    }
+
+    val context = LocalContext.current
+    val view = LocalView.current
 
     ElevatedCard(modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
-            ExpandableHeader(
-                title = group.name,
-                subtitle = group.files.summary(),
-                expanded = expanded,
-                enableHaptics = enableHaptics,
-                onToggle = { expanded = !expanded },
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AnimatedVisibility(
+                    visible = isEditMode,
+                    enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+                    exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
+                ) {
+                    Checkbox(
+                        checked = isGroupFullySelected,
+                        onCheckedChange = { checked ->
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onToggleGroupSelection(filePaths, checked)
+                        },
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
+                ExpandableHeader(
+                    title = group.name,
+                    subtitle = group.files.summary(),
+                    expanded = expanded,
+                    enableHaptics = enableHaptics,
+                    onToggle = { onExpandedChange(!expanded) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
             AnimatedVisibility(
                 visible = expanded,
                 enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
                 exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
             ) {
-                FileList(group.files)
+                FileList(
+                    files = group.files,
+                    isEditMode = isEditMode,
+                    selectedFilePaths = selectedFilePaths,
+                    enableHaptics = enableHaptics,
+                    onToggleFileSelection = onToggleFileSelection,
+                    onFileBoundsChanged = onFileBoundsChanged,
+                )
             }
         }
     }
@@ -255,29 +699,72 @@ private fun CatalogGroupCard(
 @Composable
 private fun MangaSeriesCard(
     group: MangaSeriesGroup,
+    expanded: Boolean,
+    isEditMode: Boolean,
+    selectedFilePaths: Set<String>,
     enableHaptics: Boolean,
+    onToggleFileSelection: (String) -> Unit,
+    onToggleGroupSelection: (List<String>, Boolean) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var expanded by remember(group.path) { mutableStateOf(false) }
+    val filePaths = remember(group.files) { group.files.map { it.path } }
+    val isGroupFullySelected = remember(selectedFilePaths, filePaths) {
+        filePaths.isNotEmpty() && filePaths.all { it in selectedFilePaths }
+    }
+
+    val context = LocalContext.current
+    val view = LocalView.current
 
     ElevatedCard(modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
-            ExpandableHeader(
-                title = group.name,
-                subtitle = group.latestFile?.let { file ->
-                    "Latest: ${file.displayTitle()}${file.progressSuffix()}"
-                } ?: "No files",
-                subtitleMaxLines = 3,
-                expanded = expanded,
-                enableHaptics = enableHaptics,
-                onToggle = { expanded = !expanded },
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AnimatedVisibility(
+                    visible = isEditMode,
+                    enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+                    exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
+                ) {
+                    Checkbox(
+                        checked = isGroupFullySelected,
+                        onCheckedChange = { checked ->
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onToggleGroupSelection(filePaths, checked)
+                        },
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
+                }
+                ExpandableHeader(
+                    title = group.name,
+                    subtitle = group.latestFile?.let { file ->
+                        "Latest: ${file.displayTitle()}${file.progressSuffix()}"
+                    } ?: "No files",
+                    subtitleMaxLines = 3,
+                    expanded = expanded,
+                    enableHaptics = enableHaptics,
+                    onToggle = { onExpandedChange(!expanded) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
             AnimatedVisibility(
                 visible = expanded,
                 enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
                 exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
             ) {
-                FileList(files = group.files, showProgress = false)
+                FileList(
+                    files = group.files,
+                    showProgress = false,
+                    isEditMode = isEditMode,
+                    selectedFilePaths = selectedFilePaths,
+                    enableHaptics = enableHaptics,
+                    onToggleFileSelection = onToggleFileSelection,
+                    onFileBoundsChanged = onFileBoundsChanged,
+                )
             }
         }
     }
@@ -291,11 +778,12 @@ private fun ExpandableHeader(
     expanded: Boolean,
     enableHaptics: Boolean,
     onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -331,105 +819,273 @@ private fun ExpandableHeader(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FileList(
     files: List<CatalogFile>,
     showProgress: Boolean = true,
+    isEditMode: Boolean = false,
+    selectedFilePaths: Set<String> = emptySet(),
+    enableHaptics: Boolean = false,
+    onToggleFileSelection: (String) -> Unit = {},
+    onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit = { _, _ -> },
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
+
+    var currentFiles by remember { mutableStateOf(files) }
+    val deletedPaths = remember { mutableStateListOf<String>() }
+
+    LaunchedEffect(files) {
+        val newPaths = files.map { it.path }.toSet()
+        val removed = currentFiles.filter { it.path !in newPaths && it.path !in deletedPaths }
+        if (removed.isNotEmpty()) {
+            deletedPaths.addAll(removed.map { it.path })
+            currentFiles = currentFiles.map { current ->
+                files.firstOrNull { it.path == current.path } ?: current
+            }
+        } else {
+            deletedPaths.clear()
+            currentFiles = files
+        }
+    }
+
     Column(
         modifier = Modifier.padding(top = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        files.forEach { file ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = file.displayTitle(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+        currentFiles.forEach { file ->
+            val isExiting = file.path in deletedPaths
+            val isSelected = file.path in selectedFilePaths
+
+            DisposableEffect(file.path) {
+                onDispose {
+                    onFileBoundsChanged(file.path, null)
+                }
+            }
+
+            AnimatedVisibility(
+                visible = !isExiting,
+                exit = shrinkVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
                     )
-                    if (showProgress) {
-                        val progressDetailText = when {
-                            file.completed -> "Completed"
-                            file.currentPage != null && file.currentPage > 0 -> {
-                                if (file.totalPages != null && file.totalPages > 0) {
-                                    "Page ${file.currentPage} of ${file.totalPages}"
-                                } else {
-                                    "Page ${file.currentPage}"
-                                }
-                            }
-                            else -> "Not started"
+                ) + fadeOut(
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                ),
+                label = "FileRemoval"
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            onFileBoundsChanged(file.path, coordinates.boundsInRoot())
                         }
-
-                        val lastReadText = file.lastOpenedAtMillis?.let { time ->
-                            val relative = DateUtils.getRelativeTimeSpanString(
-                                time,
-                                System.currentTimeMillis(),
-                                DateUtils.MINUTE_IN_MILLIS,
-                                DateUtils.FORMAT_ABBREV_RELATIVE
-                            ).toString()
-                            "Last read: $relative"
+                        .animateContentSize()
+                        .clickable(enabled = isEditMode) {
+                            view.performHapticIfAllowed(
+                                context,
+                                enableHaptics,
+                                HapticFeedbackConstants.VIRTUAL_KEY,
+                            )
+                            onToggleFileSelection(file.path)
                         }
-
-                        val subtitleParts = buildList {
-                            if (!file.series.isNullOrBlank()) {
-                                add("Series: ${file.series}")
-                            }
-                            add(progressDetailText)
-                            if (lastReadText != null) {
-                                add(lastReadText)
-                            }
-                        }
-
-                        Text(
-                            text = subtitleParts.joinToString(" | "),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    AnimatedVisibility(
+                        visible = isEditMode,
+                        enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+                        exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
+                    ) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = {
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    HapticFeedbackConstants.VIRTUAL_KEY,
+                                )
+                                onToggleFileSelection(file.path)
+                            },
+                            modifier = Modifier.padding(end = 8.dp)
                         )
                     }
-                }
 
-                if (showProgress) {
-                    val percent = file.readProgressPercent
-                    if (percent != null && percent > 0) {
-                        Spacer(Modifier.width(12.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            CircularProgressIndicator(
-                                progress = { percent / 100f },
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.5.dp,
-                                color = if (file.completed) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.secondary
-                                },
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = file.displayTitle(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (showProgress) {
+                            val progressDetailText = when {
+                                file.completed -> "Completed"
+                                file.currentPage != null && file.currentPage > 0 -> {
+                                    if (file.totalPages != null && file.totalPages > 0) {
+                                        "Page ${file.currentPage} of ${file.totalPages}"
+                                    } else {
+                                        "Page ${file.currentPage}"
+                                    }
+                                }
+                                else -> "Not started"
+                            }
+
+                            val lastReadText = file.lastOpenedAtMillis?.let { time ->
+                                val relative = DateUtils.getRelativeTimeSpanString(
+                                    time,
+                                    System.currentTimeMillis(),
+                                    DateUtils.MINUTE_IN_MILLIS,
+                                    DateUtils.FORMAT_ABBREV_RELATIVE
+                                ).toString()
+                                "Last read: $relative"
+                            }
+
+                            val subtitleParts = buildList {
+                                if (!file.series.isNullOrBlank()) {
+                                    add("Series: ${file.series}")
+                                }
+                                add(progressDetailText)
+                                if (lastReadText != null) {
+                                    add(lastReadText)
+                                }
+                            }
+
                             Text(
-                                text = "$percent%",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                text = subtitleParts.joinToString(" | "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
+
+                    if (showProgress) {
+                        val percent = file.readProgressPercent
+                        if (percent != null && percent > 0) {
+                            Spacer(Modifier.width(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { percent / 100f },
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = if (file.completed) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.secondary
+                                    },
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                                Text(
+                                    text = "$percent%",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            LaunchedEffect(isExiting) {
+                if (isExiting) {
+                    delay(450)
+                    currentFiles = currentFiles.filter { it.path != file.path }
+                    deletedPaths.remove(file.path)
                 }
             }
         }
     }
 }
+
+private fun DeviceCatalog.groupPaths(): Set<String> = buildSet {
+    books.forEach { group -> add(group.path) }
+    programming.forEach { group -> add(group.path) }
+    manga.forEach { group -> add(group.path) }
+}
+
+private fun DeviceCatalog.fileSelectionTargets(
+    expandedGroupPaths: Set<String>,
+): List<CatalogPointerTarget> = buildList {
+    fun addFiles(groupPath: String, files: List<CatalogFile>) {
+        if (groupPath !in expandedGroupPaths) return
+        files.forEach { file ->
+            add(
+                CatalogPointerTarget(
+                    index = size,
+                    path = file.path,
+                )
+            )
+        }
+    }
+
+    books.forEach { group -> addFiles(group.path, group.files) }
+    programming.forEach { group -> addFiles(group.path, group.files) }
+    manga.forEach { group -> addFiles(group.path, group.files) }
+}
+
+private suspend fun PointerInputScope.detectDragGesturesAfterQuickLongPress(
+    onDragStart: (Offset) -> Unit,
+    onDrag: (PointerInputChange, Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        var currentChange = down
+        val touchSlop = viewConfiguration.touchSlop
+
+        val longPressReached: Boolean = withTimeoutOrNull<Boolean>(CatalogLongPressMillis) {
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == down.id }
+                    ?: return@withTimeoutOrNull false
+                if (!change.pressed || change.isConsumed) return@withTimeoutOrNull false
+                if ((change.position - down.position).getDistance() > touchSlop) {
+                    return@withTimeoutOrNull false
+                }
+                currentChange = change
+            }
+            true
+        } ?: true
+
+        if (!longPressReached) return@awaitEachGesture
+
+        onDragStart(currentChange.position)
+        currentChange.consume()
+
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id }
+            if (change == null) {
+                onDragCancel()
+                break
+            }
+            if (!change.pressed) {
+                onDragEnd()
+                break
+            }
+
+            val dragAmount = change.positionChange()
+            if (dragAmount != Offset.Zero) {
+                onDrag(change, dragAmount)
+                change.consume()
+            }
+        }
+    }
+}
+
+private data class CatalogPointerTarget(
+    val index: Int,
+    val path: String,
+)
 
 private fun List<CatalogFile>.summary(): String {
     val withProgress = count { it.readProgressPercent != null }
@@ -461,3 +1117,5 @@ private fun CatalogFile.progressText(): String? =
         readProgressPercent != null -> "Read $readProgressPercent%"
         else -> null
     }
+
+private const val CatalogLongPressMillis = 300L

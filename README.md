@@ -74,6 +74,12 @@ Important packages:
 - Duplicate database rows for the same `book_id` are collapsed inside each Catalog area, preferring files already placed under the expected subfolder structure.
 - Manga series cards surface only the last opened/read chapter progress; expanded manga file lists stay focused on file names.
 - Catalog groups and files use natural sorting, so `2` is ordered before `10`.
+- Catalog deletion is handled through an animated Material 3 edit mode:
+  - the top-bar pencil action enters edit mode, while the trash action appears only for selected files;
+  - group and file checkboxes animate in and out instead of shifting the layout abruptly;
+  - expanded file rows support long-press drag selection with edge autoscroll, matching manga chapter selection;
+  - dragging back shrinks the live selection range and restores files outside the range to their pre-gesture state;
+  - deletion requires confirmation and is limited to supported files under `Books`, `Programming`, and `Manga`.
 - Use the separate `Web` tab to:
   - show saved OPDS sources as the primary list;
   - add a source from the `+` action;
@@ -175,6 +181,16 @@ RELEASE_KEY_PASSWORD=<key password>
 `local.properties` and `*.keystore` are ignored by git. Keep real passwords and keystore files out of commits.
 
 ## Verified Builds & Verification
+
+Latest local verification on 2026-06-14:
+
+```sh
+./gradlew :app:compileDebugKotlin
+./gradlew :app:assembleRelease
+adb install -r app/build/outputs/apk/release/app-release.apk
+# Install result: Success
+# Release APK size: 2.3 MB
+```
 
 Both debug and optimized/signed release versions are verified:
 

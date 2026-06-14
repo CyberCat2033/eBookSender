@@ -8,4 +8,8 @@ data class CatalogUiState(
     val connectedDevice: PocketBookDevice? = null,
     val deviceCatalog: DeviceCatalog = DeviceCatalog(),
     val settings: AppSettings = AppSettings(),
+    val isEditMode: Boolean = false,
+    val selectedFilePaths: Set<String> = emptySet(),
+    val isDeleting: Boolean = false,
+    val deleteErrorMessage: String? = null,
 )

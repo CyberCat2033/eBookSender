@@ -119,6 +119,18 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
         }
     }
 
+    override suspend fun deleteFile(
+        device: PocketBookDevice,
+        remoteRelativePath: String,
+    ): Result<Unit> = withFtpClient(device) { client ->
+        runCatching {
+            val normalized = remoteRelativePath.toSafeRelativeFtpPath()
+            check(client.deleteFile(normalized)) {
+                "FTP delete file failed for $normalized: ${client.replyString}"
+            }
+        }
+    }
+
     private suspend fun <T> withFtpClient(
         device: PocketBookDevice,
         block: (FTPClient) -> Result<T>,
@@ -233,4 +245,17 @@ private class ProgressInputStream(
         }
         return result
     }
+}
+
+private fun String.toSafeRelativeFtpPath(): String {
+    val trimmed = replace('\\', '/').trim()
+    require(trimmed.isNotBlank()) { "FTP path is empty" }
+    require(!trimmed.startsWith("/")) { "FTP path must be relative" }
+
+    val segments = trimmed
+        .split('/')
+        .filter { it.isNotBlank() }
+    require(segments.none { it == "." || it == ".." }) { "FTP path must not traverse directories" }
+
+    return segments.joinToString("/")
 }

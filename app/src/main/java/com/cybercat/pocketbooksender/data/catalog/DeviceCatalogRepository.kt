@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
 
 private const val PocketBookStoragePrefix = "/mnt/ext1/"
@@ -44,6 +46,9 @@ class DeviceCatalogRepository @Inject constructor(
     private val _catalog = MutableStateFlow(DeviceCatalog())
     val catalog: StateFlow<DeviceCatalog> = _catalog.asStateFlow()
 
+    private val deletedPaths = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val loadMutex = Mutex()
+
     init {
         connectionManager.connectedDevice
             .onEach { device ->
@@ -58,12 +63,70 @@ class DeviceCatalogRepository @Inject constructor(
 
     suspend fun refresh(device: PocketBookDevice) {
         _catalog.update { it.copy(isLoading = true) }
-        val result = runCatching { load(device) }
-        _catalog.value = result.getOrDefault(DeviceCatalog(errorMessage = "Load failed"))
+        val result = loadMutex.withLock {
+            runCatching { load(device) }
+        }
+        val loaded = result.getOrDefault(DeviceCatalog(errorMessage = "Load failed"))
+        _catalog.value = loaded.filterDeleted()
     }
 
     fun clear() {
+        deletedPaths.clear()
         _catalog.value = DeviceCatalog()
+    }
+
+    private fun DeviceCatalog.filterDeleted(): DeviceCatalog {
+        val deleted = deletedPaths.toSet()
+        if (deleted.isEmpty()) return this
+        return copy(
+            books = books.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
+            programming = programming.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
+            manga = manga.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
+        )
+    }
+
+    suspend fun deleteFiles(device: PocketBookDevice, paths: List<String>) = withContext(Dispatchers.IO) {
+        val safePaths = paths.distinct().map(::validateCatalogDeletePath)
+        if (safePaths.isEmpty()) return@withContext
+
+        var firstError: Throwable? = null
+        val successfulPaths = mutableListOf<String>()
+        safePaths.forEach { path ->
+            ftpGateway.deleteFile(device, path)
+                .onSuccess {
+                    successfulPaths.add(path)
+                }
+                .onFailure { error ->
+                    if (firstError == null) firstError = error
+                }
+        }
+        deletedPaths.addAll(successfulPaths)
+        refresh(device)
+        firstError?.let { throw it }
+    }
+
+    private fun validateCatalogDeletePath(path: String): String {
+        val trimmed = path.replace('\\', '/').trim()
+        require(trimmed.isNotBlank()) { "Cannot delete an empty catalog path" }
+        require(!trimmed.startsWith("/")) { "Unsafe catalog file path" }
+
+        val segments = trimmed
+            .split('/')
+            .filter { it.isNotBlank() }
+        require(segments.none { it == "." || it == ".." }) { "Unsafe catalog file path" }
+
+        val normalized = segments.joinToString("/")
+        require(
+            normalized.isUnder(BooksRoot) ||
+                normalized.isUnder(ProgrammingRoot) ||
+                normalized.isUnder(MangaRoot)
+        ) {
+            "Catalog deletion is limited to Books, Programming, and Manga"
+        }
+        require(normalized.contentExtension() in AllSupportedExtensions) {
+            "Unsupported catalog file type"
+        }
+        return normalized
     }
 
     suspend fun load(device: PocketBookDevice): DeviceCatalog = withContext(Dispatchers.IO) {

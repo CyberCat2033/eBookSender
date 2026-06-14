@@ -211,8 +211,8 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         val document = Jsoup.parse(html, url)
         val data = extractWindowData(html)
         val details = parseSeriesDetails(url, document, data)
-        val chapters = parseDataChapters(details.seriesId, data)
-            .ifEmpty { parseReaderLinks(details.seriesId, document) }
+        val chapters = parseDataChapters(details.seriesId, details.title, data)
+            .ifEmpty { parseReaderLinks(details.seriesId, details.title, document) }
 
         return if (chapters.isNotEmpty() || document.selectFirst("h1") != null || data != null) {
             MangaSeriesPage(details = details, chapters = chapters)
@@ -282,7 +282,7 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         )
     }
 
-    private fun parseDataChapters(seriesId: String, data: JSONObject?): List<MangaChapter> {
+    private fun parseDataChapters(seriesId: String, seriesTitle: String, data: JSONObject?): List<MangaChapter> {
         if (data == null) return emptyList()
 
         val newsId = data.optLong("news_id", -1L).takeIf { it > 0L }
@@ -299,7 +299,7 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
                 val title = firstNonBlank(
                     item.firstString("title", "name"),
                     "Chapter ${index + 1}",
-                ).cleanTitle()
+                ).cleanTitle().stripSeriesPrefix(seriesTitle)
                 val sortNumber = item.optFiniteDouble("posi")
                     ?: item.optFiniteDouble("number")
                     ?: title.extractChapterNumber()
@@ -325,7 +325,7 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
             .toList()
     }
 
-    private fun parseReaderLinks(seriesId: String, document: Document): List<MangaChapter> {
+    private fun parseReaderLinks(seriesId: String, seriesTitle: String, document: Document): List<MangaChapter> {
         return document.select("a[href*=/reader/]")
             .asSequence()
             .mapNotNull { anchor ->
@@ -333,13 +333,14 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
                 if (!ownsUrl(href)) return@mapNotNull null
                 val text = anchor.text().cleanWhitespace()
                 val number = text.extractChapterNumber() ?: href.extractChapterNumber()
+                val title = text.ifBlank { "Chapter ${number ?: ""}".trim() }.stripSeriesPrefix(seriesTitle)
 
                 MangaChapter(
                     sourceId = id,
                     seriesId = seriesId,
                     chapterId = href,
                     stableKey = href.normalizeUrlKey(),
-                    title = text.ifBlank { "Chapter ${number ?: ""}".trim() },
+                    title = title,
                     numberForSort = number,
                     publishedAtMillis = null,
                 )
@@ -969,6 +970,39 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         replace('\u00A0', ' ')
             .replace(Regex("""\s+"""), " ")
             .trim()
+
+    private fun String.stripSeriesPrefix(seriesTitle: String): String {
+        val trimmed = this.trim()
+        val cleanSeries = seriesTitle.replace(Regex("""[«»"'"“”]"""), "").cleanWhitespace().trim().lowercase()
+        if (cleanSeries.isEmpty()) return trimmed
+
+        val cleanTitle = trimmed.replace(Regex("""[«»"'"“”]"""), "").cleanWhitespace().trim().lowercase()
+        if (cleanTitle.startsWith(cleanSeries)) {
+            var seriesIndex = 0
+            var titleIndex = 0
+            while (seriesIndex < cleanSeries.length && titleIndex < trimmed.length) {
+                val cTitle = trimmed[titleIndex].lowercaseChar()
+                val cSeries = cleanSeries[seriesIndex]
+
+                if (cTitle == cSeries) {
+                    seriesIndex++
+                    titleIndex++
+                } else if (cTitle in listOf('«', '»', '"', '\'', '“', '”', ' ')) {
+                    titleIndex++
+                } else if (cSeries == ' ') {
+                    seriesIndex++
+                } else {
+                    break
+                }
+            }
+            if (seriesIndex >= cleanSeries.length) {
+                val remaining = trimmed.substring(titleIndex)
+                val stripped = remaining.trimStart { it == ' ' || it == '-' || it == '—' || it == '.' || it == ':' || it == '_' || it == '/' || it == '\\' }
+                return stripped.ifBlank { trimmed }
+            }
+        }
+        return trimmed
+    }
 
     private fun String.resolveAgainst(baseUrl: String): String {
         val raw = replace("\\/", "/").trim()

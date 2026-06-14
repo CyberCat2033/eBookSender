@@ -26,7 +26,7 @@ class SettingsRepository @Inject constructor(
             defaultMangaSeries = preferences[DEFAULT_MANGA_SERIES] ?: "Unknown_Series",
             bookFileNameTemplate = preferences[BOOK_FILE_NAME_TEMPLATE] ?: "{title}",
             programmingFileNameTemplate = preferences[PROGRAMMING_FILE_NAME_TEMPLATE] ?: "{title}",
-            mangaFileNameTemplate = preferences[MANGA_FILE_NAME_TEMPLATE] ?: "{volume}",
+            mangaFileNameTemplate = preferences[MANGA_FILE_NAME_TEMPLATE] ?: "{series}_{volume}",
             useDynamicColor = preferences[USE_DYNAMIC_COLOR] ?: true,
             enableHaptics = preferences[ENABLE_HAPTICS] ?: true,
             theme = preferences[THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() } ?: AppTheme.System,
@@ -83,7 +83,7 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setMangaFileNameTemplate(value: String) {
         context.settingsDataStore.edit { preferences ->
-            preferences[MANGA_FILE_NAME_TEMPLATE] = value.ifBlank { "{volume}" }
+            preferences[MANGA_FILE_NAME_TEMPLATE] = value.ifBlank { "{series}_{volume}" }
         }
     }
 

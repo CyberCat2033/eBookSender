@@ -261,11 +261,17 @@ private fun AppNavHost(
         }
         composable(MainDestination.Catalog.route) {
             CatalogScreen(
-                catalog = catalogState.deviceCatalog,
+                state = catalogState,
                 isConnected = catalogState.connectedDevice != null,
                 enableHaptics = catalogState.settings.enableHaptics,
                 listState = catalogListState,
                 onRefresh = catalogViewModel::reloadDeviceCatalog,
+                onSetEditMode = catalogViewModel::setEditMode,
+                onToggleFileSelection = catalogViewModel::toggleFileSelection,
+                onSetFileSelection = catalogViewModel::setFileSelection,
+                onToggleGroupSelection = catalogViewModel::toggleGroupSelection,
+                onDeleteSelectedFiles = catalogViewModel::deleteSelectedFiles,
+                onClearDeleteError = catalogViewModel::clearDeleteError,
             )
         }
         composable(MainDestination.Opds.route) {

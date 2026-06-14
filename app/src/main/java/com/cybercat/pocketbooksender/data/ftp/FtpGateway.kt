@@ -29,6 +29,11 @@ interface FtpGateway {
         remoteRelativePath: String,
         output: OutputStream,
     ): Result<Unit>
+
+    suspend fun deleteFile(
+        device: PocketBookDevice,
+        remoteRelativePath: String,
+    ): Result<Unit>
 }
 
 data class FtpSessionInfo(

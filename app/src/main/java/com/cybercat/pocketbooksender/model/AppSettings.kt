@@ -6,7 +6,7 @@ data class AppSettings(
     val defaultMangaSeries: String = "Unknown_Series",
     val bookFileNameTemplate: String = "{title}",
     val programmingFileNameTemplate: String = "{title}",
-    val mangaFileNameTemplate: String = "{volume}",
+    val mangaFileNameTemplate: String = "{series}_{volume}",
     val conflictStrategy: ConflictStrategy = ConflictStrategy.Ask,
     val useDynamicColor: Boolean = true,
     val enableHaptics: Boolean = true,
