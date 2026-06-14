@@ -236,6 +236,10 @@ class TransferViewModel @Inject constructor(
                     sourceUri = item.sourceUri,
                     originalName = item.originalName,
                     extension = item.extension,
+                    category = item.category,
+                    title = item.title,
+                    mangaSeries = item.mangaSeries,
+                    mangaVolume = item.mangaVolume,
                     plannedPath = item.plannedPath,
                 )
             },

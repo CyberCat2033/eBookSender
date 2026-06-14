@@ -128,11 +128,12 @@ class UploadQueueManager @Inject constructor(
         val newItems = items
             .filterNot { item -> item.sourceUri in existing }
             .map { item ->
-                if (item.status == UploadStatus.Preparing) {
-                    item
+                val prepared = if (item.status == UploadStatus.Preparing) {
+                    item.copy(progress = 0f)
                 } else {
-                    item.copy(status = UploadStatus.Preparing)
+                    item.copy(status = UploadStatus.Preparing, progress = 0f)
                 }
+                replan(prepared, activeSettings)
             }
 
         if (newItems.isEmpty()) return

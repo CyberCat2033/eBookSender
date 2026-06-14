@@ -1,6 +1,7 @@
 package com.cybercat.pocketbooksender.transfer
 
 import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.BookCategory
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
@@ -54,6 +55,10 @@ data class TransferUploadItem(
     val sourceUri: String,
     val originalName: String,
     val extension: String,
+    val category: BookCategory,
+    val title: String,
+    val mangaSeries: String?,
+    val mangaVolume: String?,
     val plannedPath: String,
 )
 

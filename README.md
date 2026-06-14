@@ -53,8 +53,8 @@ Important packages:
 - Configure global file-name templates in Settings:
   - Books default: `{title}`
   - Documents default: `{title}`
-  - Manga default: `{volume}`
-  - Supported tokens: `{title}`, `{author}`, `{tag}`, `{series}`, `{volume}`, `{year}`, `{index}`, `{publisher}`.
+  - Manga default: `{series}_{volume}`
+  - Supported tokens: `{title}`, `{author}`, `{tag}`, `{series}`, `{volume}`, `{year}`, `{index}`, `{publisher}`, `{ext}`, `{original}`.
 - Edit `Documents` tags directly in queue items. Suggestions are loaded only from PocketBook folders under `/Documents`.
 - Edit Manga series directly in queue items. Suggestions are loaded only from PocketBook folders under `/Manga`.
 - Per-item category/tag/series editors are collapsed by default. Queue items show only a compact type summary until expanded.
@@ -77,10 +77,12 @@ Important packages:
 - Catalog deletion is handled through an animated Material 3 edit mode:
   - the top-bar pencil action enters edit mode, while the trash action appears only for selected files;
   - group and file checkboxes animate in and out instead of shifting the layout abruptly;
+  - entering and leaving edit mode smoothly shifts rows to make room for selection controls;
   - expanded file rows support long-press drag selection with edge autoscroll, matching manga chapter selection;
+  - releasing after a long-press selection gesture does not immediately toggle the selected file back off;
   - dragging back shrinks the live selection range and restores files outside the range to their pre-gesture state;
   - deletion requires confirmation and is limited to supported files under `Books`, `Documents`, and `Manga`.
-  - deleting every file in a real author/tag/series folder also attempts to remove that now-empty folder.
+  - selected file removals shrink/fade out, and deleting every file in a real author/tag/series folder also attempts to remove that now-empty folder.
 - Use the separate `Web` tab to:
   - show saved OPDS sources as the primary list;
   - add a source from the `+` action;
@@ -108,6 +110,7 @@ Important packages:
   - chapter rows support long-press drag selection with edge autoscroll;
   - dragging back shrinks the live selection range and restores chapters outside the range to their pre-gesture state;
   - selected chapters are downloaded and packed into per-chapter CBZ files;
+  - downloaded manga files are added to the normal upload queue and planned with the active Settings templates, so generated names follow the same rules as manually queued manga;
   - downloaded chapter history is stored in Room and used to mark already handled chapters.
 - Current debug/test default OPDS source is seeded as `https://flub.flibusta.is/opds`.
 
@@ -115,6 +118,10 @@ CBR handling:
 
 - CBR files are uploaded as-is.
 - CBR previews use `junrar`.
+- CBZ manga uploads are normalized immediately before FTP transfer:
+  - existing `ComicInfo.xml` is replaced with one whose title matches the final planned filename;
+  - series and chapter/volume are written into `ComicInfo.xml` when known;
+  - archives whose pages all live under one common root folder have that internal root renamed to the final planned filename.
 - Manga archive format is detected by file signature, not only extension. A `.cbr` file that is actually ZIP is treated like CBZ.
 - Current RAR support is limited to RAR4 and lower. RAR5 archives should be uploaded as-is unless another extraction backend is added later.
 - CBR-to-CBZ conversion is intentionally not exposed anymore; conversion was removed as unnecessary for the current PocketBook flow.
@@ -205,6 +212,8 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 # Install result: Success
 # Release APK size: 2.3 MB
 ```
+
+The latest release verification also covered catalog edit-mode selection fixes, animated Material 3 selection/deletion transitions, settings-based manga path planning for downloaded chapters, and CBZ internal metadata normalization before upload.
 
 Both debug and optimized/signed release versions are verified:
 

@@ -13,7 +13,10 @@ import androidx.core.app.NotificationCompat
 import com.cybercat.pocketbooksender.MainActivity
 import com.cybercat.pocketbooksender.R
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.model.BookCategory
 import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
+import java.io.InputStream
 import javax.inject.Inject
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class TransferForegroundService : Service() {
@@ -115,10 +119,18 @@ class TransferForegroundService : Service() {
         item: TransferUploadItem,
     ): Result<Unit> {
         val uri = Uri.parse(item.sourceUri)
-        val input = contentResolver.openInputStream(uri)
-            ?: return Result.failure(IllegalStateException("Cannot open ${item.originalName}"))
+        val preparedInput = runCatching {
+            prepareUploadInput(uri, item)
+        }.getOrElse { error ->
+            return Result.failure(error)
+        }
+        val input = preparedInput.openStream() ?: contentResolver.openInputStream(preparedInput.uri)
+            ?: run {
+                preparedInput.cleanup()
+                return Result.failure(IllegalStateException("Cannot open ${item.originalName}"))
+            }
 
-        val fileSize = getUriSize(uri)
+        val fileSize = preparedInput.size.takeIf { it > 0L } ?: getUriSize(uri)
 
         return try {
             ftpGateway.uploadAtomically(
@@ -139,6 +151,41 @@ class TransferForegroundService : Service() {
             )
         } finally {
             input.close()
+            preparedInput.cleanup()
+        }
+    }
+
+    private suspend fun prepareUploadInput(
+        uri: Uri,
+        item: TransferUploadItem,
+    ): PreparedUploadInput = withContext(Dispatchers.IO) {
+        if (!item.needsCbzMetadataRewrite()) {
+            return@withContext PreparedUploadInput(uri = uri, tempFile = null, size = getUriSize(uri))
+        }
+
+        val tempDir = File(cacheDir, "prepared-upload").apply { mkdirs() }
+        val tempFile = File.createTempFile("cbz-metadata-", ".cbz", tempDir)
+
+        try {
+            val rootFolder = contentResolver.openInputStream(uri)?.use { input ->
+                CbzMetadataRewriter.findSingleCommonRootFolder(input)
+            }
+            val source = contentResolver.openInputStream(uri)
+                ?: throw IllegalStateException("Cannot open ${item.originalName}")
+            source.use { input ->
+                tempFile.outputStream().use { output ->
+                    CbzMetadataRewriter.rewrite(
+                        input = input,
+                        output = output,
+                        metadata = item.toCbzMetadata(),
+                        rootFolder = rootFolder,
+                    )
+                }
+            }
+            PreparedUploadInput(uri = uri, tempFile = tempFile, size = tempFile.length())
+        } catch (error: Throwable) {
+            tempFile.delete()
+            throw error
         }
     }
 
@@ -259,4 +306,33 @@ class TransferForegroundService : Service() {
             Intent(context, TransferForegroundService::class.java)
                 .putExtra(EXTRA_REQUEST_ID, requestId)
     }
+}
+
+private data class PreparedUploadInput(
+    val uri: Uri,
+    val tempFile: File?,
+    val size: Long,
+) {
+    fun openStream(): InputStream? =
+        tempFile?.inputStream()
+
+    fun cleanup() {
+        tempFile?.delete()
+    }
+}
+
+private fun TransferUploadItem.needsCbzMetadataRewrite(): Boolean =
+    category == BookCategory.Manga && extension.equals("cbz", ignoreCase = true)
+
+private fun TransferUploadItem.toCbzMetadata(): CbzMetadata =
+    CbzMetadata(
+        title = plannedPath.fileNameWithoutExtension().ifBlank { title },
+        series = mangaSeries,
+        number = mangaVolume,
+    )
+
+private fun String.fileNameWithoutExtension(): String {
+    val fileName = trim('/').substringAfterLast('/')
+    val dotIndex = fileName.lastIndexOf('.')
+    return if (dotIndex > 0) fileName.substring(0, dotIndex) else fileName
 }

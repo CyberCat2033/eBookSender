@@ -2,11 +2,13 @@ package com.cybercat.pocketbooksender.ui.screens
 
 import android.text.format.DateUtils
 import android.view.HapticFeedbackConstants
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -73,6 +75,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -88,6 +92,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
 import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.DeviceCatalog
@@ -136,6 +141,18 @@ fun CatalogScreen(
     var listBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    var suppressSelectionClickUntilMillis by remember { mutableStateOf(0L) }
+
+    fun suppressSelectionClicks() {
+        suppressSelectionClickUntilMillis = SystemClock.uptimeMillis() + SuppressSelectionClickMillis
+    }
+
+    fun suppressSelectionClicksUntilGestureEnds() {
+        suppressSelectionClickUntilMillis = Long.MAX_VALUE
+    }
+
+    fun selectionClickSuppressed(): Boolean =
+        SystemClock.uptimeMillis() < suppressSelectionClickUntilMillis
 
     fun scrollToGroup(key: String, itemCount: Int) {
         scope.launch {
@@ -449,6 +466,7 @@ fun CatalogScreen(
                                         targetSelected = target.path !in baselineSelectedPaths
                                         anchorIndex = target.index
                                         appliedSelectedByPath.clear()
+                                        suppressSelectionClicksUntilGestureEnds()
                                         if (!isEditModeState.value) {
                                             onSetEditModeState.value(true)
                                         }
@@ -469,8 +487,14 @@ fun CatalogScreen(
                                         applySelectionAt(currentY)
                                     }
                                 },
-                                onDragEnd = { stopSelection() },
-                                onDragCancel = { stopSelection() },
+                                onDragEnd = {
+                                    suppressSelectionClicks()
+                                    stopSelection()
+                                },
+                                onDragCancel = {
+                                    suppressSelectionClicks()
+                                    stopSelection()
+                                },
                             )
                         }
                     }
@@ -533,6 +557,7 @@ fun CatalogScreen(
                             enableHaptics = enableHaptics,
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
+                            selectionClickSuppressed = ::selectionClickSuppressed,
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
@@ -570,6 +595,7 @@ fun CatalogScreen(
                             enableHaptics = enableHaptics,
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
+                            selectionClickSuppressed = ::selectionClickSuppressed,
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
@@ -607,6 +633,7 @@ fun CatalogScreen(
                             enableHaptics = enableHaptics,
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
+                            selectionClickSuppressed = ::selectionClickSuppressed,
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
@@ -692,20 +719,48 @@ private fun SelectionSlot(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = expandHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-        exit = shrinkHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
+    val width by animateDpAsState(
+        targetValue = if (visible) SelectionSlotWidth else 0.dp,
+        animationSpec = tween(
+            durationMillis = SelectionMotionDurationMillis,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "SelectionSlotWidth",
+    )
+    val checkboxAlpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = SelectionMotionDurationMillis,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "SelectionCheckboxAlpha",
+    )
+    val checkboxScale by animateFloatAsState(
+        targetValue = if (visible) 1f else 0.86f,
+        animationSpec = tween(
+            durationMillis = SelectionMotionDurationMillis,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "SelectionCheckboxScale",
+    )
+
+    Box(
+        modifier = Modifier
+            .width(width)
+            .height(SelectionControlSize)
+            .clipToBounds(),
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Box(
-            modifier = Modifier.width(SelectionSlotWidth),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            CompactCheckbox(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-            )
-        }
+        CompactCheckbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.graphicsLayer {
+                alpha = checkboxAlpha
+                scaleX = checkboxScale
+                scaleY = checkboxScale
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+            },
+        )
     }
 }
 
@@ -713,12 +768,13 @@ private fun SelectionSlot(
 private fun CompactCheckbox(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
         Checkbox(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            modifier = Modifier.size(24.dp),
+            modifier = modifier.size(SelectionControlSize),
         )
     }
 }
@@ -733,6 +789,7 @@ private fun CatalogGroupCard(
     enableHaptics: Boolean,
     onToggleFileSelection: (String) -> Unit,
     onToggleGroupSelection: (List<String>, Boolean) -> Unit,
+    selectionClickSuppressed: () -> Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit,
     modifier: Modifier = Modifier
@@ -751,13 +808,12 @@ private fun CatalogGroupCard(
     }
 
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(),
+                    .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SelectionSlot(
@@ -772,7 +828,11 @@ private fun CatalogGroupCard(
                     enableHaptics = enableHaptics,
                     onToggle = { onExpandedChange(!expanded) },
                     titleClickEnabled = isEditMode,
-                    onTitleClick = { toggleGroup() },
+                    onTitleClick = {
+                        if (!selectionClickSuppressed()) {
+                            toggleGroup()
+                        }
+                    },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -790,6 +850,7 @@ private fun CatalogGroupCard(
                     selectedFilePaths = selectedFilePaths,
                     enableHaptics = enableHaptics,
                     onToggleFileSelection = onToggleFileSelection,
+                    selectionClickSuppressed = selectionClickSuppressed,
                     onFileBoundsChanged = onFileBoundsChanged,
                 )
             }
@@ -807,6 +868,7 @@ private fun MangaSeriesCard(
     enableHaptics: Boolean,
     onToggleFileSelection: (String) -> Unit,
     onToggleGroupSelection: (List<String>, Boolean) -> Unit,
+    selectionClickSuppressed: () -> Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit,
     modifier: Modifier = Modifier
@@ -825,13 +887,12 @@ private fun MangaSeriesCard(
     }
 
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(),
+                    .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SelectionSlot(
@@ -842,14 +903,18 @@ private fun MangaSeriesCard(
                 ExpandableHeader(
                     title = group.name,
                     subtitle = group.latestFile?.let { file ->
-                        "Latest: ${file.displayTitle()}${file.progressSuffix()}"
+                        "Latest: ${file.mangaDisplayTitle()}${file.progressSuffix()}"
                     } ?: "No files",
                     subtitleMaxLines = 3,
                     expanded = expanded,
                     enableHaptics = enableHaptics,
                     onToggle = { onExpandedChange(!expanded) },
                     titleClickEnabled = isEditMode,
-                    onTitleClick = { toggleGroup() },
+                    onTitleClick = {
+                        if (!selectionClickSuppressed()) {
+                            toggleGroup()
+                        }
+                    },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -868,6 +933,7 @@ private fun MangaSeriesCard(
                     selectedFilePaths = selectedFilePaths,
                     enableHaptics = enableHaptics,
                     onToggleFileSelection = onToggleFileSelection,
+                    selectionClickSuppressed = selectionClickSuppressed,
                     onFileBoundsChanged = onFileBoundsChanged,
                 )
             }
@@ -941,6 +1007,7 @@ private fun FileList(
     selectedFilePaths: Set<String> = emptySet(),
     enableHaptics: Boolean = false,
     onToggleFileSelection: (String) -> Unit = {},
+    selectionClickSuppressed: () -> Boolean = { false },
     onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
@@ -980,12 +1047,16 @@ private fun FileList(
             AnimatedVisibility(
                 visible = !isExiting,
                 exit = shrinkVertically(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
+                    shrinkTowards = Alignment.Top,
+                    animationSpec = tween(
+                        durationMillis = RemovalMotionDurationMillis,
+                        easing = FastOutSlowInEasing,
+                    ),
                 ) + fadeOut(
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                    animationSpec = tween(
+                        durationMillis = RemovalMotionDurationMillis,
+                        easing = FastOutSlowInEasing,
+                    ),
                 ),
                 label = "FileRemoval"
             ) {
@@ -995,8 +1066,10 @@ private fun FileList(
                         .onGloballyPositioned { coordinates ->
                             onFileBoundsChanged(file.path, coordinates.boundsInRoot())
                         }
-                        .animateContentSize()
                         .clickable(enabled = isEditMode) {
+                            if (selectionClickSuppressed()) {
+                                return@clickable
+                            }
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
@@ -1012,18 +1085,20 @@ private fun FileList(
                         visible = isEditMode,
                         checked = isSelected,
                         onCheckedChange = {
-                            view.performHapticIfAllowed(
-                                context,
-                                enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY,
-                            )
-                            onToggleFileSelection(file.path)
+                            if (!selectionClickSuppressed()) {
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    HapticFeedbackConstants.VIRTUAL_KEY,
+                                )
+                                onToggleFileSelection(file.path)
+                            }
                         },
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = file.displayTitle(),
+                            text = if (showProgress) file.displayTitle() else file.mangaDisplayTitle(),
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
@@ -1103,7 +1178,7 @@ private fun FileList(
             }
             LaunchedEffect(isExiting) {
                 if (isExiting) {
-                    delay(450)
+                    delay(RemovalMotionDurationMillis.toLong())
                     currentFiles = currentFiles.filter { it.path != file.path }
                     deletedPaths.remove(file.path)
                 }
@@ -1209,11 +1284,14 @@ private fun List<CatalogFile>.summary(): String {
 private fun CatalogFile.displayTitle(): String =
     title?.takeIf { it.isNotBlank() } ?: name
 
+private fun CatalogFile.mangaDisplayTitle(): String =
+    name.bookTitleWithoutExtension().ifBlank { displayTitle() }
+
 private fun MangaSeriesGroup.subtitle(): String =
     lastReadFile?.let { file ->
-        "Last read: ${file.displayTitle()}${file.progressSuffix()}"
+        "Last read: ${file.mangaDisplayTitle()}${file.progressSuffix()}"
     } ?: latestFile?.let { file ->
-        "Latest: ${file.displayTitle()}"
+        "Latest: ${file.mangaDisplayTitle()}"
     } ?: "No files"
 
 private fun CatalogFile.progressSuffix(): String =
@@ -1227,4 +1305,8 @@ private fun CatalogFile.progressText(): String? =
     }
 
 private const val CatalogLongPressMillis = 300L
+private const val SuppressSelectionClickMillis = 250L
+private const val SelectionMotionDurationMillis = 220
+private const val RemovalMotionDurationMillis = 260
 private val SelectionSlotWidth = 36.dp
+private val SelectionControlSize = 24.dp

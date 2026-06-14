@@ -12,11 +12,9 @@ import com.cybercat.pocketbooksender.data.manga.MangaDownloadProgress
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesDetails
-import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.UploadItem
-import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.transfer.UploadQueueManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.IOException
@@ -36,7 +34,6 @@ class MangaViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val catalogRepository: DeviceCatalogRepository,
     private val queueManager: UploadQueueManager,
-    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val _mangaState = MutableStateFlow(MangaUiState())
@@ -475,21 +472,10 @@ class MangaViewModel @Inject constructor(
         series: MangaSeriesDetails,
         downloaded: List<MangaDownloadedChapter>,
     ) {
-        val settings = settingsRepository.settings.stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.Eagerly,
-            initialValue = settingsRepository.settings.let { runCatching { settingsRepository.settings }.getOrNull() }?.let { null } ?: com.cybercat.pocketbooksender.model.AppSettings()
-        ).value
-
-        // We can just add files to queueManager!
-        // But since we want to customise parameters of each item:
         val items = downloaded.map { item ->
             val uri = Uri.fromFile(item.file)
-            // Note: UploadQueueManager.addUris parses the uri and plans path automatically,
-            // but we want to customize category/manga volume title!
-            // To achieve this cleanly, we can build custom UploadItem instances here and push them using UploadQueueManager.updateQueue
             val ext = item.file.extension.lowercase().ifBlank { "cbz" }
-            val preliminary = UploadItem(
+            UploadItem(
                 id = UUID.randomUUID().toString(),
                 sourceUri = uri.toString(),
                 originalName = item.file.name,
@@ -499,16 +485,7 @@ class MangaViewModel @Inject constructor(
                 mangaSeries = series.title,
                 mangaVolume = item.chapter.title,
                 plannedPath = "",
-                status = UploadStatus.Preparing,
             )
-            // Replan path
-            preliminary.copy(plannedPath = queueManager.let { 
-                // We'll use pathPlanner from Hilt inside UploadQueueManager
-                // But we can just plan path directly
-                val folder = series.title.replace(Regex("[\\\\/:*?\"<>|]+"), "_").trim(' ', '.')
-                val file = item.chapter.title.replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_").trim('_', '.')
-                "Manga/$folder/$file.$ext"
-            })
         }
 
         queueManager.addPreparedItems(items)
