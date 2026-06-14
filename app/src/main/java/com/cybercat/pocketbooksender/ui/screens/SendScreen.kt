@@ -115,25 +115,34 @@ fun SendScreen(
     var clearTrigger by remember { mutableStateOf(0) }
     var clearInProgress by remember { mutableStateOf(false) }
     var clearAnimatedRowCount by remember { mutableStateOf(0) }
-    val activeQueue = if (state.isTransferActive) {
-        state.queue
-    } else {
-        state.queue.filterNot { it.status == UploadStatus.Uploaded }
+    val queue = state.queue
+    val activeQueue = remember(queue, state.isTransferActive) {
+        if (state.isTransferActive) {
+            queue
+        } else {
+            queue.filterNot { it.status == UploadStatus.Uploaded }
+        }
     }
-    val activeRows = activeQueue.withStableLazyKeys()
-    val activeMangaQueue = activeQueue.filter { it.category == BookCategory.Manga }
+    val activeRows = remember(activeQueue) { activeQueue.withStableLazyKeys() }
+    val activeMangaQueue = remember(activeQueue) {
+        activeQueue.filter { it.category == BookCategory.Manga }
+    }
     val canBatchRenameManga = activeMangaQueue.size > 1 && !state.isTransferActive && !clearInProgress
     var showMangaBatchEditor by remember { mutableStateOf(false) }
-    val uploadedQueue = if (state.isTransferActive) {
-        emptyList()
-    } else {
-        state.queue.filter { it.status == UploadStatus.Uploaded }
+    val uploadedQueue = remember(queue, state.isTransferActive) {
+        if (state.isTransferActive) {
+            emptyList()
+        } else {
+            queue.filter { it.status == UploadStatus.Uploaded }
+        }
     }
     val animatedUploadedSectionCount = if (uploadedQueue.isNotEmpty()) 1 else 0
-    val hasUploadableFiles = state.queue.any {
-        it.status == UploadStatus.Pending ||
-            it.status == UploadStatus.Failed ||
-            it.status == UploadStatus.Skipped
+    val hasUploadableFiles = remember(queue) {
+        queue.any {
+            it.status == UploadStatus.Pending ||
+                it.status == UploadStatus.Failed ||
+                it.status == UploadStatus.Skipped
+        }
     }
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),

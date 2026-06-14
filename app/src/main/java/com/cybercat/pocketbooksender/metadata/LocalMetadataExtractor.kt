@@ -45,7 +45,8 @@ class LocalMetadataExtractor @Inject constructor(
                     "cbz", "cbr" -> extractMangaArchive(uri, fallbackTitle)
                     else -> BookMetadata(title = fallbackTitle)
                 }
-            }.getOrElse {
+            }.getOrElse { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
                 BookMetadata(title = fallbackTitle)
             }
         }
@@ -276,12 +277,16 @@ class LocalMetadataExtractor @Inject constructor(
 
     private fun readFirstNaturalZipImage(uri: Uri): Bitmap? {
         var bestEntryName: String? = null
+        var bytes: ByteArray? = null
 
         open(uri).use { input ->
             ZipInputStream(input).use { zip ->
                 while (true) {
                     val entry = zip.nextEntry ?: break
-                    if (entry.isDirectory) continue
+                    if (entry.isDirectory) {
+                        zip.closeEntry()
+                        continue
+                    }
 
                     val normalizedName = entry.name
                         .replace('\\', '/')
@@ -292,23 +297,9 @@ class LocalMetadataExtractor @Inject constructor(
                         val currentBest = bestEntryName?.replace('\\', '/')?.substringAfterLast("/")?.trim()
                         if (currentBest == null || NaturalSort.compare(normalizedName, currentBest) < 0) {
                             bestEntryName = entry.name
+                            bytes = zip.readCurrentEntry(MAX_IMAGE_BYTES)
+                            continue
                         }
-                    }
-                    zip.closeEntry()
-                }
-            }
-        }
-
-        if (bestEntryName == null) return null
-
-        var bytes: ByteArray? = null
-        open(uri).use { input ->
-            ZipInputStream(input).use { zip ->
-                while (true) {
-                    val entry = zip.nextEntry ?: break
-                    if (entry.name == bestEntryName) {
-                        bytes = zip.readCurrentEntry(MAX_IMAGE_BYTES)
-                        break
                     }
                     zip.closeEntry()
                 }
@@ -322,17 +313,22 @@ class LocalMetadataExtractor @Inject constructor(
         runCatching {
             open(uri).use { input ->
                 Archive(input).use { archive ->
-                    val firstImage = archive.fileHeaders()
-                        .filterNot(FileHeader::isDirectory)
-                        .filter { it.normalizedName().isImageName() }
-                        .sortedWith(NaturalSort.by { it.normalizedName() })
-                        .firstOrNull()
+                    var bestHeader: FileHeader? = null
+                    var bestBytes: ByteArray? = null
 
-                    firstImage?.let { header ->
-                        archive.getInputStream(header).use { imageInput ->
-                            decodeBitmap(imageInput.readBytesLimited(MAX_IMAGE_BYTES))
+                    while (true) {
+                        val header = archive.nextFileHeader() ?: break
+                        if (header.isDirectory) continue
+                        val name = header.normalizedName()
+                        if (name.lowercase().isImageName()) {
+                            val currentBest = bestHeader?.normalizedName()
+                            if (currentBest == null || NaturalSort.compare(name, currentBest) < 0) {
+                                bestHeader = header
+                                bestBytes = archive.getInputStream(header).use { it.readBytesLimited(MAX_IMAGE_BYTES) }
+                            }
                         }
                     }
+                    bestBytes?.let(::decodeBitmap)
                 }
             }
         }.getOrNull()
@@ -353,7 +349,7 @@ class LocalMetadataExtractor @Inject constructor(
     private fun decodeBase64Bitmap(value: String): Bitmap? =
         runCatching {
             val bytes = Base64.decode(value.replace(Regex("""\s+"""), ""), Base64.DEFAULT)
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            decodeBitmap(bytes)
         }.getOrNull()
 
     private fun InputStream.readBytesLimited(limit: Int): ByteArray {
@@ -372,15 +368,6 @@ class LocalMetadataExtractor @Inject constructor(
 
     private fun ZipInputStream.readCurrentEntry(limit: Int): ByteArray =
         readBytesLimited(limit)
-
-    private fun Archive.fileHeaders(): List<FileHeader> {
-        val headers = mutableListOf<FileHeader>()
-        while (true) {
-            val header = nextFileHeader() ?: break
-            headers += header
-        }
-        return headers
-    }
 
     private fun FileHeader.normalizedName(): String =
         fileNameString
@@ -413,7 +400,43 @@ class LocalMetadataExtractor @Inject constructor(
     }
 
     private fun decodeBitmap(bytes: ByteArray): Bitmap? =
-        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
+        runCatching {
+            val bounds = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+
+            val options = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.RGB_565
+                inDither = true
+                inSampleSize = calculateInSampleSize(
+                    width = bounds.outWidth,
+                    height = bounds.outHeight,
+                    maxWidth = PREVIEW_MAX_WIDTH,
+                    maxHeight = PREVIEW_MAX_HEIGHT,
+                )
+            }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        }.getOrNull()
+
+    private fun calculateInSampleSize(
+        width: Int,
+        height: Int,
+        maxWidth: Int,
+        maxHeight: Int,
+    ): Int {
+        if (width <= 0 || height <= 0) return 1
+
+        var sampleSize = 1
+        var sampledWidth = width
+        var sampledHeight = height
+        while (sampledWidth / 2 >= maxWidth || sampledHeight / 2 >= maxHeight) {
+            sampleSize *= 2
+            sampledWidth /= 2
+            sampledHeight /= 2
+        }
+        return sampleSize
+    }
 
     private data class OpfMetadata(
         val title: String,
@@ -425,5 +448,7 @@ class LocalMetadataExtractor @Inject constructor(
         const val MAX_TEXT_BYTES = 32 * 1024 * 1024
         const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
         const val PREVIEW_WIDTH = 360
+        const val PREVIEW_MAX_WIDTH = 360
+        const val PREVIEW_MAX_HEIGHT = 540
     }
 }

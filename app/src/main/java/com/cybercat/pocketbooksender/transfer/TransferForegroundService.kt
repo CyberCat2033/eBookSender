@@ -15,6 +15,7 @@ import com.cybercat.pocketbooksender.R
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -192,10 +193,10 @@ class TransferForegroundService : Service() {
             "Uploaded $uploaded, failed $failed"
         }
 
-        stopForeground(STOP_FOREGROUND_DETACH)
+        stopForeground(STOP_FOREGROUND_REMOVE)
 
         notificationManager().notify(
-            NOTIFICATION_ID,
+            nextCompletionNotificationId(),
             NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_upload)
                 .setContentTitle("PocketBook transfer complete")
@@ -247,7 +248,12 @@ class TransferForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "book_transfers"
         private const val NOTIFICATION_ID = 2001
+        private const val COMPLETION_NOTIFICATION_ID_START = 2100
         private const val EXTRA_REQUEST_ID = "request_id"
+        private val completionNotificationIds = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
+
+        private fun nextCompletionNotificationId(): Int =
+            completionNotificationIds.getAndIncrement()
 
         fun createIntent(context: Context, requestId: String): Intent =
             Intent(context, TransferForegroundService::class.java)

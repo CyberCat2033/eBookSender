@@ -1,0 +1,322 @@
+package com.cybercat.pocketbooksender.ui
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
+import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.data.settings.SettingsRepository
+import com.cybercat.pocketbooksender.domain.FtpUrlParser
+import com.cybercat.pocketbooksender.model.BookCategory
+import com.cybercat.pocketbooksender.model.CatalogGroup
+import com.cybercat.pocketbooksender.model.MangaSeriesGroup
+import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.UploadStatus
+import com.cybercat.pocketbooksender.transfer.ConnectionManager
+import com.cybercat.pocketbooksender.transfer.TransferCoordinator
+import com.cybercat.pocketbooksender.transfer.TransferEvent
+import com.cybercat.pocketbooksender.transfer.TransferForegroundService
+import com.cybercat.pocketbooksender.transfer.TransferUploadItem
+import com.cybercat.pocketbooksender.transfer.UploadQueueManager
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+@HiltViewModel
+class TransferViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val connectionManager: ConnectionManager,
+    private val queueManager: UploadQueueManager,
+    private val catalogRepository: DeviceCatalogRepository,
+    private val settingsRepository: SettingsRepository,
+    private val transferCoordinator: TransferCoordinator,
+    private val ftpGateway: FtpGateway,
+) : ViewModel() {
+
+    private val _ftpInput = MutableStateFlow("")
+    private val _isConnecting = MutableStateFlow(false)
+    private val _isTransferActive = MutableStateFlow(false)
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    private val _ftpSuggestions = MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
+
+    val uiState: StateFlow<TransferUiState> = combine(
+        _ftpInput,
+        _isConnecting,
+        connectionManager.connectedDevice,
+        _isTransferActive,
+        queueManager.queue,
+        settingsRepository.settings,
+        _errorMessage,
+        catalogRepository.catalog,
+        _ftpSuggestions
+    ) { ftpInput, isConnecting, device, isTransfer, queue, settings, error, catalog, suggestions ->
+        val tags = if (catalog.programming.isNotEmpty()) {
+            catalog.programming.map(CatalogGroup::name)
+        } else {
+            suggestions.first
+        }
+        val series = if (catalog.manga.isNotEmpty()) {
+            catalog.manga.map(MangaSeriesGroup::name)
+        } else {
+            suggestions.second
+        }
+
+        TransferUiState(
+            ftpInput = ftpInput,
+            isConnecting = isConnecting,
+            connectedDevice = device,
+            isTransferActive = isTransfer,
+            queue = queue,
+            settings = settings,
+            errorMessage = error,
+            programmingTags = tags,
+            mangaSeriesSuggestions = series
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = TransferUiState()
+    )
+
+    init {
+        // Collect FTP input field default values reactively on connection change
+        connectionManager.connectedDevice
+            .onEach { device ->
+                if (device != null) {
+                    _ftpInput.value = device.ftpUrl
+                    _errorMessage.value = null
+                    refreshRemoteFolderSuggestions(device)
+                } else {
+                    _ftpSuggestions.value = Pair(emptyList(), emptyList())
+                }
+            }
+            .launchIn(viewModelScope)
+
+        // Reactively handle foreground transfer service events and update queue
+        transferCoordinator.events
+            .onEach(::handleTransferEvent)
+            .launchIn(viewModelScope)
+    }
+
+    fun onFtpInputChanged(value: String) {
+        _ftpInput.value = value
+    }
+
+    fun connect() {
+        connectTo(_ftpInput.value)
+    }
+
+    fun connectTo(rawLink: String) {
+        val parsedDevice = FtpUrlParser.parse(rawLink)
+            .getOrElse { error ->
+                _isConnecting.value = false
+                _errorMessage.value = error.message ?: "Invalid FTP link"
+                return
+            }
+
+        val device = parsedDevice.copy(
+            rootPath = uiState.value.settings.rootPath.ifBlank { "/mnt/ext1" },
+        )
+
+        _isConnecting.value = true
+        connectionManager.disconnect()
+        _ftpInput.value = device.ftpUrl
+        _errorMessage.value = null
+
+        viewModelScope.launch {
+            ftpGateway.checkConnection(device)
+                .onSuccess {
+                    _isConnecting.value = false
+                    connectionManager.connect(device)
+                    _ftpInput.value = device.ftpUrl
+                    _errorMessage.value = null
+                }
+                .onFailure { error ->
+                    _isConnecting.value = false
+                    connectionManager.disconnect()
+                    _errorMessage.value = error.toFtpConnectionMessage(device)
+                }
+        }
+    }
+
+    fun disconnect() {
+        _isConnecting.value = false
+        connectionManager.disconnect()
+    }
+
+    fun addUris(uris: List<Uri>) {
+        queueManager.addUris(uris)
+    }
+
+    fun removeItem(id: String) {
+        queueManager.removeItem(id)
+    }
+
+    fun clearQueue() {
+        queueManager.clearQueue()
+    }
+
+    fun updateCategory(id: String, category: BookCategory) {
+        queueManager.updateCategory(id, category)
+    }
+
+    fun updateProgrammingTag(id: String, tag: String) {
+        queueManager.updateProgrammingTag(id, tag)
+    }
+
+    fun updateMangaSeries(id: String, series: String) {
+        queueManager.updateMangaSeries(id, series)
+    }
+
+    fun updateQueuedMangaSeries(series: String) {
+        queueManager.updateQueuedMangaSeries(series)
+    }
+
+    fun uploadAll() {
+        val snapshot = uiState.value
+        val device = snapshot.connectedDevice
+        if (device == null) {
+            _errorMessage.value = "Connect PocketBook before upload"
+            return
+        }
+        if (snapshot.queue.isEmpty()) {
+            _errorMessage.value = "Queue is empty"
+            return
+        }
+
+        val uploadableItems = snapshot.queue.filter {
+            it.status == UploadStatus.Pending ||
+                it.status == UploadStatus.Failed ||
+                it.status == UploadStatus.Skipped
+        }
+        if (uploadableItems.isEmpty()) {
+            _errorMessage.value = "No pending files to upload"
+            return
+        }
+
+        val requestId = transferCoordinator.submit(
+            device = device,
+            items = uploadableItems.map { item ->
+                TransferUploadItem(
+                    id = item.id,
+                    sourceUri = item.sourceUri,
+                    originalName = item.originalName,
+                    extension = item.extension,
+                    plannedPath = item.plannedPath,
+                )
+            },
+        )
+
+        _isTransferActive.value = true
+        _errorMessage.value = null
+
+        queueManager.updateQueue { current ->
+            current.map { item ->
+                if (uploadableItems.any { it.id == item.id }) {
+                    item.copy(status = UploadStatus.Pending, progress = 0.0f)
+                } else {
+                    item
+                }
+            }
+        }
+
+        ContextCompat.startForegroundService(
+            context,
+            TransferForegroundService.createIntent(context, requestId),
+        )
+    }
+
+    private fun handleTransferEvent(event: TransferEvent) {
+        when (event) {
+            is TransferEvent.ItemStarted -> {
+                queueManager.updateQueue { current ->
+                    current.map { item ->
+                        if (item.id == event.itemId) {
+                            item.copy(status = UploadStatus.Uploading, progress = 0.0f)
+                        } else {
+                            item
+                        }
+                    }
+                }
+            }
+            is TransferEvent.ItemProgress -> {
+                queueManager.updateQueue { current ->
+                    current.map { item ->
+                        if (item.id == event.itemId) {
+                            item.copy(status = UploadStatus.Uploading, progress = event.progress)
+                        } else {
+                            item
+                        }
+                    }
+                }
+            }
+            is TransferEvent.ItemUploaded -> {
+                queueManager.updateQueue { current ->
+                    current.map { item ->
+                        if (item.id == event.itemId) {
+                            item.copy(status = UploadStatus.Uploaded, progress = 1f)
+                        } else {
+                            item
+                        }
+                    }
+                }
+            }
+            is TransferEvent.ItemFailed -> {
+                queueManager.updateQueue { current ->
+                    current.map { item ->
+                        if (item.id == event.itemId) {
+                            item.copy(status = UploadStatus.Failed, progress = 0f)
+                        } else {
+                            item
+                        }
+                    }
+                }
+                _errorMessage.value = event.message
+            }
+            is TransferEvent.Completed -> {
+                _isTransferActive.value = false
+                val device = connectionManager.connectedDevice.value
+                if (device != null) {
+                    refreshRemoteFolderSuggestions(device)
+                    viewModelScope.launch {
+                        catalogRepository.refresh(device)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun refreshRemoteFolderSuggestions(device: PocketBookDevice) {
+        viewModelScope.launch {
+            val tags = ftpGateway.listDirectories(device, "Programming").getOrDefault(emptyList())
+            val series = ftpGateway.listDirectories(device, "Manga").getOrDefault(emptyList())
+            _ftpSuggestions.value = Pair(tags, series)
+        }
+    }
+
+    private fun Throwable.toFtpConnectionMessage(device: PocketBookDevice): String {
+        val reason = when (this) {
+            is UnknownHostException -> "Host ${device.host} cannot be resolved"
+            is ConnectException -> "Connection to ${device.host}:${device.port} refused"
+            is SocketTimeoutException -> "Timeout connecting to ${device.host}:${device.port}"
+            else -> message ?: this::class.java.simpleName
+        }
+        return "Cannot connect to ${device.host}:${device.port}: $reason"
+    }
+}

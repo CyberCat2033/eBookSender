@@ -19,8 +19,17 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import com.cybercat.pocketbooksender.transfer.ConnectionManager
 
 private const val PocketBookStoragePrefix = "/mnt/ext1/"
 
@@ -28,9 +37,39 @@ private const val PocketBookStoragePrefix = "/mnt/ext1/"
 class DeviceCatalogRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val ftpGateway: FtpGateway,
+    private val connectionManager: ConnectionManager,
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private val _catalog = MutableStateFlow(DeviceCatalog())
+    val catalog: StateFlow<DeviceCatalog> = _catalog.asStateFlow()
+
+    init {
+        connectionManager.connectedDevice
+            .onEach { device ->
+                if (device != null) {
+                    refresh(device)
+                } else {
+                    clear()
+                }
+            }
+            .launchIn(scope)
+    }
+
+    suspend fun refresh(device: PocketBookDevice) {
+        _catalog.update { it.copy(isLoading = true) }
+        val result = runCatching { load(device) }
+        _catalog.value = result.getOrDefault(DeviceCatalog(errorMessage = "Load failed"))
+    }
+
+    fun clear() {
+        _catalog.value = DeviceCatalog()
+    }
+
     suspend fun load(device: PocketBookDevice): DeviceCatalog = withContext(Dispatchers.IO) {
-        val databaseCatalog = runCatching { loadFromPocketBookDatabase(device) }.getOrNull()
+        val databaseCatalog = runCatching { loadFromPocketBookDatabase(device) }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+            .getOrNull()
         if (databaseCatalog != null && !databaseCatalog.isEmpty) {
             databaseCatalog
         } else {

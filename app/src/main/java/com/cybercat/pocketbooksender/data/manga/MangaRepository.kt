@@ -361,6 +361,7 @@ class MangaRepository @Inject constructor(
                 errorMessage = null,
             )
         }.getOrElse { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
             ChapterDownloadOutcome(
                 downloaded = null,
                 historyItem = null,

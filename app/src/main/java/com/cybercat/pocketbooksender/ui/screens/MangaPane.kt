@@ -813,7 +813,6 @@ private fun MangaBrowserCard(
                             webViewRef = this
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.databaseEnabled = true
                             settings.loadsImagesAutomatically = true
                             settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                             settings.useWideViewPort = true
