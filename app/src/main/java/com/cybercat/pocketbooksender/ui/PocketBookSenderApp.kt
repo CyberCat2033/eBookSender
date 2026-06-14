@@ -308,6 +308,9 @@ private fun AppNavHost(
             )
         }
         composable(MainDestination.Settings.route) {
+            LaunchedEffect(Unit) {
+                settingsViewModel.scanLocales()
+            }
             SettingsScreen(
                 state = settingsState,
                 scrollState = settingsScrollState,
@@ -325,11 +328,23 @@ private fun AppNavHost(
                 onClearDownloadCache = settingsViewModel::clearDownloadCache,
                 onClearStatusMessage = settingsViewModel::clearStatusMessage,
                 onThemeChanged = settingsViewModel::setTheme,
+                onLanguageChanged = settingsViewModel::setLanguageCode,
                 onWarnOnDisconnectedRenameChanged = settingsViewModel::setWarnOnDisconnectedRename,
                 onConfirmPendingRename = settingsViewModel::confirmPendingRename,
                 onCancelPendingRename = settingsViewModel::cancelPendingRename,
             )
         }
+    }
+}
+
+@Composable
+private fun MainDestination.translatedLabel(): String {
+    val strings = com.cybercat.pocketbooksender.localization.LocalStrings.current
+    return when (this) {
+        MainDestination.Send -> strings.navSend
+        MainDestination.Catalog -> strings.navCatalog
+        MainDestination.Opds -> strings.navWeb
+        MainDestination.Settings -> strings.navSettings
     }
 }
 
@@ -344,6 +359,7 @@ private fun AppNavigationBar(
     ) {
         MainDestinations.forEach { destination ->
             val selected = currentRoute == destination.route
+            val label = destination.translatedLabel()
             NavigationBarItem(
                 selected = selected,
                 onClick = {
@@ -353,8 +369,8 @@ private fun AppNavigationBar(
                         onNavigate(destination.route)
                     }
                 },
-                icon = { Icon(destination.icon, contentDescription = destination.label) },
-                label = { Text(destination.label) },
+                icon = { Icon(destination.icon, contentDescription = label) },
+                label = { Text(label) },
             )
         }
     }
@@ -371,6 +387,7 @@ private fun AppNavigationRail(
     ) {
         MainDestinations.forEach { destination ->
             val selected = currentRoute == destination.route
+            val label = destination.translatedLabel()
             NavigationRailItem(
                 selected = selected,
                 onClick = {
@@ -380,8 +397,8 @@ private fun AppNavigationRail(
                         onNavigate(destination.route)
                     }
                 },
-                icon = { Icon(destination.icon, contentDescription = destination.label) },
-                label = { Text(destination.label) },
+                icon = { Icon(destination.icon, contentDescription = label) },
+                label = { Text(label) },
             )
         }
     }

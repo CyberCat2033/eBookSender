@@ -18,11 +18,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +57,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import com.cybercat.pocketbooksender.localization.LocalStrings
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -92,6 +96,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
 import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
@@ -123,6 +128,7 @@ fun CatalogScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     val catalog = state.deviceCatalog
     val selectedFilePathsState = rememberUpdatedState(state.selectedFilePaths)
     val isEditModeState = rememberUpdatedState(state.isEditMode)
@@ -198,8 +204,8 @@ fun CatalogScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete selected books?") },
-            text = { Text("This will permanently delete the selected ${state.selectedFilePaths.size} file(s) from your PocketBook device.") },
+            title = { Text(strings.catalogDeleteTitle) },
+            text = { Text(strings.get("catalog_delete_body", state.selectedFilePaths.size)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -208,7 +214,7 @@ fun CatalogScreen(
                         onDeleteSelectedFiles()
                     }
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(strings.catalogDeleteBtn, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -218,7 +224,7 @@ fun CatalogScreen(
                         showDeleteConfirm = false
                     }
                 ) {
-                    Text("Cancel")
+                    Text(strings.catalogDeleteCancel)
                 }
             }
         )
@@ -227,7 +233,7 @@ fun CatalogScreen(
     if (state.deleteErrorMessage != null) {
         AlertDialog(
             onDismissRequest = onClearDeleteError,
-            title = { Text("Error deleting files") },
+            title = { Text(strings.catalogDeleteErrorTitle) },
             text = { Text(state.deleteErrorMessage) },
             confirmButton = {
                 TextButton(
@@ -236,7 +242,7 @@ fun CatalogScreen(
                         onClearDeleteError()
                     }
                 ) {
-                    Text("OK")
+                    Text(strings.catalogDeleteErrorBtn)
                 }
             }
         )
@@ -252,7 +258,7 @@ fun CatalogScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     CircularProgressIndicator()
-                    Text("Deleting books...", style = MaterialTheme.typography.titleMedium)
+                    Text(strings.catalogDeletingState, style = MaterialTheme.typography.titleMedium)
                 }
             },
             dismissButton = null
@@ -268,9 +274,9 @@ fun CatalogScreen(
                         label = "CatalogTopBarTitle",
                     ) { isEditMode ->
                         if (isEditMode) {
-                            Text("Selected: ${state.selectedFilePaths.size}")
+                            Text(strings.get("catalog_selected_count", state.selectedFilePaths.size))
                         } else {
-                            Text("Catalog")
+                            Text(strings.catalogTitle)
                         }
                     }
                 },
@@ -541,8 +547,14 @@ fun CatalogScreen(
                 }
 
                 if (catalog.books.isNotEmpty()) {
-                    item {
-                        SectionTitle(state.settings.booksFolderName, catalog.books.sumOf { it.files.size })
+                    item(
+                        key = "section:books",
+                        contentType = "catalog_section_title",
+                    ) {
+                        SectionTitle(
+                            title = state.settings.booksFolderName,
+                            count = catalog.books.sumOf { it.files.size },
+                        )
                     }
                     items(
                         items = catalog.books,
@@ -557,6 +569,7 @@ fun CatalogScreen(
                             enableHaptics = enableHaptics,
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
+                            onEnterEditMode = { onSetEditMode(true) },
                             selectionClickSuppressed = ::selectionClickSuppressed,
                             onExpandedChange = { expanded ->
                                 if (expanded) {
@@ -573,14 +586,19 @@ fun CatalogScreen(
                                     fileRowBounds[path] = bounds
                                 }
                             },
-                            modifier = Modifier.animateItem()
                         )
                     }
                 }
 
                 if (catalog.documents.isNotEmpty()) {
-                    item {
-                        SectionTitle(state.settings.documentsFolderName, catalog.documents.sumOf { it.files.size })
+                    item(
+                        key = "section:documents",
+                        contentType = "catalog_section_title",
+                    ) {
+                        SectionTitle(
+                            title = state.settings.documentsFolderName,
+                            count = catalog.documents.sumOf { it.files.size },
+                        )
                     }
                     items(
                         items = catalog.documents,
@@ -595,6 +613,7 @@ fun CatalogScreen(
                             enableHaptics = enableHaptics,
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
+                            onEnterEditMode = { onSetEditMode(true) },
                             selectionClickSuppressed = ::selectionClickSuppressed,
                             onExpandedChange = { expanded ->
                                 if (expanded) {
@@ -611,14 +630,19 @@ fun CatalogScreen(
                                     fileRowBounds[path] = bounds
                                 }
                             },
-                            modifier = Modifier.animateItem()
                         )
                     }
                 }
 
                 if (catalog.manga.isNotEmpty()) {
-                    item {
-                        SectionTitle(state.settings.mangaFolderName, catalog.manga.size)
+                    item(
+                        key = "section:manga",
+                        contentType = "catalog_section_title",
+                    ) {
+                        SectionTitle(
+                            title = state.settings.mangaFolderName,
+                            count = catalog.manga.size,
+                        )
                     }
                     items(
                         items = catalog.manga,
@@ -633,6 +657,7 @@ fun CatalogScreen(
                             enableHaptics = enableHaptics,
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
+                            onEnterEditMode = { onSetEditMode(true) },
                             selectionClickSuppressed = ::selectionClickSuppressed,
                             onExpandedChange = { expanded ->
                                 if (expanded) {
@@ -649,7 +674,6 @@ fun CatalogScreen(
                                     fileRowBounds[path] = bounds
                                 }
                             },
-                            modifier = Modifier.animateItem()
                         )
                     }
                 }
@@ -692,10 +716,16 @@ private fun CatalogMessage(
 }
 
 @Composable
-private fun SectionTitle(title: String, count: Int) {
+private fun SectionTitle(
+    title: String,
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
     Row(
-        modifier = Modifier
+        modifier = modifier
+            .zIndex(CatalogSectionTitleZIndex)
             .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
             .padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -789,6 +819,7 @@ private fun CatalogGroupCard(
     enableHaptics: Boolean,
     onToggleFileSelection: (String) -> Unit,
     onToggleGroupSelection: (List<String>, Boolean) -> Unit,
+    onEnterEditMode: () -> Unit,
     selectionClickSuppressed: () -> Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit,
@@ -805,6 +836,20 @@ private fun CatalogGroupCard(
     fun toggleGroup(checked: Boolean = !isGroupFullySelected) {
         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
         onToggleGroupSelection(filePaths, checked)
+    }
+
+    fun selectGroupFromLongPress() {
+        if (filePaths.isEmpty() || selectionClickSuppressed()) return
+        view.performHapticIfAllowed(
+            context,
+            enableHaptics,
+            HapticFeedbackConstants.LONG_PRESS,
+            ignoreDnd = true,
+        )
+        if (!isEditMode) {
+            onEnterEditMode()
+        }
+        onToggleGroupSelection(filePaths, true)
     }
 
     ElevatedCard(
@@ -833,6 +878,7 @@ private fun CatalogGroupCard(
                             toggleGroup()
                         }
                     },
+                    onTitleLongClick = ::selectGroupFromLongPress,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -868,6 +914,7 @@ private fun MangaSeriesCard(
     enableHaptics: Boolean,
     onToggleFileSelection: (String) -> Unit,
     onToggleGroupSelection: (List<String>, Boolean) -> Unit,
+    onEnterEditMode: () -> Unit,
     selectionClickSuppressed: () -> Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit,
@@ -884,6 +931,20 @@ private fun MangaSeriesCard(
     fun toggleGroup(checked: Boolean = !isGroupFullySelected) {
         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
         onToggleGroupSelection(filePaths, checked)
+    }
+
+    fun selectGroupFromLongPress() {
+        if (filePaths.isEmpty() || selectionClickSuppressed()) return
+        view.performHapticIfAllowed(
+            context,
+            enableHaptics,
+            HapticFeedbackConstants.LONG_PRESS,
+            ignoreDnd = true,
+        )
+        if (!isEditMode) {
+            onEnterEditMode()
+        }
+        onToggleGroupSelection(filePaths, true)
     }
 
     ElevatedCard(
@@ -915,6 +976,7 @@ private fun MangaSeriesCard(
                             toggleGroup()
                         }
                     },
+                    onTitleLongClick = ::selectGroupFromLongPress,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -941,6 +1003,7 @@ private fun MangaSeriesCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ExpandableHeader(
     title: String,
@@ -951,10 +1014,26 @@ private fun ExpandableHeader(
     onToggle: () -> Unit,
     titleClickEnabled: Boolean = false,
     onTitleClick: () -> Unit = {},
+    onTitleLongClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val titleInteractionModifier = if (titleClickEnabled) {
+        Modifier.combinedClickable(
+            onClick = onTitleClick,
+            onLongClick = onTitleLongClick,
+        )
+    } else {
+        Modifier.pointerInput(onTitleLongClick) {
+            detectTapGestures(
+                onLongPress = {
+                    onTitleLongClick()
+                },
+            )
+        }
+    }
+
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -962,9 +1041,7 @@ private fun ExpandableHeader(
         Column(
             Modifier
                 .weight(1f)
-                .clickable(enabled = titleClickEnabled) {
-                    onTitleClick()
-                }
+                .then(titleInteractionModifier)
         ) {
             Text(
                 text = title,
@@ -1308,5 +1385,6 @@ private const val CatalogLongPressMillis = 300L
 private const val SuppressSelectionClickMillis = 250L
 private const val SelectionMotionDurationMillis = 220
 private const val RemovalMotionDurationMillis = 260
+private const val CatalogSectionTitleZIndex = 1f
 private val SelectionSlotWidth = 36.dp
 private val SelectionControlSize = 24.dp

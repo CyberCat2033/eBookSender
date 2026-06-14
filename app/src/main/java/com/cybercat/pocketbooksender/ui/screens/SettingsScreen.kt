@@ -20,6 +20,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.model.AppTheme
 import com.cybercat.pocketbooksender.ui.SettingsUiState
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+import com.cybercat.pocketbooksender.localization.LocalStrings
 import kotlinx.coroutines.delay
 
 @Composable
@@ -241,24 +243,26 @@ fun SettingsScreen(
     onClearDownloadCache: () -> Unit,
     onClearStatusMessage: () -> Unit,
     onThemeChanged: (AppTheme) -> Unit,
+    onLanguageChanged: (String) -> Unit,
     onWarnOnDisconnectedRenameChanged: (Boolean) -> Unit,
     onConfirmPendingRename: () -> Unit,
     onCancelPendingRename: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
 
     state.pendingRename?.let { pending ->
         AlertDialog(
             onDismissRequest = onCancelPendingRename,
-            title = { Text("Device Disconnected") },
+            title = { Text(strings.settingsDialogTitle) },
             text = {
                 val folderDescription = when (pending.folderType) {
-                    FolderType.Books -> "Books"
-                    FolderType.Documents -> "Documents"
-                    FolderType.Manga -> "Manga"
+                    FolderType.Books -> strings.settingsBooksFolder
+                    FolderType.Documents -> strings.settingsDocsFolder
+                    FolderType.Manga -> strings.settingsMangaFolder
                 }
-                Text("You are not connected to the device. Change the local setting for '$folderDescription' folder to '${pending.newName}' anyway?\n\n(This will not rename the directory on the device.)")
+                Text(strings.get("settings_dialog_body", folderDescription, pending.newName))
             },
             confirmButton = {
                 TextButton(
@@ -267,7 +271,7 @@ fun SettingsScreen(
                         onConfirmPendingRename()
                     }
                 ) {
-                    Text("Change anyway")
+                    Text(strings.settingsDialogConfirm)
                 }
             },
             dismissButton = {
@@ -277,7 +281,7 @@ fun SettingsScreen(
                         onCancelPendingRename()
                     }
                 ) {
-                    Text("Cancel")
+                    Text(strings.settingsDialogCancel)
                 }
             }
         )
@@ -286,7 +290,7 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text(strings.settingsTitle) },
                 windowInsets = WindowInsets(0.dp),
             )
         },
@@ -299,11 +303,11 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            SettingsSection(title = "POCKETBOOK STORAGE") {
+            SettingsSection(title = strings.settingsStorageSection) {
                 ValidatedSettingsField(
                     value = state.settings.rootPath,
                     onValueChange = onRootPathChanged,
-                    label = "Root path",
+                    label = strings.settingsRootPath,
                     leadingIcon = Icons.Outlined.Folder,
                     validation = { input ->
                         val trimmed = input.trim().replace('\\', '/')
@@ -314,7 +318,7 @@ fun SettingsScreen(
                 ValidatedSettingsField(
                     value = state.settings.booksFolderName,
                     onValueChange = onBooksFolderNameChanged,
-                    label = "Books folder name",
+                    label = strings.settingsBooksFolder,
                     leadingIcon = Icons.Outlined.Folder,
                     validation = { input ->
                         val clean = input.trim().replace(Regex("[\\\\/:*?\"<>|]"), "")
@@ -324,7 +328,7 @@ fun SettingsScreen(
                 ValidatedSettingsField(
                     value = state.settings.documentsFolderName,
                     onValueChange = onDocumentsFolderNameChanged,
-                    label = "Documents folder name",
+                    label = strings.settingsDocsFolder,
                     leadingIcon = Icons.Outlined.Folder,
                     validation = { input ->
                         val clean = input.trim().replace(Regex("[\\\\/:*?\"<>|]"), "")
@@ -334,7 +338,7 @@ fun SettingsScreen(
                 ValidatedSettingsField(
                     value = state.settings.mangaFolderName,
                     onValueChange = onMangaFolderNameChanged,
-                    label = "Manga folder name",
+                    label = strings.settingsMangaFolder,
                     leadingIcon = Icons.Outlined.Folder,
                     imeAction = ImeAction.Next,
                     validation = { input ->
@@ -344,9 +348,9 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsSection(title = "NAMING RULES") {
+            SettingsSection(title = strings.settingsNamingSection) {
                 Text(
-                    text = "Tokens: {title}, {author}, {tag}, {series}, {volume}, {year}, {index}, {publisher}, {ext}, {original}.",
+                    text = strings.settingsNamingTokens,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -372,13 +376,13 @@ fun SettingsScreen(
                     ValidatedSettingsField(
                         value = state.settings.bookFileNameTemplate,
                         onValueChange = onBookFileNameTemplateChanged,
-                        label = "Books file name template",
+                        label = strings.settingsNamingBooksTemplate,
                         imeAction = ImeAction.Next,
                         onPreviewChange = { bookTemplatePreview = it },
                         validation = { it.trim().ifBlank { "{title}" } }
                     )
                     NamingPreview(
-                        label = "Books",
+                        label = strings.get("settings_naming_preview", "Books"),
                         template = bookTemplatePreview,
                         exampleTokens = commonTokens,
                         folderName = state.settings.booksFolderName
@@ -391,20 +395,20 @@ fun SettingsScreen(
                     ValidatedSettingsField(
                         value = state.settings.defaultDocumentsTag,
                         onValueChange = onDefaultDocumentsTagChanged,
-                        label = "Default documents tag",
+                        label = strings.settingsNamingDocsTag,
                         imeAction = ImeAction.Next,
                         validation = { it.trim().ifBlank { "Untagged" } }
                     )
                     ValidatedSettingsField(
                         value = state.settings.documentsFileNameTemplate,
                         onValueChange = onDocumentsFileNameTemplateChanged,
-                        label = "Documents file name template",
+                        label = strings.settingsNamingDocsTemplate,
                         imeAction = ImeAction.Next,
                         onPreviewChange = { docsTemplatePreview = it },
                         validation = { it.trim().ifBlank { "{title}" } }
                     )
                     NamingPreview(
-                        label = "Documents",
+                        label = strings.get("settings_naming_preview", "Documents"),
                         template = docsTemplatePreview,
                         exampleTokens = commonTokens,
                         folderName = state.settings.documentsFolderName
@@ -417,20 +421,20 @@ fun SettingsScreen(
                     ValidatedSettingsField(
                         value = state.settings.defaultMangaSeries,
                         onValueChange = onDefaultMangaSeriesChanged,
-                        label = "Default manga series",
+                        label = strings.settingsNamingMangaSeries,
                         imeAction = ImeAction.Next,
                         validation = { it.trim().ifBlank { "Unknown_Series" } }
                     )
                     ValidatedSettingsField(
                         value = state.settings.mangaFileNameTemplate,
                         onValueChange = onMangaFileNameTemplateChanged,
-                        label = "Manga file name template",
+                        label = strings.settingsNamingMangaTemplate,
                         imeAction = ImeAction.Done,
                         onPreviewChange = { mangaTemplatePreview = it },
                         validation = { it.trim().ifBlank { "{series}_{volume}" } }
                     )
                     NamingPreview(
-                        label = "Manga",
+                        label = strings.get("settings_naming_preview", "Manga"),
                         template = mangaTemplatePreview,
                         exampleTokens = commonTokens,
                         folderName = state.settings.mangaFolderName,
@@ -439,14 +443,14 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsSection(title = "INTERFACE") {
+            SettingsSection(title = strings.settingsInterfaceSection) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Dynamic color", style = MaterialTheme.typography.bodyLarge)
-                        Text("Use Material You colors", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(strings.settingsDynamicColor, style = MaterialTheme.typography.bodyLarge)
+                        Text(strings.settingsDynamicColorDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = state.settings.useDynamicColor,
@@ -462,8 +466,8 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Haptic feedback", style = MaterialTheme.typography.bodyLarge)
-                        Text("Vibrate on interactions", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(strings.settingsHaptic, style = MaterialTheme.typography.bodyLarge)
+                        Text(strings.settingsHapticDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = state.settings.enableHaptics,
@@ -479,8 +483,8 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Warn on disconnected rename", style = MaterialTheme.typography.bodyLarge)
-                        Text("Warn when changing folder names while disconnected", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(strings.settingsWarnDisconnected, style = MaterialTheme.typography.bodyLarge)
+                        Text(strings.settingsWarnDisconnectedDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = state.settings.warnOnDisconnectedRename,
@@ -491,12 +495,110 @@ fun SettingsScreen(
                     )
                 }
 
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
+                // Language Option
+                var showLanguageDialog by remember { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            showLanguageDialog = true
+                        }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(strings.settingsLanguageOption, style = MaterialTheme.typography.bodyLarge)
+                        val currentLangName = if (state.settings.languageCode == "system") {
+                            "${strings.settingsLanguageSystem} (${strings.languageName})"
+                        } else {
+                            strings.languageName
+                        }
+                        Text(currentLangName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                if (showLanguageDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showLanguageDialog = false },
+                        title = { Text(strings.settingsLanguageDialogTitle) },
+                        text = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // "System language" row
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                            onLanguageChanged("system")
+                                            showLanguageDialog = false
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    androidx.compose.material3.RadioButton(
+                                        selected = state.settings.languageCode == "system",
+                                        onClick = {
+                                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                            onLanguageChanged("system")
+                                            showLanguageDialog = false
+                                        }
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(strings.settingsLanguageSystem)
+                                }
+
+                                // Available locales list
+                                state.availableLocales.forEach { locale ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                                onLanguageChanged(locale.code)
+                                                showLanguageDialog = false
+                                            }
+                                            .padding(vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        androidx.compose.material3.RadioButton(
+                                            selected = state.settings.languageCode == locale.code,
+                                            onClick = {
+                                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                                onLanguageChanged(locale.code)
+                                                showLanguageDialog = false
+                                            }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(locale.name)
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { showLanguageDialog = false }) {
+                                Text(strings.settingsDialogCancel)
+                            }
+                        }
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("App theme", style = MaterialTheme.typography.bodyLarge)
+                    Text(strings.settingsTheme, style = MaterialTheme.typography.bodyLarge)
                     val options = listOf(
-                        AppTheme.Light to "Light",
-                        AppTheme.Dark to "Dark",
-                        AppTheme.System to "System"
+                        AppTheme.Light to strings.settingsThemeLight,
+                        AppTheme.Dark to strings.settingsThemeDark,
+                        AppTheme.System to strings.settingsThemeSystem
                     )
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         options.forEachIndexed { index, (option, label) ->
@@ -513,7 +615,7 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsSection(title = "MAINTENANCE") {
+            SettingsSection(title = strings.settingsMaintenanceSection) {
                 Column(
                     modifier = Modifier.animateContentSize(
                         animationSpec = spring(
@@ -532,7 +634,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Outlined.Delete, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Clear download cache")
+                        Text(strings.settingsClearCache)
                     }
 
                     val statusMessage = state.settingsStatusMessage
@@ -564,8 +666,31 @@ fun SettingsScreen(
                                 delay(3000)
                                 onClearStatusMessage()
                             }
+                            
+                            val displayMessage = when {
+                                message.startsWith("Cleared ") -> {
+                                    val size = message.substringAfter("Cleared ").substringBefore(" MB").toDoubleOrNull() ?: 0.0
+                                    strings.get("settings_cleared_cache", size)
+                                }
+                                message == "Nothing to clear" -> strings.settingsNothingToClear
+                                message.startsWith("Renamed '") -> {
+                                    val old = message.substringAfter("Renamed '").substringBefore("' to '")
+                                    val new = message.substringAfter("' to '").substringBefore("' on device")
+                                    strings.get("settings_renamed_on_device", old, new)
+                                }
+                                message.startsWith("Could not rename: folder '") -> {
+                                    val folder = message.substringAfter("Could not rename: folder '").substringBefore("' already exists")
+                                    strings.get("settings_rename_failed_exists", folder)
+                                }
+                                message.startsWith("Could not rename folder on device: ") -> {
+                                    val err = message.substringAfter("Could not rename folder on device: ")
+                                    strings.get("settings_rename_failed_error", err)
+                                }
+                                else -> message
+                            }
+
                             Text(
-                                text = message,
+                                text = displayMessage,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Medium,

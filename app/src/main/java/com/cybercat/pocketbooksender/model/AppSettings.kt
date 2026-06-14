@@ -15,6 +15,7 @@ data class AppSettings(
     val enableHaptics: Boolean = true,
     val theme: AppTheme = AppTheme.System,
     val warnOnDisconnectedRename: Boolean = true,
+    val languageCode: String = "system",
 )
 
 enum class ConflictStrategy {

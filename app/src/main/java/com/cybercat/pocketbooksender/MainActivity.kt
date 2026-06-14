@@ -10,9 +10,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cybercat.pocketbooksender.localization.LocalStrings
+import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.data.opds.OpdsRepository
 import com.cybercat.pocketbooksender.ui.PocketBookSenderApp
 import dagger.hilt.android.AndroidEntryPoint
@@ -22,6 +26,9 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
     @Inject
     lateinit var opdsRepository: OpdsRepository
+
+    @Inject
+    lateinit var localizationManager: LocalizationManager
 
     private var sharedUris by mutableStateOf<List<Uri>>(emptyList())
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -36,10 +43,13 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            PocketBookSenderApp(
-                sharedUris = sharedUris,
-                onSharedUrisConsumed = { sharedUris = emptyList() },
-            )
+            val currentStrings by localizationManager.currentStrings.collectAsStateWithLifecycle()
+            CompositionLocalProvider(LocalStrings provides currentStrings) {
+                PocketBookSenderApp(
+                    sharedUris = sharedUris,
+                    onSharedUrisConsumed = { sharedUris = emptyList() },
+                )
+            }
         }
     }
 

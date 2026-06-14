@@ -87,6 +87,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 import com.cybercat.pocketbooksender.ui.BitmapCache
 import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
+import com.cybercat.pocketbooksender.localization.LocalStrings
 import androidx.compose.ui.platform.LocalView
 import android.view.HapticFeedbackConstants
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
@@ -126,6 +127,7 @@ fun MangaPane(
 ) {
     val view = LocalView.current
     val context = LocalContext.current
+    val strings = LocalStrings.current
     val selectedChapterIdsState = rememberUpdatedState(state.selectedChapterIds)
     val onToggleChapterState = rememberUpdatedState(onToggleChapter)
     val selectedSeriesId = state.selectedSeries?.seriesId
@@ -512,6 +514,7 @@ private fun MangaSearchField(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     val enabled = !state.isLoading && !state.isDownloading
     OutlinedTextField(
         value = state.searchInput,
@@ -519,7 +522,7 @@ private fun MangaSearchField(
         modifier = modifier,
         enabled = enabled,
         singleLine = true,
-        label = { Text("Search manga") },
+        label = { Text(strings.mangaSearchManga) },
         leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
         trailingIcon = {
             if (state.searchInput.isNotEmpty() && enabled) {
@@ -543,6 +546,7 @@ private fun MangaSearchButton(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     Button(
         onClick = {
             view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
@@ -553,7 +557,7 @@ private fun MangaSearchButton(
     ) {
         Icon(Icons.Outlined.Search, contentDescription = null)
         Spacer(Modifier.width(8.dp))
-        Text("Search")
+        Text(strings.mangaSearchMangaPlaceholder)
     }
 }
 
@@ -565,6 +569,7 @@ private fun MangaLoginButton(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     OutlinedButton(
         onClick = {
             view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
@@ -574,7 +579,7 @@ private fun MangaLoginButton(
     ) {
         Icon(Icons.Outlined.OpenInBrowser, contentDescription = null)
         Spacer(Modifier.width(8.dp))
-        Text("Login")
+        Text(strings.mangaBtnLogin)
     }
 }
 
@@ -876,6 +881,7 @@ private fun ComxNativeLoginDialog(
     var doNotRemember by remember { mutableStateOf(false) }
     val canSubmit = loginName.isNotBlank() && loginPassword.isNotBlank()
 
+    val strings = LocalStrings.current
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
@@ -898,14 +904,14 @@ private fun ComxNativeLoginDialog(
                     onValueChange = { loginName = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("Username") },
+                    label = { Text(strings.mangaUsername) },
                 )
                 OutlinedTextField(
                     value = loginPassword,
                     onValueChange = { loginPassword = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("Password") },
+                    label = { Text(strings.mangaPassword) },
                     visualTransformation = PasswordVisualTransformation(),
                 )
                 Row(
@@ -915,21 +921,21 @@ private fun ComxNativeLoginDialog(
                         checked = doNotRemember,
                         onCheckedChange = { doNotRemember = it },
                     )
-                    Text("Do not remember me")
+                    Text(strings.mangaDoNotRemember)
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("Cancel")
+                        Text(strings.opdsBtnCancel)
                     }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = { onSubmit(loginName.trim(), loginPassword, doNotRemember) },
                         enabled = canSubmit,
                     ) {
-                        Text("Login")
+                        Text(strings.mangaBtnLogin)
                     }
                 }
             }
@@ -1053,11 +1059,12 @@ private fun MangaSearchResultCard(
                     )
                 }
             }
+            val strings = LocalStrings.current
             TextButton(
                 onClick = { onOpenSeries(result.seriesId) },
                 enabled = enabled,
             ) {
-                Text("Open")
+                Text(strings.mangaBtnOpen)
             }
         }
     }
@@ -1226,7 +1233,7 @@ private fun MangaChapterRow(
             if (downloaded) {
                 AssistChip(
                     onClick = {},
-                    label = { Text("Done") },
+                    label = { Text(LocalStrings.current.mangaStatusDone) },
                     enabled = false,
                 )
             }

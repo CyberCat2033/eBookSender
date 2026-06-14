@@ -34,6 +34,7 @@ class SettingsRepository @Inject constructor(
             enableHaptics = preferences[ENABLE_HAPTICS] ?: true,
             theme = preferences[THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() } ?: AppTheme.System,
             warnOnDisconnectedRename = preferences[WARN_ON_DISCONNECTED_RENAME] ?: true,
+            languageCode = preferences[LANGUAGE_CODE] ?: "system",
         )
     }
 
@@ -85,6 +86,12 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    suspend fun setLanguageCode(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[LANGUAGE_CODE] = value
+        }
+    }
+
     suspend fun setDefaultDocumentsTag(value: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[DEFAULT_DOCUMENTS_TAG] = value.ifBlank { "Untagged" }
@@ -129,5 +136,6 @@ class SettingsRepository @Inject constructor(
         val ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")
         val THEME = stringPreferencesKey("theme")
         val WARN_ON_DISCONNECTED_RENAME = booleanPreferencesKey("warn_on_disconnected_rename")
+        val LANGUAGE_CODE = stringPreferencesKey("language_code")
     }
 }

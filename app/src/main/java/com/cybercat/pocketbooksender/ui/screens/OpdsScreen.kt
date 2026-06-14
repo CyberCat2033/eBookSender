@@ -78,6 +78,7 @@ import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.downloadFormatLabel
 import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
 import androidx.activity.compose.BackHandler
+import com.cybercat.pocketbooksender.localization.LocalStrings
 import androidx.compose.ui.platform.LocalContext
 import com.cybercat.pocketbooksender.ui.BitmapCache
 import com.cybercat.pocketbooksender.ui.MangaUiState
@@ -128,6 +129,7 @@ fun OpdsScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     var showAddSourceDialog by remember { mutableStateOf(false) }
     var newSourceUrl by remember { mutableStateOf("") }
     var newSourceTitle by remember { mutableStateOf("") }
@@ -251,7 +253,7 @@ fun OpdsScreen(
                         onDownloadSelectedMangaChapters()
                     },
                     icon = { Icon(Icons.Outlined.Download, contentDescription = null) },
-                    text = { Text("Download ($selectedMangaChapterCount)") },
+                    text = { Text(strings.get("opds_btn_download", selectedMangaChapterCount)) },
                 )
             }
         },
@@ -536,9 +538,10 @@ private fun AddSourceDialog(
     onDismiss: () -> Unit,
     onSaveSource: () -> Unit,
 ) {
+    val strings = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add OPDS source") },
+        title = { Text(strings.opdsAddTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -546,16 +549,16 @@ private fun AddSourceDialog(
                     onValueChange = onUrlChanged,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("OPDS URL") },
+                    label = { Text(strings.opdsUrlField) },
                     leadingIcon = { Icon(Icons.Outlined.Link, contentDescription = null) },
-                    placeholder = { Text("https://example.org/opds") },
+                    placeholder = { Text(strings.opdsUrlPlaceholder) },
                 )
                 OutlinedTextField(
                     value = title,
                     onValueChange = onTitleChanged,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("Source title") },
+                    label = { Text(strings.opdsTitleField) },
                 )
             }
         },
@@ -564,12 +567,12 @@ private fun AddSourceDialog(
                 onClick = onSaveSource,
                 enabled = url.isNotBlank(),
             ) {
-                Text("Save")
+                Text(strings.opdsBtnSave)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(strings.opdsBtnCancel)
             }
         },
     )
@@ -658,6 +661,7 @@ private fun SearchPanel(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -669,7 +673,7 @@ private fun SearchPanel(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 enabled = isSearchAvailable && enabled,
-                label = { Text("Search catalog") },
+                label = { Text(strings.opdsSearchCatalog) },
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty() && enabled) {
@@ -692,12 +696,12 @@ private fun SearchPanel(
             ) {
                 Icon(Icons.Outlined.Search, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Search")
+                Text(strings.opdsSearchPlaceholder)
             }
 
             if (!isSearchAvailable) {
                 Text(
-                    text = "This catalog page does not expose OPDS search.",
+                    text = strings.opdsNoSearchSupport,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -138,7 +138,15 @@ CBR handling:
   - default Manga series
   - Books/Documents/Manga filename templates
   - dynamic color toggle
-  - warn on disconnected folder rename toggle
+  - language code preference
+- App language localization & support for external translations:
+  - Choose language from Settings, including a "System language" option.
+  - Automatically queries system locale settings to determine the interface language on first run.
+  - Basic locales (`en.json`, `ru.json`) are packaged in `assets/locales/`.
+  - Community members can drop `.json` translation files into `<rootPath>/PocketBookSender/locales/` on the device.
+  - Scans files at runtime, reads metadata (`meta_language_code` and `meta_language_name`) from inside the JSON files.
+  - Prevents language collisions (groups by language code, overriding internal with external, and choosing the newest translation file).
+  - Integrates with CompositionLocal `LocalStrings` for reactive runtime language switching without app restarts.
 - Disconnected folder rename warnings:
   - Changing folder settings while disconnected displays a warning dialog prompting the user to either force save locally or cancel.
   - This warning can be disabled globally from the interface settings menu.

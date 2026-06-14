@@ -28,6 +28,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val connectionManager: ConnectionManager,
     private val ftpGateway: FtpGateway,
+    private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
 ) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
     private val _pendingRename = MutableStateFlow<PendingRename?>(null)
@@ -35,12 +36,14 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<SettingsUiState> = combine(
         settingsRepository.settings,
         _statusMessage,
-        _pendingRename
-    ) { settings, status, pending ->
+        _pendingRename,
+        localizationManager.availableLocales
+    ) { settings, status, pending, locales ->
         SettingsUiState(
             settings = settings,
             settingsStatusMessage = status,
-            pendingRename = pending
+            pendingRename = pending,
+            availableLocales = locales
         )
     }.stateIn(
         scope = viewModelScope,
@@ -186,6 +189,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setTheme(value: AppTheme) {
         viewModelScope.launch { settingsRepository.setTheme(value) }
+    }
+
+    fun setLanguageCode(value: String) {
+        viewModelScope.launch { settingsRepository.setLanguageCode(value) }
+    }
+
+    fun scanLocales() {
+        viewModelScope.launch { localizationManager.scanLocales() }
     }
 
     fun clearStatusMessage() {
