@@ -20,6 +20,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +47,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -53,6 +55,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -627,6 +630,43 @@ private fun SectionTitle(title: String, count: Int) {
 }
 
 @Composable
+private fun SelectionSlot(
+    visible: Boolean,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Box(
+        modifier = Modifier.width(SelectionSlotWidth),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            CompactCheckbox(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactCheckbox(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+@Composable
 private fun CatalogGroupCard(
     group: CatalogGroup,
     expanded: Boolean,
@@ -647,6 +687,11 @@ private fun CatalogGroupCard(
     val context = LocalContext.current
     val view = LocalView.current
 
+    fun toggleGroup(checked: Boolean = !isGroupFullySelected) {
+        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+        onToggleGroupSelection(filePaths, checked)
+    }
+
     ElevatedCard(modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             Row(
@@ -655,26 +700,19 @@ private fun CatalogGroupCard(
                     .animateContentSize(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AnimatedVisibility(
+                SelectionSlot(
                     visible = isEditMode,
-                    enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-                    exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
-                ) {
-                    Checkbox(
-                        checked = isGroupFullySelected,
-                        onCheckedChange = { checked ->
-                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                            onToggleGroupSelection(filePaths, checked)
-                        },
-                        modifier = Modifier.padding(end = 4.dp)
-                    )
-                }
+                    checked = isGroupFullySelected,
+                    onCheckedChange = ::toggleGroup,
+                )
                 ExpandableHeader(
                     title = group.name,
                     subtitle = group.files.summary(),
                     expanded = expanded,
                     enableHaptics = enableHaptics,
                     onToggle = { onExpandedChange(!expanded) },
+                    titleClickEnabled = isEditMode,
+                    onTitleClick = { toggleGroup() },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -717,6 +755,11 @@ private fun MangaSeriesCard(
     val context = LocalContext.current
     val view = LocalView.current
 
+    fun toggleGroup(checked: Boolean = !isGroupFullySelected) {
+        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+        onToggleGroupSelection(filePaths, checked)
+    }
+
     ElevatedCard(modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             Row(
@@ -725,20 +768,11 @@ private fun MangaSeriesCard(
                     .animateContentSize(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AnimatedVisibility(
+                SelectionSlot(
                     visible = isEditMode,
-                    enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-                    exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
-                ) {
-                    Checkbox(
-                        checked = isGroupFullySelected,
-                        onCheckedChange = { checked ->
-                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                            onToggleGroupSelection(filePaths, checked)
-                        },
-                        modifier = Modifier.padding(end = 4.dp)
-                    )
-                }
+                    checked = isGroupFullySelected,
+                    onCheckedChange = ::toggleGroup,
+                )
                 ExpandableHeader(
                     title = group.name,
                     subtitle = group.latestFile?.let { file ->
@@ -748,6 +782,8 @@ private fun MangaSeriesCard(
                     expanded = expanded,
                     enableHaptics = enableHaptics,
                     onToggle = { onExpandedChange(!expanded) },
+                    titleClickEnabled = isEditMode,
+                    onTitleClick = { toggleGroup() },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -778,6 +814,8 @@ private fun ExpandableHeader(
     expanded: Boolean,
     enableHaptics: Boolean,
     onToggle: () -> Unit,
+    titleClickEnabled: Boolean = false,
+    onTitleClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -786,7 +824,13 @@ private fun ExpandableHeader(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
+        Column(
+            Modifier
+                .weight(1f)
+                .clickable(enabled = titleClickEnabled) {
+                    onTitleClick()
+                }
+        ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
@@ -895,24 +939,18 @@ private fun FileList(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    AnimatedVisibility(
+                    SelectionSlot(
                         visible = isEditMode,
-                        enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-                        exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
-                    ) {
-                        Checkbox(
-                            checked = isSelected,
-                            onCheckedChange = {
-                                view.performHapticIfAllowed(
-                                    context,
-                                    enableHaptics,
-                                    HapticFeedbackConstants.VIRTUAL_KEY,
-                                )
-                                onToggleFileSelection(file.path)
-                            },
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                    }
+                        checked = isSelected,
+                        onCheckedChange = {
+                            view.performHapticIfAllowed(
+                                context,
+                                enableHaptics,
+                                HapticFeedbackConstants.VIRTUAL_KEY,
+                            )
+                            onToggleFileSelection(file.path)
+                        },
+                    )
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -1119,3 +1157,4 @@ private fun CatalogFile.progressText(): String? =
     }
 
 private const val CatalogLongPressMillis = 300L
+private val SelectionSlotWidth = 36.dp

@@ -34,6 +34,11 @@ interface FtpGateway {
         device: PocketBookDevice,
         remoteRelativePath: String,
     ): Result<Unit>
+
+    suspend fun deleteDirectory(
+        device: PocketBookDevice,
+        remoteRelativePath: String,
+    ): Result<Unit>
 }
 
 data class FtpSessionInfo(

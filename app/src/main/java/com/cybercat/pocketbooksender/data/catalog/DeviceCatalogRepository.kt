@@ -86,9 +86,11 @@ class DeviceCatalogRepository @Inject constructor(
     }
 
     suspend fun deleteFiles(device: PocketBookDevice, paths: List<String>) = withContext(Dispatchers.IO) {
-        val safePaths = paths.distinct().map(::validateCatalogDeletePath)
+        val safePaths = paths.map(::validateCatalogDeletePath).distinct()
         if (safePaths.isEmpty()) return@withContext
 
+        val selectedPathSet = safePaths.toSet()
+        val folderCandidates = _catalog.value.deleteFolderCandidates(selectedPathSet)
         var firstError: Throwable? = null
         val successfulPaths = mutableListOf<String>()
         safePaths.forEach { path ->
@@ -100,6 +102,21 @@ class DeviceCatalogRepository @Inject constructor(
                     if (firstError == null) firstError = error
                 }
         }
+
+        val successfulPathSet = successfulPaths.toSet()
+        val folderPaths = folderCandidates
+            .filter { candidate -> candidate.filePaths.all { it in successfulPathSet } }
+            .map { candidate -> validateCatalogDeleteFolderPath(candidate.path) }
+            .distinct()
+            .sortedByDescending { path -> path.count { it == '/' } }
+
+        folderPaths.forEach { folderPath ->
+            ftpGateway.deleteDirectory(device, folderPath)
+                .onFailure { error ->
+                    if (firstError == null) firstError = error
+                }
+        }
+
         deletedPaths.addAll(successfulPaths)
         refresh(device)
         firstError?.let { throw it }
@@ -127,6 +144,50 @@ class DeviceCatalogRepository @Inject constructor(
             "Unsupported catalog file type"
         }
         return normalized
+    }
+
+    private fun validateCatalogDeleteFolderPath(path: String): String {
+        val trimmed = path.replace('\\', '/').trim()
+        require(trimmed.isNotBlank()) { "Cannot delete an empty catalog folder path" }
+        require(!trimmed.startsWith("/")) { "Unsafe catalog folder path" }
+
+        val segments = trimmed
+            .split('/')
+            .filter { it.isNotBlank() }
+        require(segments.none { it == "." || it == ".." }) { "Unsafe catalog folder path" }
+        require(segments.size >= 2) { "Refusing to delete catalog root folder" }
+
+        val normalized = segments.joinToString("/")
+        require(
+            normalized.isUnder(BooksRoot) ||
+                normalized.isUnder(ProgrammingRoot) ||
+                normalized.isUnder(MangaRoot)
+        ) {
+            "Catalog folder deletion is limited to Books, Programming, and Manga"
+        }
+        return normalized
+    }
+
+    private fun DeviceCatalog.deleteFolderCandidates(
+        selectedPaths: Set<String>,
+    ): List<CatalogDeleteFolderCandidate> = buildList {
+        fun addCandidate(groupPath: String, files: List<CatalogFile>) {
+            if ('/' !in groupPath.trim('/')) return
+            val filePaths = files.mapTo(mutableSetOf()) { it.path }
+            if (filePaths.isEmpty() || !selectedPaths.containsAll(filePaths)) return
+            if (files.any { file -> !file.path.isUnderFolder(groupPath) }) return
+
+            add(
+                CatalogDeleteFolderCandidate(
+                    path = groupPath,
+                    filePaths = filePaths,
+                )
+            )
+        }
+
+        books.forEach { group -> addCandidate(group.path, group.files) }
+        programming.forEach { group -> addCandidate(group.path, group.files) }
+        manga.forEach { group -> addCandidate(group.path, group.files) }
     }
 
     suspend fun load(device: PocketBookDevice): DeviceCatalog = withContext(Dispatchers.IO) {
@@ -444,6 +505,11 @@ class DeviceCatalogRepository @Inject constructor(
         val series: String?,
     )
 
+    private data class CatalogDeleteFolderCandidate(
+        val path: String,
+        val filePaths: Set<String>,
+    )
+
     private companion object {
         const val CacheDirectory = "pocketbook-catalog"
         const val RemoteDatabaseDirectory = "system/explorer-3"
@@ -495,6 +561,11 @@ private fun normalizePath(absolutePath: String): String? =
 
 private fun String.isUnder(root: String): Boolean =
     this == root || startsWith("$root/")
+
+private fun String.isUnderFolder(folder: String): Boolean {
+    val normalizedFolder = folder.trim('/')
+    return this != normalizedFolder && startsWith("$normalizedFolder/")
+}
 
 private fun String.directoryAfter(root: String): String? {
     if (!startsWith("$root/")) return null

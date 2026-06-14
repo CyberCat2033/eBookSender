@@ -131,6 +131,18 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
         }
     }
 
+    override suspend fun deleteDirectory(
+        device: PocketBookDevice,
+        remoteRelativePath: String,
+    ): Result<Unit> = withFtpClient(device) { client ->
+        runCatching {
+            val normalized = remoteRelativePath.toSafeRelativeFtpPath()
+            check(client.removeDirectory(normalized)) {
+                "FTP delete directory failed for $normalized: ${client.replyString}"
+            }
+        }
+    }
+
     private suspend fun <T> withFtpClient(
         device: PocketBookDevice,
         block: (FTPClient) -> Result<T>,

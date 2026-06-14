@@ -80,6 +80,7 @@ Important packages:
   - expanded file rows support long-press drag selection with edge autoscroll, matching manga chapter selection;
   - dragging back shrinks the live selection range and restores files outside the range to their pre-gesture state;
   - deletion requires confirmation and is limited to supported files under `Books`, `Programming`, and `Manga`.
+  - deleting every file in a real author/tag/series folder also attempts to remove that now-empty folder.
 - Use the separate `Web` tab to:
   - show saved OPDS sources as the primary list;
   - add a source from the `+` action;
