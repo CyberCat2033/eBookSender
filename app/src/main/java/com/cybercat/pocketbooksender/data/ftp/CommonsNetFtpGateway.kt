@@ -176,8 +176,9 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
         val client = FTPClient()
         client.controlEncoding = Charsets.UTF_8.name()
         client.connectTimeout = CONNECT_TIMEOUT_MS
-        client.setDataTimeout(DATA_TIMEOUT_MS)
         client.defaultTimeout = CONNECT_TIMEOUT_MS
+        client.soTimeout = DATA_TIMEOUT_MS
+        client.setDataTimeout(java.time.Duration.ofMillis(DATA_TIMEOUT_MS.toLong()))
 
         try {
             client.connect(device.host, device.port)

@@ -31,6 +31,10 @@ class OpdsRepository @Inject constructor(
 ) {
     private val catalogCache = ConcurrentHashMap<String, TimedCacheEntry<OpdsCatalog>>()
 
+    fun clearCache() {
+        catalogCache.clear()
+    }
+
     val sources: Flow<List<OpdsSource>> =
         sourceDao.observeSources().map { entities ->
             entities

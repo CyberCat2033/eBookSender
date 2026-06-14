@@ -13,11 +13,16 @@ import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.cybercat.pocketbooksender.data.opds.OpdsRepository
 import com.cybercat.pocketbooksender.ui.PocketBookSenderApp
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var opdsRepository: OpdsRepository
+
     private var sharedUris by mutableStateOf<List<Uri>>(emptyList())
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -42,7 +47,13 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         if (isFinishing) {
             com.cybercat.pocketbooksender.ui.BitmapCache.clear(this)
+            opdsRepository.clearCache()
         }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        opdsRepository.clearCache()
     }
 
     private fun requestNotificationsIfNeeded() {
