@@ -202,7 +202,7 @@ private fun NamingPreview(
             .padding(vertical = 4.dp)
     ) {
         Text(
-            text = "$label preview",
+            text = label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
