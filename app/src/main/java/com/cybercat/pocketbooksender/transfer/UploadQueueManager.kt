@@ -64,6 +64,8 @@ class UploadQueueManager @Inject constructor(
 
         val settings = activeSettings
         val existing = _queue.value.queueIdentityKeys()
+        val skippedFiles = mutableListOf<String>()
+
         val newItems = uris
             .distinctBy { it.toString() }
             .mapNotNull { uri ->
@@ -71,13 +73,40 @@ class UploadQueueManager @Inject constructor(
                 if (uriString in existing) {
                     null
                 } else {
-                    persistReadPermission(uri)
                     val displayName = resolveDisplayName(uri)
                         ?: uri.lastPathSegment
                         ?: "Book-${UUID.randomUUID()}"
-                    createUploadItem(uri, displayName, settings)
+                    val extension = displayName.bookExtension().lowercase().trim()
+
+                    val isSupported = extension in com.cybercat.pocketbooksender.domain.AllSupportedExtensions ||
+                            (extension.endsWith(".zip") && extension.removeSuffix(".zip") in com.cybercat.pocketbooksender.domain.AllSupportedExtensions)
+                    val fileSize = resolveFileSize(uri)
+                    val isTooBig = fileSize > 500L * 1024L * 1024L // 500 MB limit
+
+                    if (!isSupported || isTooBig) {
+                        val reason = when {
+                            !isSupported -> "unsupported format"
+                            else -> "too large (>500MB)"
+                        }
+                        skippedFiles.add("$displayName ($reason)")
+                        null
+                    } else {
+                        persistReadPermission(uri)
+                        createUploadItem(uri, displayName, settings)
+                    }
                 }
             }
+
+        if (skippedFiles.isNotEmpty()) {
+            val message = if (skippedFiles.size == 1) {
+                "Skipped: ${skippedFiles.first()}"
+            } else {
+                "Skipped ${skippedFiles.size} files (unsupported format or >500MB)"
+            }
+            scope.launch(Dispatchers.Main) {
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
 
         if (newItems.isEmpty()) return
 
@@ -261,6 +290,17 @@ class UploadQueueManager @Inject constructor(
         return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+        }
+    }
+
+    private fun resolveFileSize(uri: Uri): Long {
+        return try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getLong(index) else 0L
+            } ?: 0L
+        } catch (_: Exception) {
+            0L
         }
     }
 
