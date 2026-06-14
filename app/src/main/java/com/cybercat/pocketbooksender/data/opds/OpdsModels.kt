@@ -51,3 +51,8 @@ data class OpdsSearchTemplate(
     val template: String,
     val type: String?,
 )
+
+class OpdsAuthenticationRequiredException(
+    val url: String,
+    message: String = "Authentication required for $url",
+) : Exception(message)

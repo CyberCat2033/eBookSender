@@ -249,5 +249,11 @@
   "manga_progress_detail_generic": "%1$s - %2$s",
   "manga_error_failures_summary": "%1$s\n...and %2$d more failed",
   "manga_download_progress_title": "%1$d%% downloaded",
+  "opds_status_credentials_updated": "Credentials updated",
+  "opds_error_cannot_save_credentials": "Cannot save credentials",
+  "opds_auth_required_title": "Authentication Required",
+  "opds_auth_btn_login": "Login",
+  "opds_username_label": "Username",
+  "opds_password_label": "Password",
   "catalog_error_failed_to_delete": "Failed to delete files"
 }

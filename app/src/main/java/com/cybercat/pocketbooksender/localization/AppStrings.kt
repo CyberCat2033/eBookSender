@@ -285,6 +285,13 @@ class AppStrings(
     val mangaErrorFailuresSummary: String get() = get("manga_error_failures_summary")
     val mangaDownloadProgressTitle: String get() = get("manga_download_progress_title")
 
+    val opdsStatusCredentialsUpdated: String get() = get("opds_status_credentials_updated")
+    val opdsErrorCannotSaveCredentials: String get() = get("opds_error_cannot_save_credentials")
+    val opdsAuthRequiredTitle: String get() = get("opds_auth_required_title")
+    val opdsAuthBtnLogin: String get() = get("opds_auth_btn_login")
+    val opdsUsernameLabel: String get() = get("opds_username_label")
+    val opdsPasswordLabel: String get() = get("opds_password_label")
+
     // Catalog Errors
     val catalogErrorFailedToDelete: String get() = get("catalog_error_failed_to_delete")
 }

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
@@ -72,6 +73,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
+import com.cybercat.pocketbooksender.data.opds.OpdsSource
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
@@ -126,6 +128,11 @@ fun OpdsScreen(
     onSelectAllMangaChapters: () -> Unit,
     onClearMangaChapterSelection: () -> Unit,
     onDownloadSelectedMangaChapters: () -> Unit,
+    onAuthUsernameChanged: (String) -> Unit,
+    onAuthPasswordChanged: (String) -> Unit,
+    onDismissAuthDialog: () -> Unit,
+    onSaveCredentials: () -> Unit,
+    onOpenCredentialsEdit: (OpdsSource) -> Unit,
     enableHaptics: Boolean,
 ) {
     val context = LocalContext.current
@@ -176,6 +183,18 @@ fun OpdsScreen(
                 onSaveSource(newSourceTitle, newSourceUrl, newSourceUsername.ifBlank { null }, newSourcePassword.ifBlank { null })
                 showAddSourceDialog = false
             },
+        )
+    }
+
+    if (state.showAuthDialog) {
+        OpdsCredentialsDialog(
+            sourceTitle = state.authDialogSourceTitle,
+            username = state.authDialogUsername,
+            password = state.authDialogPassword,
+            onUsernameChanged = onAuthUsernameChanged,
+            onPasswordChanged = onAuthPasswordChanged,
+            onDismiss = onDismissAuthDialog,
+            onSave = onSaveCredentials,
         )
     }
 
@@ -321,6 +340,7 @@ fun OpdsScreen(
                                 enableHaptics = enableHaptics,
                                 onOpenSource = onOpenSource,
                                 onRemoveSource = onRemoveSource,
+                                onEditCredentials = onOpenCredentialsEdit,
                             )
                         }
 
@@ -612,6 +632,7 @@ private fun SourcePicker(
     enableHaptics: Boolean,
     onOpenSource: (String) -> Unit,
     onRemoveSource: (String) -> Unit,
+    onEditCredentials: (OpdsSource) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val currentUrl = state.currentUrl.orEmpty().trimEnd('/')
@@ -657,14 +678,25 @@ private fun SourcePicker(
                         )
                     },
                     trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.REJECT)
-                                expanded = false
-                                onRemoveSource(source.id)
-                            },
-                        ) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Delete OPDS source")
+                        Row {
+                            IconButton(
+                                onClick = {
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    expanded = false
+                                    onEditCredentials(source)
+                                },
+                            ) {
+                                Icon(Icons.Outlined.VpnKey, contentDescription = "Edit credentials")
+                            }
+                            IconButton(
+                                onClick = {
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.REJECT)
+                                    expanded = false
+                                    onRemoveSource(source.id)
+                                },
+                            ) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "Delete OPDS source")
+                            }
                         }
                     },
                     onClick = {
@@ -676,6 +708,58 @@ private fun SourcePicker(
             }
         }
     }
+}
+
+@Composable
+private fun OpdsCredentialsDialog(
+    sourceTitle: String,
+    username: String,
+    password: String,
+    onUsernameChanged: (String) -> Unit,
+    onPasswordChanged: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+) {
+    val strings = LocalStrings.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.opdsAuthRequiredTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = sourceTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = onUsernameChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsUsernameLabel) },
+                    leadingIcon = { Icon(Icons.Outlined.VpnKey, contentDescription = null) },
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = onPasswordChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsPasswordLabel) },
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onSave) {
+                Text(strings.opdsAuthBtnLogin)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(strings.opdsBtnCancel)
+            }
+        },
+    )
 }
 
 @Composable

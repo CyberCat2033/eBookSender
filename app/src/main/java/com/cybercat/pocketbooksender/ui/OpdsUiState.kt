@@ -16,6 +16,12 @@ data class OpdsUiState(
     val isDownloading: Boolean = false,
     val errorMessage: String? = null,
     val statusMessage: String? = null,
+    val showAuthDialog: Boolean = false,
+    val authDialogSourceId: String? = null,
+    val authDialogSourceTitle: String = "",
+    val authDialogUsername: String = "",
+    val authDialogPassword: String = "",
+    val authDialogUrlToRetry: String? = null,
 ) {
     val canGoBack: Boolean = history.isNotEmpty()
 }

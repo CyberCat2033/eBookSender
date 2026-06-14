@@ -249,5 +249,11 @@
   "manga_progress_detail_generic": "%1$s - %2$s",
   "manga_error_failures_summary": "%1$s\n...и ещё %2$d глав не загружено",
   "manga_download_progress_title": "%1$d%% загружено",
+  "opds_status_credentials_updated": "Данные для входа обновлены",
+  "opds_error_cannot_save_credentials": "Не удалось сохранить данные для входа",
+  "opds_auth_required_title": "Требуется авторизация",
+  "opds_auth_btn_login": "Войти",
+  "opds_username_label": "Имя пользователя",
+  "opds_password_label": "Пароль",
   "catalog_error_failed_to_delete": "Не удалось удалить файлы"
 }

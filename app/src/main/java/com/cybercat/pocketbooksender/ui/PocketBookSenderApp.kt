@@ -304,6 +304,11 @@ private fun AppNavHost(
                 onSelectAllMangaChapters = mangaViewModel::selectAllMangaChapters,
                 onClearMangaChapterSelection = mangaViewModel::clearMangaChapterSelection,
                 onDownloadSelectedMangaChapters = mangaViewModel::downloadSelectedMangaChapters,
+                onAuthUsernameChanged = opdsViewModel::onAuthUsernameChanged,
+                onAuthPasswordChanged = opdsViewModel::onAuthPasswordChanged,
+                onDismissAuthDialog = opdsViewModel::dismissCredentialsDialog,
+                onSaveCredentials = opdsViewModel::saveCredentials,
+                onOpenCredentialsEdit = opdsViewModel::openCredentialsDialog,
                 enableHaptics = settingsState.settings.enableHaptics,
             )
         }

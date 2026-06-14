@@ -9,6 +9,8 @@ import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsRepository
 import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
+import com.cybercat.pocketbooksender.data.opds.OpdsAuthenticationRequiredException
+import java.net.URL
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.transfer.UploadQueueManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -117,6 +120,72 @@ class OpdsViewModel @Inject constructor(
                     state.copy(
                         errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotSaveSource,
                         statusMessage = null,
+                    )
+                }
+            }
+        }
+    }
+
+    fun openCredentialsDialog(source: com.cybercat.pocketbooksender.data.opds.OpdsSource, urlToRetry: String? = null) {
+        _opdsState.update { state ->
+            state.copy(
+                showAuthDialog = true,
+                authDialogSourceId = source.id,
+                authDialogSourceTitle = source.title,
+                authDialogUsername = source.username.orEmpty(),
+                authDialogPassword = source.password.orEmpty(),
+                authDialogUrlToRetry = urlToRetry,
+            )
+        }
+    }
+
+    fun onAuthUsernameChanged(value: String) {
+        _opdsState.update { it.copy(authDialogUsername = value) }
+    }
+
+    fun onAuthPasswordChanged(value: String) {
+        _opdsState.update { it.copy(authDialogPassword = value) }
+    }
+
+    fun dismissCredentialsDialog() {
+        _opdsState.update { state ->
+            state.copy(
+                showAuthDialog = false,
+                authDialogSourceId = null,
+                authDialogUrlToRetry = null,
+            )
+        }
+    }
+
+    fun saveCredentials() {
+        val snapshot = _opdsState.value
+        val sourceId = snapshot.authDialogSourceId ?: return
+        val username = snapshot.authDialogUsername
+        val password = snapshot.authDialogPassword
+        val urlToRetry = snapshot.authDialogUrlToRetry
+
+        viewModelScope.launch {
+            val source = opdsRepository.sources.first().firstOrNull { it.id == sourceId } ?: return@launch
+            runCatching {
+                opdsRepository.addSource(
+                    title = source.title,
+                    url = source.url,
+                    username = username.trim().ifBlank { null },
+                    password = password.trim().ifBlank { null },
+                )
+            }.onSuccess {
+                _opdsState.update { it.copy(showAuthDialog = false, authDialogSourceId = null, authDialogUrlToRetry = null) }
+                showOpdsStatus(localizationManager.currentStrings.value.opdsStatusCredentialsUpdated)
+                if (urlToRetry != null) {
+                    loadOpdsCatalog(urlToRetry, snapshot.history)
+                }
+            }.onFailure { error ->
+                _opdsState.update { state ->
+                    state.copy(
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotSaveCredentials,
+                        showAuthDialog = false,
+                        authDialogSourceId = null,
+                        authDialogUrlToRetry = null,
                     )
                 }
             }
@@ -246,6 +315,17 @@ class OpdsViewModel @Inject constructor(
                 }
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
+                if (error is OpdsAuthenticationRequiredException) {
+                    val currentSources = opdsRepository.sources.first()
+                    val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
+                    val matchingSource = currentSources.firstOrNull { source ->
+                        runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
+                    }
+                    if (matchingSource != null) {
+                        openCredentialsDialog(matchingSource, urlToRetry = error.url)
+                        return@launch
+                    }
+                }
                 _opdsState.update { state ->
                     state.copy(
                         isLoading = false,
@@ -291,6 +371,17 @@ class OpdsViewModel @Inject constructor(
                 showOpdsStatus(localizationManager.currentStrings.value.get("opds_status_added_to_queue", file.name))
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
+                if (error is OpdsAuthenticationRequiredException) {
+                    val currentSources = opdsRepository.sources.first()
+                    val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
+                    val matchingSource = currentSources.firstOrNull { source ->
+                        runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
+                    }
+                    if (matchingSource != null) {
+                        openCredentialsDialog(matchingSource)
+                        return@launch
+                    }
+                }
                 _opdsState.update { state ->
                     state.copy(
                         isDownloading = false,
@@ -401,6 +492,17 @@ class OpdsViewModel @Inject constructor(
                 }
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
+                if (error is OpdsAuthenticationRequiredException) {
+                    val currentSources = opdsRepository.sources.first()
+                    val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
+                    val matchingSource = currentSources.firstOrNull { source ->
+                        runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
+                    }
+                    if (matchingSource != null) {
+                        openCredentialsDialog(matchingSource, urlToRetry = url)
+                        return@launch
+                    }
+                }
                 _opdsState.update { state ->
                     state.copy(
                         isLoading = false,
