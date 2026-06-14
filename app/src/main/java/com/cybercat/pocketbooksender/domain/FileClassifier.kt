@@ -9,7 +9,7 @@ class FileClassifier @Inject constructor() {
     fun classify(fileName: String): BookCategory {
         return when (fileName.bookExtension()) {
             "cbr", "cbz" -> BookCategory.Manga
-            "pdf", "pdf.zip" -> BookCategory.Programming
+            "pdf", "pdf.zip" -> BookCategory.Documents
             else -> BookCategory.Books
         }
     }

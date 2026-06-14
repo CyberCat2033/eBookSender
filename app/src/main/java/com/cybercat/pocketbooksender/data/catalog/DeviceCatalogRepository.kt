@@ -32,6 +32,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
+import com.cybercat.pocketbooksender.data.settings.SettingsRepository
+import kotlinx.coroutines.flow.first
 
 private const val PocketBookStoragePrefix = "/mnt/ext1/"
 
@@ -40,6 +42,7 @@ class DeviceCatalogRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val ftpGateway: FtpGateway,
     private val connectionManager: ConnectionManager,
+    private val settingsRepository: SettingsRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -63,8 +66,9 @@ class DeviceCatalogRepository @Inject constructor(
 
     suspend fun refresh(device: PocketBookDevice) {
         _catalog.update { it.copy(isLoading = true) }
+        val settings = settingsRepository.settings.first()
         val result = loadMutex.withLock {
-            runCatching { load(device) }
+            runCatching { load(device, settings) }
         }
         val loaded = result.getOrDefault(DeviceCatalog(errorMessage = "Load failed"))
         _catalog.value = loaded.filterDeleted()
@@ -80,13 +84,14 @@ class DeviceCatalogRepository @Inject constructor(
         if (deleted.isEmpty()) return this
         return copy(
             books = books.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
-            programming = programming.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
+            documents = documents.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
             manga = manga.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
         )
     }
 
     suspend fun deleteFiles(device: PocketBookDevice, paths: List<String>) = withContext(Dispatchers.IO) {
-        val safePaths = paths.map(::validateCatalogDeletePath).distinct()
+        val settings = settingsRepository.settings.first()
+        val safePaths = paths.map { validateCatalogDeletePath(it, settings) }.distinct()
         if (safePaths.isEmpty()) return@withContext
 
         val selectedPathSet = safePaths.toSet()
@@ -106,7 +111,7 @@ class DeviceCatalogRepository @Inject constructor(
         val successfulPathSet = successfulPaths.toSet()
         val folderPaths = folderCandidates
             .filter { candidate -> candidate.filePaths.all { it in successfulPathSet } }
-            .map { candidate -> validateCatalogDeleteFolderPath(candidate.path) }
+            .map { candidate -> validateCatalogDeleteFolderPath(candidate.path, settings) }
             .distinct()
             .sortedByDescending { path -> path.count { it == '/' } }
 
@@ -122,7 +127,7 @@ class DeviceCatalogRepository @Inject constructor(
         firstError?.let { throw it }
     }
 
-    private fun validateCatalogDeletePath(path: String): String {
+    private fun validateCatalogDeletePath(path: String, settings: com.cybercat.pocketbooksender.model.AppSettings): String {
         val trimmed = path.replace('\\', '/').trim()
         require(trimmed.isNotBlank()) { "Cannot delete an empty catalog path" }
         require(!trimmed.startsWith("/")) { "Unsafe catalog file path" }
@@ -134,11 +139,11 @@ class DeviceCatalogRepository @Inject constructor(
 
         val normalized = segments.joinToString("/")
         require(
-            normalized.isUnder(BooksRoot) ||
-                normalized.isUnder(ProgrammingRoot) ||
-                normalized.isUnder(MangaRoot)
+            normalized.isUnder(settings.booksFolderName) ||
+                normalized.isUnder(settings.documentsFolderName) ||
+                normalized.isUnder(settings.mangaFolderName)
         ) {
-            "Catalog deletion is limited to Books, Programming, and Manga"
+            "Catalog deletion is limited to ${settings.booksFolderName}, ${settings.documentsFolderName}, and ${settings.mangaFolderName}"
         }
         require(normalized.contentExtension() in AllSupportedExtensions) {
             "Unsupported catalog file type"
@@ -146,7 +151,7 @@ class DeviceCatalogRepository @Inject constructor(
         return normalized
     }
 
-    private fun validateCatalogDeleteFolderPath(path: String): String {
+    private fun validateCatalogDeleteFolderPath(path: String, settings: com.cybercat.pocketbooksender.model.AppSettings): String {
         val trimmed = path.replace('\\', '/').trim()
         require(trimmed.isNotBlank()) { "Cannot delete an empty catalog folder path" }
         require(!trimmed.startsWith("/")) { "Unsafe catalog folder path" }
@@ -159,11 +164,11 @@ class DeviceCatalogRepository @Inject constructor(
 
         val normalized = segments.joinToString("/")
         require(
-            normalized.isUnder(BooksRoot) ||
-                normalized.isUnder(ProgrammingRoot) ||
-                normalized.isUnder(MangaRoot)
+            normalized.isUnder(settings.booksFolderName) ||
+                normalized.isUnder(settings.documentsFolderName) ||
+                normalized.isUnder(settings.mangaFolderName)
         ) {
-            "Catalog folder deletion is limited to Books, Programming, and Manga"
+            "Catalog folder deletion is limited to ${settings.booksFolderName}, ${settings.documentsFolderName}, and ${settings.mangaFolderName}"
         }
         return normalized
     }
@@ -186,30 +191,30 @@ class DeviceCatalogRepository @Inject constructor(
         }
 
         books.forEach { group -> addCandidate(group.path, group.files) }
-        programming.forEach { group -> addCandidate(group.path, group.files) }
+        documents.forEach { group -> addCandidate(group.path, group.files) }
         manga.forEach { group -> addCandidate(group.path, group.files) }
     }
 
-    suspend fun load(device: PocketBookDevice): DeviceCatalog = withContext(Dispatchers.IO) {
-        val databaseCatalog = runCatching { loadFromPocketBookDatabase(device) }
+    suspend fun load(device: PocketBookDevice, settings: com.cybercat.pocketbooksender.model.AppSettings): DeviceCatalog = withContext(Dispatchers.IO) {
+        val databaseCatalog = runCatching { loadFromPocketBookDatabase(device, settings) }
             .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
             .getOrNull()
         if (databaseCatalog != null && !databaseCatalog.isEmpty) {
             databaseCatalog
         } else {
-            loadFromFolders(device)
+            loadFromFolders(device, settings)
         }
     }
 
-    private suspend fun loadFromPocketBookDatabase(device: PocketBookDevice): DeviceCatalog {
+    private suspend fun loadFromPocketBookDatabase(device: PocketBookDevice, settings: com.cybercat.pocketbooksender.model.AppSettings): DeviceCatalog {
         val dbFile = downloadDatabaseSnapshot(device)
-        val files = readDatabaseFiles(dbFile)
+        val files = readDatabaseFiles(dbFile, settings)
             .filter { it.path.contentExtension() in AllSupportedExtensions }
 
         return DeviceCatalog(
-            books = files.toBookGroups(),
-            programming = files.toProgrammingGroups(),
-            manga = files.toMangaGroups(),
+            books = files.toBookGroups(settings),
+            documents = files.toDocumentsGroups(settings),
+            manga = files.toMangaGroups(settings),
             scannedAtMillis = System.currentTimeMillis(),
             isLoading = false,
             errorMessage = null,
@@ -248,7 +253,7 @@ class DeviceCatalogRepository @Inject constructor(
         return dbFile
     }
 
-    private fun readDatabaseFiles(dbFile: File): List<DbCatalogFile> {
+    private fun readDatabaseFiles(dbFile: File, settings: com.cybercat.pocketbooksender.model.AppSettings): List<DbCatalogFile> {
         val database = SQLiteDatabase.openDatabase(
             dbFile.absolutePath,
             null,
@@ -258,9 +263,9 @@ class DeviceCatalogRepository @Inject constructor(
         return database.use { db ->
             db.execSQL("PRAGMA query_only = ON")
             val args = arrayOf(
-                "$PocketBookStoragePrefix$BooksRoot%",
-                "$PocketBookStoragePrefix$ProgrammingRoot%",
-                "$PocketBookStoragePrefix$MangaRoot%",
+                "$PocketBookStoragePrefix${settings.booksFolderName}%",
+                "$PocketBookStoragePrefix${settings.documentsFolderName}%",
+                "$PocketBookStoragePrefix${settings.mangaFolderName}%",
             )
             db.rawQuery(CatalogQuery, args).use { cursor ->
                 buildList {
@@ -302,51 +307,51 @@ class DeviceCatalogRepository @Inject constructor(
         )
     }
 
-    private fun List<DbCatalogFile>.toBookGroups(): List<CatalogGroup> =
-        filter { it.path.isUnder(BooksRoot) }
-            .deduplicateIn(BooksRoot)
+    private fun List<DbCatalogFile>.toBookGroups(settings: com.cybercat.pocketbooksender.model.AppSettings): List<CatalogGroup> =
+        filter { it.path.isUnder(settings.booksFolderName) }
+            .deduplicateIn(settings.booksFolderName)
             .groupBy { file ->
-                file.path.directoryAfter(BooksRoot)
+                file.path.directoryAfter(settings.booksFolderName)
                     ?: file.authors.firstOrNull()
                     ?: "Unknown Author"
             }
             .map { (name, files) ->
                 CatalogGroup(
                     name = name,
-                    path = "$BooksRoot/$name",
+                    path = "${settings.booksFolderName}/$name",
                     files = files.toCatalogFiles(),
                 )
             }
             .filter { it.files.isNotEmpty() }
             .sortedWith(NaturalSort.by { it.name })
 
-    private fun List<DbCatalogFile>.toProgrammingGroups(): List<CatalogGroup> =
-        filter { it.path.isUnder(ProgrammingRoot) }
-            .deduplicateIn(ProgrammingRoot)
+    private fun List<DbCatalogFile>.toDocumentsGroups(settings: com.cybercat.pocketbooksender.model.AppSettings): List<CatalogGroup> =
+        filter { it.path.isUnder(settings.documentsFolderName) }
+            .deduplicateIn(settings.documentsFolderName)
             .groupBy { file ->
-                file.path.directoryAfter(ProgrammingRoot) ?: "Untagged"
+                file.path.directoryAfter(settings.documentsFolderName) ?: "Untagged"
             }
             .map { (name, files) ->
                 CatalogGroup(
                     name = name,
-                    path = "$ProgrammingRoot/$name",
+                    path = "${settings.documentsFolderName}/$name",
                     files = files.toCatalogFiles(),
                 )
             }
             .filter { it.files.isNotEmpty() }
             .sortedWith(NaturalSort.by { it.name })
 
-    private fun List<DbCatalogFile>.toMangaGroups(): List<MangaSeriesGroup> =
-        filter { it.path.isUnder(MangaRoot) }
-            .deduplicateIn(MangaRoot)
+    private fun List<DbCatalogFile>.toMangaGroups(settings: com.cybercat.pocketbooksender.model.AppSettings): List<MangaSeriesGroup> =
+        filter { it.path.isUnder(settings.mangaFolderName) }
+            .deduplicateIn(settings.mangaFolderName)
             .groupBy { file ->
-                file.path.directoryAfter(MangaRoot) ?: "Unsorted Manga"
+                file.path.directoryAfter(settings.mangaFolderName) ?: "Unsorted Manga"
             }
             .map { (name, files) ->
                 val catalogFiles = files.toCatalogFiles()
                 MangaSeriesGroup(
                     name = name,
-                    path = "$MangaRoot/$name",
+                    path = "${settings.mangaFolderName}/$name",
                     latestFile = catalogFiles.lastOrNull(),
                     lastReadFile = catalogFiles.lastReadFile(),
                     files = catalogFiles,
@@ -376,11 +381,11 @@ class DeviceCatalogRepository @Inject constructor(
         filter { it.lastOpenedAtMillis != null }
             .maxByOrNull { it.lastOpenedAtMillis ?: 0L }
 
-    private suspend fun loadFromFolders(device: PocketBookDevice): DeviceCatalog =
+    private suspend fun loadFromFolders(device: PocketBookDevice, settings: com.cybercat.pocketbooksender.model.AppSettings): DeviceCatalog =
         DeviceCatalog(
-            books = loadGroupedFiles(device, BooksRoot),
-            programming = loadGroupedFiles(device, ProgrammingRoot),
-            manga = loadMangaSeries(device, MangaRoot),
+            books = loadGroupedFiles(device, settings.booksFolderName, settings),
+            documents = loadGroupedFiles(device, settings.documentsFolderName, settings),
+            manga = loadMangaSeries(device, settings.mangaFolderName, settings),
             scannedAtMillis = System.currentTimeMillis(),
             isLoading = false,
             errorMessage = null,
@@ -389,6 +394,7 @@ class DeviceCatalogRepository @Inject constructor(
     private suspend fun loadGroupedFiles(
         device: PocketBookDevice,
         root: String,
+        settings: com.cybercat.pocketbooksender.model.AppSettings,
     ): List<CatalogGroup> {
         val rootEntries = ftpGateway.listEntries(device, root).getOrThrow()
         val rootFiles = rootEntries
@@ -421,7 +427,7 @@ class DeviceCatalogRepository @Inject constructor(
             null
         } else {
             CatalogGroup(
-                name = if (root == ProgrammingRoot) "Untagged" else "Unknown Author",
+                name = if (root == settings.documentsFolderName) "Untagged" else "Unknown Author",
                 path = root,
                 files = rootFiles.sortedWith(NaturalSort.by { it.path }),
             )
@@ -434,6 +440,7 @@ class DeviceCatalogRepository @Inject constructor(
     private suspend fun loadMangaSeries(
         device: PocketBookDevice,
         root: String,
+        settings: com.cybercat.pocketbooksender.model.AppSettings,
     ): List<MangaSeriesGroup> {
         return ftpGateway.listEntries(device, root)
             .getOrThrow()
@@ -514,9 +521,6 @@ class DeviceCatalogRepository @Inject constructor(
         const val CacheDirectory = "pocketbook-catalog"
         const val RemoteDatabaseDirectory = "system/explorer-3"
         const val DatabaseName = "explorer-3.db"
-        const val BooksRoot = "Books"
-        const val ProgrammingRoot = "Programming"
-        const val MangaRoot = "Manga"
 
         val OptionalDatabaseFiles = listOf("$DatabaseName-wal", "$DatabaseName-shm")
         val DatabaseFiles = listOf(DatabaseName) + OptionalDatabaseFiles

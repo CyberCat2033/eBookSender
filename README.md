@@ -37,7 +37,7 @@ Important packages:
 - Accept shared files through `ACTION_SEND` / `ACTION_SEND_MULTIPLE`.
 - Classify files by extension:
   - `epub`, `fb2`, `mobi`, `azw3`, etc. -> `Books`
-  - `pdf` -> `Programming`
+  - `pdf` -> `Documents`
   - `cbr`, `cbz` -> `Manga`
 - Treat wrapped book names like `Book_Name.fb2.zip` by the inner book extension instead of plain `zip`.
 - Extract metadata from supported files, including wrapped `fb2.zip` books.
@@ -48,14 +48,14 @@ Important packages:
   - CBZ first image.
 - Plan target paths:
   - `Books/<Author>/<Book_Title>.<ext>`
-  - `Programming/<Tag>/<Title>.<ext>`
+  - `Documents/<Tag>/<Title>.<ext>`
   - `Manga/<Series>/<Volume>.<ext>`
 - Configure global file-name templates in Settings:
   - Books default: `{title}`
-  - Programming default: `{title}`
+  - Documents default: `{title}`
   - Manga default: `{volume}`
   - Supported tokens: `{title}`, `{author}`, `{tag}`, `{series}`, `{volume}`.
-- Edit `Programming` tags directly in queue items. Suggestions are loaded only from PocketBook folders under `/Programming`.
+- Edit `Documents` tags directly in queue items. Suggestions are loaded only from PocketBook folders under `/Documents`.
 - Edit Manga series directly in queue items. Suggestions are loaded only from PocketBook folders under `/Manga`.
 - Per-item category/tag/series editors are collapsed by default. Queue items show only a compact type summary until expanded.
 - When multiple manga files are in the active queue, show a batch editor that applies one Manga series to all active manga items at once.
@@ -68,7 +68,7 @@ Important packages:
   - primary source is PocketBook's `system/explorer-3/explorer-3.db` library database, downloaded as a local snapshot together with `-wal` and `-shm`;
   - FTP folder scanning remains as fallback when the database snapshot cannot be loaded;
   - `Books` are grouped by author folder or database author metadata;
-  - `Programming` is grouped by tag folders;
+  - `Documents` is grouped by tag folders;
   - `Manga` is grouped by series folders with the latest file shown.
 - Catalog entries show PocketBook database metadata when available: title, authors, read percentage, and completed state.
 - Duplicate database rows for the same `book_id` are collapsed inside each Catalog area, preferring files already placed under the expected subfolder structure.
@@ -79,7 +79,7 @@ Important packages:
   - group and file checkboxes animate in and out instead of shifting the layout abruptly;
   - expanded file rows support long-press drag selection with edge autoscroll, matching manga chapter selection;
   - dragging back shrinks the live selection range and restores files outside the range to their pre-gesture state;
-  - deletion requires confirmation and is limited to supported files under `Books`, `Programming`, and `Manga`.
+  - deletion requires confirmation and is limited to supported files under `Books`, `Documents`, and `Manga`.
   - deleting every file in a real author/tag/series folder also attempts to remove that now-empty folder.
 - Use the separate `Web` tab to:
   - show saved OPDS sources as the primary list;
@@ -124,9 +124,9 @@ CBR handling:
   - `Title.epub`
 - Persist settings in DataStore:
   - root path
-  - default Programming tag
+  - default Documents tag
   - default Manga series
-  - Books/Programming/Manga filename templates
+  - Books/Documents/Manga filename templates
   - dynamic color toggle
 - Launcher icon is a custom adaptive icon with foreground and monochrome layers for Android themed icons, and Android 12+ launcher colors are backed by system Material colors.
 - Settings screen is scrollable on short screens.

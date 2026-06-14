@@ -9,7 +9,10 @@ data class BookMetadata(
     val coverUri: String? = null,
     val preview: Bitmap? = null,
     val series: String? = null,
+    val seriesIndex: String? = null,
     val language: String? = null,
+    val year: String? = null,
+    val publisher: String? = null,
 )
 
 interface MetadataExtractor {

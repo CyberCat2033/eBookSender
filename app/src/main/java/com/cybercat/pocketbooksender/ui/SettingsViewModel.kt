@@ -3,8 +3,12 @@ package com.cybercat.pocketbooksender.ui
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
+import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.model.AppTheme
+import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -13,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -21,6 +26,8 @@ import java.io.File
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
+    private val connectionManager: ConnectionManager,
+    private val ftpGateway: FtpGateway,
 ) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
 
@@ -39,20 +46,64 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setRootPath(value) }
     }
 
+    fun setBooksFolderName(value: String) {
+        viewModelScope.launch {
+            val oldName = settingsRepository.settings.first().booksFolderName
+            val newName = value.ifBlank { "Books" }
+            if (oldName != newName) {
+                renameFolderOnDevice(oldName, newName)
+                settingsRepository.setBooksFolderName(newName)
+            }
+        }
+    }
+
+    fun setDocumentsFolderName(value: String) {
+        viewModelScope.launch {
+            val oldName = settingsRepository.settings.first().documentsFolderName
+            val newName = value.ifBlank { "Documents" }
+            if (oldName != newName) {
+                renameFolderOnDevice(oldName, newName)
+                settingsRepository.setDocumentsFolderName(newName)
+            }
+        }
+    }
+
+    fun setMangaFolderName(value: String) {
+        viewModelScope.launch {
+            val oldName = settingsRepository.settings.first().mangaFolderName
+            val newName = value.ifBlank { "Manga" }
+            if (oldName != newName) {
+                renameFolderOnDevice(oldName, newName)
+                settingsRepository.setMangaFolderName(newName)
+            }
+        }
+    }
+
+    private suspend fun renameFolderOnDevice(oldName: String, newName: String) {
+        val device = connectionManager.connectedDevice.value ?: return
+        ftpGateway.rename(device, oldName, newName)
+            .onSuccess {
+                showTemporaryStatus("Renamed '$oldName' to '$newName' on device")
+            }
+            .onFailure {
+                showTemporaryStatus("Could not rename folder on device")
+            }
+    }
+
     fun setBookFileNameTemplate(value: String) {
         viewModelScope.launch { settingsRepository.setBookFileNameTemplate(value) }
     }
 
-    fun setProgrammingFileNameTemplate(value: String) {
-        viewModelScope.launch { settingsRepository.setProgrammingFileNameTemplate(value) }
+    fun setDocumentsFileNameTemplate(value: String) {
+        viewModelScope.launch { settingsRepository.setDocumentsFileNameTemplate(value) }
     }
 
     fun setMangaFileNameTemplate(value: String) {
         viewModelScope.launch { settingsRepository.setMangaFileNameTemplate(value) }
     }
 
-    fun setDefaultProgrammingTag(value: String) {
-        viewModelScope.launch { settingsRepository.setDefaultProgrammingTag(value) }
+    fun setDefaultDocumentsTag(value: String) {
+        viewModelScope.launch { settingsRepository.setDefaultDocumentsTag(value) }
     }
 
     fun setDefaultMangaSeries(value: String) {
@@ -69,6 +120,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setTheme(value: AppTheme) {
         viewModelScope.launch { settingsRepository.setTheme(value) }
+    }
+
+    fun clearStatusMessage() {
+        _statusMessage.value = null
     }
 
     fun clearDownloadCache() {

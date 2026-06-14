@@ -107,7 +107,7 @@ fun SendScreen(
     onRemoveItem: (String) -> Unit,
     onClearQueue: () -> Unit,
     onCategoryChanged: (String, BookCategory) -> Unit,
-    onProgrammingTagChanged: (String, String) -> Unit,
+    onDocumentsTagChanged: (String, String) -> Unit,
     onMangaSeriesChanged: (String, String) -> Unit,
     onQueuedMangaSeriesChanged: (String) -> Unit,
     onUploadAll: () -> Unit,
@@ -307,12 +307,13 @@ fun SendScreen(
                         ) { triggerRemove ->
                             UploadItemRow(
                                 item = item,
-                                programmingTags = state.programmingTags,
+                                documentsTags = state.documentsTags,
                                 mangaSeriesSuggestions = state.mangaSeriesSuggestions,
                                 enableHaptics = state.settings.enableHaptics,
+                                settings = state.settings,
                                 onRemove = triggerRemove,
                                 onCategoryChanged = { category -> onCategoryChanged(item.id, category) },
-                                onProgrammingTagChanged = { tag -> onProgrammingTagChanged(item.id, tag) },
+                                onDocumentsTagChanged = { tag -> onDocumentsTagChanged(item.id, tag) },
                                 onMangaSeriesChanged = { series -> onMangaSeriesChanged(item.id, series) },
                             )
                         }
@@ -702,12 +703,13 @@ private fun EmptyQueue() {
 private fun UploadItemRow(
     item: UploadItem,
     modifier: Modifier = Modifier,
-    programmingTags: List<String>,
+    documentsTags: List<String>,
     mangaSeriesSuggestions: List<String>,
     enableHaptics: Boolean,
+    settings: com.cybercat.pocketbooksender.model.AppSettings,
     onRemove: () -> Unit,
     onCategoryChanged: (BookCategory) -> Unit,
-    onProgrammingTagChanged: (String) -> Unit,
+    onDocumentsTagChanged: (String) -> Unit,
     onMangaSeriesChanged: (String) -> Unit,
 ) {
     var detailsExpanded by remember(item.id) { mutableStateOf(false) }
@@ -757,6 +759,7 @@ private fun UploadItemRow(
                         detailsExpanded = !detailsExpanded
                         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                     },
+                    settings = settings,
                 )
 
                 // Отступ top=12.dp помещён ВНУТРИ AnimatedVisibility: он схлопывается
@@ -783,13 +786,15 @@ private fun UploadItemRow(
                                 view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                                 onCategoryChanged(cat)
                             },
+                            settings = settings,
                         )
 
-                        if (item.category == BookCategory.Programming) {
-                            ProgrammingTagEditor(
-                                selectedTag = item.programmingTag.orEmpty(),
-                                suggestions = programmingTags,
-                                onTagChanged = onProgrammingTagChanged,
+                        if (item.category == BookCategory.Documents) {
+                            DocumentsTagEditor(
+                                selectedTag = item.documentsTag.orEmpty(),
+                                suggestions = documentsTags,
+                                onTagChanged = onDocumentsTagChanged,
+                                categoryName = settings.documentsFolderName,
                             )
                         }
 
@@ -966,6 +971,7 @@ private fun ItemTypeSummary(
     item: UploadItem,
     expanded: Boolean,
     onToggle: () -> Unit,
+    settings: com.cybercat.pocketbooksender.model.AppSettings,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -985,7 +991,7 @@ private fun ItemTypeSummary(
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = item.category.label(),
+                    text = item.category.label(settings),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -1016,10 +1022,11 @@ private fun ItemTypeSummary(
 }
 
 @Composable
-private fun ProgrammingTagEditor(
+private fun DocumentsTagEditor(
     selectedTag: String,
     suggestions: List<String>,
     onTagChanged: (String) -> Unit,
+    categoryName: String,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -1027,7 +1034,7 @@ private fun ProgrammingTagEditor(
             onValueChange = onTagChanged,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            label = { Text("Programming tag") },
+            label = { Text("$categoryName tag") },
         )
 
         Row(
@@ -1112,6 +1119,7 @@ private fun CategorySelector(
     selected: BookCategory,
     lockedToManga: Boolean,
     onCategoryChanged: (BookCategory) -> Unit,
+    settings: com.cybercat.pocketbooksender.model.AppSettings,
 ) {
     Row(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -1122,7 +1130,7 @@ private fun CategorySelector(
                 selected = selected == category,
                 enabled = !lockedToManga || category == BookCategory.Manga,
                 onClick = { onCategoryChanged(category) },
-                label = { Text(category.label()) },
+                label = { Text(category.label(settings)) },
                 leadingIcon = {
                     Icon(
                         imageVector = category.iconFor(""),
@@ -1135,22 +1143,22 @@ private fun CategorySelector(
     }
 }
 
-private fun BookCategory.label(): String = when (this) {
-    BookCategory.Books -> "Books"
-    BookCategory.Programming -> "Programming"
-    BookCategory.Manga -> "Manga"
+private fun BookCategory.label(settings: com.cybercat.pocketbooksender.model.AppSettings): String = when (this) {
+    BookCategory.Books -> settings.booksFolderName
+    BookCategory.Documents -> settings.documentsFolderName
+    BookCategory.Manga -> settings.mangaFolderName
 }
 
 private fun UploadItem.typeDetail(): String? = when (category) {
     BookCategory.Books -> author?.takeIf { it.isNotBlank() }
-    BookCategory.Programming -> programmingTag?.takeIf { it.isNotBlank() }
+    BookCategory.Documents -> documentsTag?.takeIf { it.isNotBlank() }
     BookCategory.Manga -> mangaSeries?.takeIf { it.isNotBlank() }
 }
 
 private fun BookCategory.iconFor(extension: String): ImageVector = when {
     this == BookCategory.Manga -> Icons.Outlined.Image
     extension == "pdf" -> Icons.Outlined.PictureAsPdf
-    this == BookCategory.Programming -> Icons.Outlined.Code
+    this == BookCategory.Documents -> Icons.Outlined.Code
     else -> Icons.AutoMirrored.Outlined.MenuBook
 }
 

@@ -168,9 +168,9 @@ class UploadQueueManager @Inject constructor(
                     replan(item.copy(category = BookCategory.Manga), settings)
                 } else {
                     val updated = when (category) {
-                        BookCategory.Programming -> item.copy(
-                            category = BookCategory.Programming,
-                            programmingTag = item.programmingTag ?: settings.defaultProgrammingTag,
+                        BookCategory.Documents -> item.copy(
+                            category = BookCategory.Documents,
+                            documentsTag = item.documentsTag ?: settings.defaultDocumentsTag,
                         )
                         BookCategory.Books -> item.copy(category = BookCategory.Books)
                         BookCategory.Manga -> item.copy(
@@ -186,12 +186,12 @@ class UploadQueueManager @Inject constructor(
         }
     }
 
-    fun updateProgrammingTag(id: String, tag: String) {
+    fun updateDocumentsTag(id: String, tag: String) {
         _queue.update { current ->
             val trimmedTag = tag.trim()
             val updated = current.map { item ->
                 if (item.id == id) {
-                    replan(item.copy(programmingTag = trimmedTag), activeSettings)
+                    replan(item.copy(documentsTag = trimmedTag), activeSettings)
                 } else {
                     item
                 }
@@ -247,7 +247,7 @@ class UploadQueueManager @Inject constructor(
             category = category,
             title = title,
             author = if (category == BookCategory.Books) "Unknown Author" else null,
-            programmingTag = if (category == BookCategory.Programming) settings.defaultProgrammingTag else null,
+            documentsTag = if (category == BookCategory.Documents) settings.defaultDocumentsTag else null,
             mangaSeries = if (category == BookCategory.Manga) settings.defaultMangaSeries else null,
             mangaVolume = if (category == BookCategory.Manga) title else null,
             plannedPath = "",
@@ -278,6 +278,11 @@ class UploadQueueManager @Inject constructor(
                         } else {
                             currentItem.mangaSeries
                         },
+                        year = metadata.year,
+                        language = metadata.language,
+                        series = metadata.series,
+                        seriesIndex = metadata.seriesIndex,
+                        publisher = metadata.publisher,
                         coverUri = metadata.coverUri,
                         preview = metadata.preview,
                         status = UploadStatus.Pending,

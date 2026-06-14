@@ -39,6 +39,12 @@ interface FtpGateway {
         device: PocketBookDevice,
         remoteRelativePath: String,
     ): Result<Unit>
+
+    suspend fun rename(
+        device: PocketBookDevice,
+        fromPath: String,
+        toPath: String,
+    ): Result<Unit>
 }
 
 data class FtpSessionInfo(

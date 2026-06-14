@@ -143,6 +143,20 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
         }
     }
 
+    override suspend fun rename(
+        device: PocketBookDevice,
+        fromPath: String,
+        toPath: String,
+    ): Result<Unit> = withFtpClient(device) { client ->
+        runCatching {
+            val normalizedFrom = fromPath.toSafeRelativeFtpPath()
+            val normalizedTo = toPath.toSafeRelativeFtpPath()
+            check(client.rename(normalizedFrom, normalizedTo)) {
+                "FTP rename failed from $normalizedFrom to $normalizedTo: ${client.replyString}"
+            }
+        }
+    }
+
     private suspend fun <T> withFtpClient(
         device: PocketBookDevice,
         block: (FTPClient) -> Result<T>,

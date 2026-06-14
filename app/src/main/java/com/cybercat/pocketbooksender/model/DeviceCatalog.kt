@@ -2,14 +2,14 @@ package com.cybercat.pocketbooksender.model
 
 data class DeviceCatalog(
     val books: List<CatalogGroup> = emptyList(),
-    val programming: List<CatalogGroup> = emptyList(),
+    val documents: List<CatalogGroup> = emptyList(),
     val manga: List<MangaSeriesGroup> = emptyList(),
     val scannedAtMillis: Long? = null,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
 ) {
     val isEmpty: Boolean
-        get() = books.isEmpty() && programming.isEmpty() && manga.isEmpty()
+        get() = books.isEmpty() && documents.isEmpty() && manga.isEmpty()
 }
 
 data class CatalogGroup(

@@ -22,10 +22,13 @@ class SettingsRepository @Inject constructor(
     val settings: Flow<AppSettings> = context.settingsDataStore.data.map { preferences ->
         AppSettings(
             rootPath = preferences[ROOT_PATH] ?: "/mnt/ext1",
-            defaultProgrammingTag = preferences[DEFAULT_PROGRAMMING_TAG] ?: "Untagged",
+            booksFolderName = preferences[BOOKS_FOLDER_NAME] ?: "Books",
+            documentsFolderName = preferences[DOCUMENTS_FOLDER_NAME] ?: "Documents",
+            mangaFolderName = preferences[MANGA_FOLDER_NAME] ?: "Manga",
+            defaultDocumentsTag = preferences[DEFAULT_DOCUMENTS_TAG] ?: "Untagged",
             defaultMangaSeries = preferences[DEFAULT_MANGA_SERIES] ?: "Unknown_Series",
             bookFileNameTemplate = preferences[BOOK_FILE_NAME_TEMPLATE] ?: "{title}",
-            programmingFileNameTemplate = preferences[PROGRAMMING_FILE_NAME_TEMPLATE] ?: "{title}",
+            documentsFileNameTemplate = preferences[DOCUMENTS_FILE_NAME_TEMPLATE] ?: "{title}",
             mangaFileNameTemplate = preferences[MANGA_FILE_NAME_TEMPLATE] ?: "{series}_{volume}",
             useDynamicColor = preferences[USE_DYNAMIC_COLOR] ?: true,
             enableHaptics = preferences[ENABLE_HAPTICS] ?: true,
@@ -36,6 +39,24 @@ class SettingsRepository @Inject constructor(
     suspend fun setRootPath(value: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[ROOT_PATH] = value.ifBlank { "/mnt/ext1" }
+        }
+    }
+
+    suspend fun setBooksFolderName(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[BOOKS_FOLDER_NAME] = value.ifBlank { "Books" }
+        }
+    }
+
+    suspend fun setDocumentsFolderName(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[DOCUMENTS_FOLDER_NAME] = value.ifBlank { "Documents" }
+        }
+    }
+
+    suspend fun setMangaFolderName(value: String) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[MANGA_FOLDER_NAME] = value.ifBlank { "Manga" }
         }
     }
 
@@ -57,9 +78,9 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    suspend fun setDefaultProgrammingTag(value: String) {
+    suspend fun setDefaultDocumentsTag(value: String) {
         context.settingsDataStore.edit { preferences ->
-            preferences[DEFAULT_PROGRAMMING_TAG] = value.ifBlank { "Untagged" }
+            preferences[DEFAULT_DOCUMENTS_TAG] = value.ifBlank { "Untagged" }
         }
     }
 
@@ -75,9 +96,9 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    suspend fun setProgrammingFileNameTemplate(value: String) {
+    suspend fun setDocumentsFileNameTemplate(value: String) {
         context.settingsDataStore.edit { preferences ->
-            preferences[PROGRAMMING_FILE_NAME_TEMPLATE] = value.ifBlank { "{title}" }
+            preferences[DOCUMENTS_FILE_NAME_TEMPLATE] = value.ifBlank { "{title}" }
         }
     }
 
@@ -89,10 +110,13 @@ class SettingsRepository @Inject constructor(
 
     private companion object {
         val ROOT_PATH = stringPreferencesKey("root_path")
-        val DEFAULT_PROGRAMMING_TAG = stringPreferencesKey("default_programming_tag")
+        val BOOKS_FOLDER_NAME = stringPreferencesKey("books_folder_name")
+        val DOCUMENTS_FOLDER_NAME = stringPreferencesKey("documents_folder_name")
+        val MANGA_FOLDER_NAME = stringPreferencesKey("manga_folder_name")
+        val DEFAULT_DOCUMENTS_TAG = stringPreferencesKey("default_documents_tag")
         val DEFAULT_MANGA_SERIES = stringPreferencesKey("default_manga_series")
         val BOOK_FILE_NAME_TEMPLATE = stringPreferencesKey("book_file_name_template")
-        val PROGRAMMING_FILE_NAME_TEMPLATE = stringPreferencesKey("programming_file_name_template")
+        val DOCUMENTS_FILE_NAME_TEMPLATE = stringPreferencesKey("documents_file_name_template")
         val MANGA_FILE_NAME_TEMPLATE = stringPreferencesKey("manga_file_name_template")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")

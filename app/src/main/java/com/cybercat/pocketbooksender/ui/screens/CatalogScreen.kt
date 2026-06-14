@@ -2,12 +2,14 @@ package com.cybercat.pocketbooksender.ui.screens
 
 import android.text.format.DateUtils
 import android.view.HapticFeedbackConstants
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -16,6 +18,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
@@ -34,6 +37,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -63,6 +68,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,7 +81,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -126,6 +134,37 @@ fun CatalogScreen(
     val targetByPath = remember(fileTargets) { fileTargets.associateBy { it.path } }
     val fileRowBounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
     var listBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+
+    fun scrollToGroup(key: String, itemCount: Int) {
+        scope.launch {
+            val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.key == key } ?: return@launch
+            val viewportHeight = listState.layoutInfo.viewportSize.height
+            
+            // Estimated height of an item is ~72dp (64dp + padding).
+            val itemHeightPx = with(density) { 72.dp.toPx() }
+            val estimatedExpandedHeight = itemInfo.size + (itemCount * itemHeightPx)
+            
+            val itemBottom = itemInfo.offset + estimatedExpandedHeight
+            val overflow = itemBottom - viewportHeight
+            
+            if (overflow > 0) {
+                // Scroll by the overflow amount to make the bottom visible,
+                // but don't scroll the item past the top of the screen.
+                val maxScroll = itemInfo.offset.toFloat()
+                val scrollAmount = minOf(overflow, maxScroll)
+                if (scrollAmount > 0) {
+                    val animationDuration = minOf(750, 250 + (itemCount * 35))
+                    listState.animateScrollBy(scrollAmount, tween(durationMillis = animationDuration))
+                }
+            }
+        }
+    }
+
+    BackHandler(enabled = state.isEditMode) {
+        onSetEditMode(false)
+    }
 
     LaunchedEffect(catalog) {
         val knownGroupPaths = catalog.groupPaths()
@@ -266,17 +305,32 @@ fun CatalogScreen(
             )
         },
     ) { innerPadding ->
-        PullToRefreshBox(
-            isRefreshing = catalog.isLoading,
-            onRefresh = {
-                if (isConnected && !state.isEditMode) {
-                    onRefresh()
+        val contentModifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+
+        @Composable
+        fun ContentWrapper(content: @Composable () -> Unit) {
+            if (isConnected) {
+                PullToRefreshBox(
+                    isRefreshing = catalog.isLoading,
+                    onRefresh = {
+                        if (!state.isEditMode) {
+                            onRefresh()
+                        }
+                    },
+                    modifier = contentModifier
+                ) {
+                    content()
                 }
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+            } else {
+                Box(modifier = contentModifier) {
+                    content()
+                }
+            }
+        }
+
+        ContentWrapper {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -457,14 +511,14 @@ fun CatalogScreen(
                     item {
                         CatalogMessage(
                             title = "Catalog is empty",
-                            text = "No books were found under Books, Programming, or Manga.",
+                            text = "No books were found under ${state.settings.booksFolderName}, ${state.settings.documentsFolderName}, or ${state.settings.mangaFolderName}.",
                         )
                     }
                 }
 
                 if (catalog.books.isNotEmpty()) {
                     item {
-                        SectionTitle("Books", catalog.books.sumOf { it.files.size })
+                        SectionTitle(state.settings.booksFolderName, catalog.books.sumOf { it.files.size })
                     }
                     items(
                         items = catalog.books,
@@ -482,6 +536,7 @@ fun CatalogScreen(
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
+                                    scrollToGroup("books:${group.path}", group.files.size)
                                 } else {
                                     expandedGroupPaths.remove(group.path)
                                 }
@@ -498,13 +553,13 @@ fun CatalogScreen(
                     }
                 }
 
-                if (catalog.programming.isNotEmpty()) {
+                if (catalog.documents.isNotEmpty()) {
                     item {
-                        SectionTitle("Programming", catalog.programming.sumOf { it.files.size })
+                        SectionTitle(state.settings.documentsFolderName, catalog.documents.sumOf { it.files.size })
                     }
                     items(
-                        items = catalog.programming,
-                        key = { "programming:${it.path}" },
+                        items = catalog.documents,
+                        key = { "documents:${it.path}" },
                         contentType = { "catalog_group" }
                     ) { group ->
                         CatalogGroupCard(
@@ -518,6 +573,7 @@ fun CatalogScreen(
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
+                                    scrollToGroup("documents:${group.path}", group.files.size)
                                 } else {
                                     expandedGroupPaths.remove(group.path)
                                 }
@@ -536,7 +592,7 @@ fun CatalogScreen(
 
                 if (catalog.manga.isNotEmpty()) {
                     item {
-                        SectionTitle("Manga", catalog.manga.size)
+                        SectionTitle(state.settings.mangaFolderName, catalog.manga.size)
                     }
                     items(
                         items = catalog.manga,
@@ -554,6 +610,7 @@ fun CatalogScreen(
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
+                                    scrollToGroup("manga:${group.path}", group.files.size)
                                 } else {
                                     expandedGroupPaths.remove(group.path)
                                 }
@@ -635,14 +692,14 @@ private fun SelectionSlot(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Box(
-        modifier = Modifier.width(SelectionSlotWidth),
-        contentAlignment = Alignment.CenterStart,
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+        exit = shrinkHorizontally(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
     ) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(),
-            exit = fadeOut(),
+        Box(
+            modifier = Modifier.width(SelectionSlotWidth),
+            contentAlignment = Alignment.CenterStart,
         ) {
             CompactCheckbox(
                 checked = checked,
@@ -666,6 +723,7 @@ private fun CompactCheckbox(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CatalogGroupCard(
     group: CatalogGroup,
@@ -692,7 +750,9 @@ private fun CatalogGroupCard(
         onToggleGroupSelection(filePaths, checked)
     }
 
-    ElevatedCard(modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier
@@ -716,10 +776,13 @@ private fun CatalogGroupCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+            val animationDuration = remember(group.files.size) {
+                minOf(750, 250 + (group.files.size * 35))
+            }
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-                exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+                enter = expandVertically(animationSpec = tween(durationMillis = animationDuration)) + fadeIn(animationSpec = tween(durationMillis = animationDuration)),
+                exit = shrinkVertically(animationSpec = tween(durationMillis = animationDuration)) + fadeOut(animationSpec = tween(durationMillis = animationDuration))
             ) {
                 FileList(
                     files = group.files,
@@ -734,6 +797,7 @@ private fun CatalogGroupCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MangaSeriesCard(
     group: MangaSeriesGroup,
@@ -760,7 +824,9 @@ private fun MangaSeriesCard(
         onToggleGroupSelection(filePaths, checked)
     }
 
-    ElevatedCard(modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier
@@ -787,10 +853,13 @@ private fun MangaSeriesCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+            val animationDuration = remember(group.files.size) {
+                minOf(750, 250 + (group.files.size * 35))
+            }
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
-                exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut()
+                enter = expandVertically(animationSpec = tween(durationMillis = animationDuration)) + fadeIn(animationSpec = tween(durationMillis = animationDuration)),
+                exit = shrinkVertically(animationSpec = tween(durationMillis = animationDuration)) + fadeOut(animationSpec = tween(durationMillis = animationDuration))
             ) {
                 FileList(
                     files = group.files,
@@ -1045,7 +1114,7 @@ private fun FileList(
 
 private fun DeviceCatalog.groupPaths(): Set<String> = buildSet {
     books.forEach { group -> add(group.path) }
-    programming.forEach { group -> add(group.path) }
+    documents.forEach { group -> add(group.path) }
     manga.forEach { group -> add(group.path) }
 }
 
@@ -1065,7 +1134,7 @@ private fun DeviceCatalog.fileSelectionTargets(
     }
 
     books.forEach { group -> addFiles(group.path, group.files) }
-    programming.forEach { group -> addFiles(group.path, group.files) }
+    documents.forEach { group -> addFiles(group.path, group.files) }
     manga.forEach { group -> addFiles(group.path, group.files) }
 }
 
@@ -1107,6 +1176,7 @@ private suspend fun PointerInputScope.detectDragGesturesAfterQuickLongPress(
                 break
             }
             if (!change.pressed) {
+                change.consume()
                 onDragEnd()
                 break
             }

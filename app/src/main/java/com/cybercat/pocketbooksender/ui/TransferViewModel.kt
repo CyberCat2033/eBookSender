@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -82,8 +83,8 @@ class TransferViewModel @Inject constructor(
         val error = values[7] as String?
         val catalog = values[8] as DeviceCatalog
         val suggestions = values[9] as Pair<List<String>, List<String>>
-        val tags = if (catalog.programming.isNotEmpty()) {
-            catalog.programming.map(CatalogGroup::name)
+        val tags = if (catalog.documents.isNotEmpty()) {
+            catalog.documents.map(CatalogGroup::name)
         } else {
             suggestions.first
         }
@@ -102,7 +103,7 @@ class TransferViewModel @Inject constructor(
             queue = queue,
             settings = settings,
             errorMessage = error,
-            programmingTags = tags,
+            documentsTags = tags,
             mangaSeriesSuggestions = series
         )
     }.stateIn(
@@ -193,8 +194,8 @@ class TransferViewModel @Inject constructor(
         queueManager.updateCategory(id, category)
     }
 
-    fun updateProgrammingTag(id: String, tag: String) {
-        queueManager.updateProgrammingTag(id, tag)
+    fun updateDocumentsTag(id: String, tag: String) {
+        queueManager.updateDocumentsTag(id, tag)
     }
 
     fun updateMangaSeries(id: String, series: String) {
@@ -323,8 +324,9 @@ class TransferViewModel @Inject constructor(
 
     private fun refreshRemoteFolderSuggestions(device: PocketBookDevice) {
         viewModelScope.launch {
-            val tags = ftpGateway.listDirectories(device, "Programming").getOrDefault(emptyList())
-            val series = ftpGateway.listDirectories(device, "Manga").getOrDefault(emptyList())
+            val settings = settingsRepository.settings.first()
+            val tags = ftpGateway.listDirectories(device, settings.documentsFolderName).getOrDefault(emptyList())
+            val series = ftpGateway.listDirectories(device, settings.mangaFolderName).getOrDefault(emptyList())
             _ftpSuggestions.value = Pair(tags, series)
         }
     }
