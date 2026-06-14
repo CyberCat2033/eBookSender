@@ -382,7 +382,7 @@ fun SettingsScreen(
                         validation = { it.trim().ifBlank { "{title}" } }
                     )
                     NamingPreview(
-                        label = strings.get("settings_naming_preview", "Books"),
+                        label = strings.get("settings_naming_preview", strings.categoryBooks),
                         template = bookTemplatePreview,
                         exampleTokens = commonTokens,
                         folderName = state.settings.booksFolderName
@@ -408,7 +408,7 @@ fun SettingsScreen(
                         validation = { it.trim().ifBlank { "{title}" } }
                     )
                     NamingPreview(
-                        label = strings.get("settings_naming_preview", "Documents"),
+                        label = strings.get("settings_naming_preview", strings.categoryDocuments),
                         template = docsTemplatePreview,
                         exampleTokens = commonTokens,
                         folderName = state.settings.documentsFolderName
@@ -434,7 +434,7 @@ fun SettingsScreen(
                         validation = { it.trim().ifBlank { "{series}_{volume}" } }
                     )
                     NamingPreview(
-                        label = strings.get("settings_naming_preview", "Manga"),
+                        label = strings.get("settings_naming_preview", strings.categoryManga),
                         template = mangaTemplatePreview,
                         exampleTokens = commonTokens,
                         folderName = state.settings.mangaFolderName,

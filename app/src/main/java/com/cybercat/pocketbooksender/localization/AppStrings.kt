@@ -72,6 +72,9 @@ class AppStrings(
     val settingsLanguageOption: String get() = get("settings_language_option")
     val settingsLanguageDialogTitle: String get() = get("settings_language_dialog_title")
     val settingsLanguageSystem: String get() = get("settings_language_system")
+    val categoryBooks: String get() = get("category_books")
+    val categoryDocuments: String get() = get("category_documents")
+    val categoryManga: String get() = get("category_manga")
 
     // Send Screen
     val sendTitle: String get() = get("send_title")

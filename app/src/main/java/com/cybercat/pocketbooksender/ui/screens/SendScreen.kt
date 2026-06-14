@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -534,14 +536,17 @@ private fun ConnectionPanel(
                     },
                     placeholder = { Text(strings.sendPlaceholderFtp) },
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     OutlinedButton(
                         onClick = {
                             view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                             startQrScan(context, onQrScanned)
                         },
                         enabled = !state.isConnecting,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
                     ) {
                         Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
@@ -557,7 +562,7 @@ private fun ConnectionPanel(
                             }
                         },
                         enabled = !state.isConnecting,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
                     ) {
                         Icon(Icons.Outlined.WifiTethering, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
@@ -614,7 +619,7 @@ private fun ActionRow(
     val view = LocalView.current
     val strings = LocalStrings.current
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         OutlinedButton(
@@ -623,7 +628,7 @@ private fun ActionRow(
                 onAddFiles()
             },
             enabled = canAddFiles,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
@@ -635,7 +640,7 @@ private fun ActionRow(
                 onUploadAll()
             },
             enabled = canUpload,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
         ) {
             Icon(Icons.Outlined.Upload, contentDescription = null)
             Spacer(Modifier.width(8.dp))

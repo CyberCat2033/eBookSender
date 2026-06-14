@@ -53,6 +53,9 @@
   "settings_language_option": "Язык приложения",
   "settings_language_dialog_title": "Выберите язык",
   "settings_language_system": "Системная",
+  "category_books": "Книги",
+  "category_documents": "Документы",
+  "category_manga": "Манга",
 
   "send_title": "PocketBook Sender",
   "send_label_ftp": "FTP ссылка или IP",
