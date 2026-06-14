@@ -322,17 +322,20 @@ class OpdsViewModel @Inject constructor(
                         runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
                     }
                     if (matchingSource != null) {
+                        _opdsState.update { state ->
+                            state.copy(
+                                isLoading = false,
+                                catalog = snapshot.catalog,
+                                currentUrl = snapshot.currentUrl,
+                                history = snapshot.history,
+                            )
+                        }
                         openCredentialsDialog(matchingSource, urlToRetry = error.url)
                         return@launch
                     }
                 }
-                _opdsState.update { state ->
-                    state.copy(
-                        isLoading = false,
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotBuildSearchUrl,
-                        statusMessage = null,
-                    )
-                }
+                _opdsState.update { state -> state.copy(isLoading = false) }
+                showOpdsError(error.message ?: localizationManager.currentStrings.value.opdsErrorCannotBuildSearchUrl)
             }
         }
     }
@@ -378,17 +381,13 @@ class OpdsViewModel @Inject constructor(
                         runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
                     }
                     if (matchingSource != null) {
+                        _opdsState.update { state -> state.copy(isDownloading = false) }
                         openCredentialsDialog(matchingSource)
                         return@launch
                     }
                 }
-                _opdsState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotDownload,
-                        statusMessage = null,
-                    )
-                }
+                _opdsState.update { state -> state.copy(isDownloading = false) }
+                showOpdsError(error.message ?: localizationManager.currentStrings.value.opdsErrorCannotDownload)
             }
         }
     }
@@ -467,6 +466,7 @@ class OpdsViewModel @Inject constructor(
 
     private fun loadOpdsCatalog(url: String, history: List<OpdsHistoryEntry>) {
         viewModelScope.launch {
+            val snapshotBeforeLoad = _opdsState.value
             _opdsState.update {
                 it.copy(
                     isLoading = true,
@@ -499,17 +499,21 @@ class OpdsViewModel @Inject constructor(
                         runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
                     }
                     if (matchingSource != null) {
+                        // Restore previous catalog so back button and content are preserved
+                        _opdsState.update { state ->
+                            state.copy(
+                                isLoading = false,
+                                catalog = snapshotBeforeLoad.catalog,
+                                currentUrl = snapshotBeforeLoad.currentUrl,
+                                history = snapshotBeforeLoad.history,
+                            )
+                        }
                         openCredentialsDialog(matchingSource, urlToRetry = url)
                         return@launch
                     }
                 }
-                _opdsState.update { state ->
-                    state.copy(
-                        isLoading = false,
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotOpenCatalog,
-                        statusMessage = null,
-                    )
-                }
+                _opdsState.update { state -> state.copy(isLoading = false) }
+                showOpdsError(error.message ?: localizationManager.currentStrings.value.opdsErrorCannotOpenCatalog)
             }
         }
     }
@@ -579,11 +583,24 @@ class OpdsViewModel @Inject constructor(
             },
             clearIfStillCurrent = { msg ->
                 _opdsState.update { state ->
-                    if (state.statusMessage == msg) {
-                        state.copy(statusMessage = null)
-                    } else {
-                        state
-                    }
+                    if (state.statusMessage == msg) state.copy(statusMessage = null) else state
+                }
+            },
+            message = message,
+        )
+    }
+
+    private fun showOpdsError(message: String) {
+        showTemporaryStatus(
+            delayMillis = OpdsErrorMessageMillis,
+            setMessage = { msg ->
+                _opdsState.update { state ->
+                    state.copy(errorMessage = msg, statusMessage = null)
+                }
+            },
+            clearIfStillCurrent = { msg ->
+                _opdsState.update { state ->
+                    if (state.errorMessage == msg) state.copy(errorMessage = null) else state
                 }
             },
             message = message,
@@ -624,5 +641,6 @@ class OpdsViewModel @Inject constructor(
 
     private companion object {
         const val OpdsStatusMessageMillis = 2300L
+        const val OpdsErrorMessageMillis = 5500L
     }
 }

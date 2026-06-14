@@ -275,6 +275,10 @@ class OpdsRepository @Inject constructor(
             )
         }
 
+        if (code == HttpURLConnection.HTTP_UNAUTHORIZED || code == HttpURLConnection.HTTP_FORBIDDEN) {
+            connection.disconnect()
+            throw OpdsAuthenticationRequiredException(url)
+        }
         if (code !in 200..299) {
             val message = connection.responseMessage?.takeIf { it.isNotBlank() }
             connection.disconnect()
