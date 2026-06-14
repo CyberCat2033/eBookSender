@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -123,6 +124,11 @@ fun MangaPane(
     onSetMangaSeriesSubscribed: (Boolean) -> Unit,
     onCheckSubscriptions: () -> Unit,
     onDownloadSelected: () -> Unit,
+    onToggleSubscriptionUpdateChapter: (String, Boolean) -> Unit,
+    onSelectAllSubscriptionUpdateChapters: () -> Unit,
+    onClearSubscriptionUpdateChapters: () -> Unit,
+    onDownloadSubscriptionUpdates: () -> Unit,
+    onCloseSubscriptionUpdates: () -> Unit,
     enableHaptics: Boolean,
 ) {
     val view = LocalView.current
@@ -403,6 +409,19 @@ fun MangaPane(
                 selectedCount = state.selectedChapterIds.size,
             )
         }
+    }
+
+    if (state.subscriptionUpdatesVisible && state.subscriptionUpdates.isNotEmpty()) {
+        MangaSubscriptionUpdatesDialog(
+            updates = state.subscriptionUpdates,
+            selectedChapterIds = state.selectedSubscriptionUpdateChapterIds,
+            onToggleChapter = onToggleSubscriptionUpdateChapter,
+            onSelectAll = onSelectAllSubscriptionUpdateChapters,
+            onClearAll = onClearSubscriptionUpdateChapters,
+            onDownload = onDownloadSubscriptionUpdates,
+            onClose = onCloseSubscriptionUpdates,
+            enableHaptics = enableHaptics,
+        )
     }
 
     if (state.browserVisible) {
@@ -1229,7 +1248,7 @@ private fun MangaChapterRow(
                 )
                 chapter.numberForSort?.let { number ->
                     Text(
-                        text = strings.get("manga_chapter_number", number),
+                        text = strings.get("manga_chapter_number", number.formatChapterNumber()),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1250,6 +1269,7 @@ private fun MangaChapterRow(
 private fun MangaCover(
     coverUrl: String?,
     title: String,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var bitmap by remember(coverUrl) { mutableStateOf<Bitmap?>(coverUrl?.let { BitmapCache.getFromMemory(it) }) }
@@ -1273,7 +1293,7 @@ private fun MangaCover(
     }
 
     Surface(
-        modifier = Modifier.size(width = 58.dp, height = 78.dp),
+        modifier = modifier.size(width = 58.dp, height = 78.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = MaterialTheme.shapes.small,
     ) {
@@ -1423,6 +1443,16 @@ private data class ChapterPointerTarget(
 private fun chapterItemKey(chapter: MangaChapter): String =
     "chapter:${chapter.stableKey}"
 
+private fun Double.formatChapterNumber(): String {
+    if (!java.lang.Double.isFinite(this)) return toString()
+    val wholeNumber = toLong()
+    return if (this == wholeNumber.toDouble()) {
+        wholeNumber.toString()
+    } else {
+        toString()
+    }
+}
+
 internal fun MangaUiState.selectedSeriesItemIndex(): Int {
     var index = 1
     if (errorMessage != null) index++
@@ -1437,3 +1467,155 @@ private const val CoverRequestWidth = 160
 private const val CoverRequestHeight = 220
 
 private const val HtmlExtractDelayMillis = 900L
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun MangaSubscriptionUpdatesDialog(
+    updates: List<com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult>,
+    selectedChapterIds: Set<String>,
+    onToggleChapter: (String, Boolean) -> Unit,
+    onSelectAll: () -> Unit,
+    onClearAll: () -> Unit,
+    onDownload: () -> Unit,
+    onClose: () -> Unit,
+    enableHaptics: Boolean,
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    val selectedCount = selectedChapterIds.size
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 520.dp),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = strings.mangaUpdatesTitle,
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Outlined.Close, contentDescription = "Close")
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AssistChip(
+                        onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onSelectAll()
+                        },
+                        label = { Text(strings.mangaUpdatesSelectAll) }
+                    )
+                    AssistChip(
+                        onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onClearAll()
+                        },
+                        label = { Text(strings.mangaUpdatesDeselectAll) }
+                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    updates.forEach { update ->
+                        val series = update.page.details
+                        item(key = series.seriesId) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                ) {
+                                    MangaCover(
+                                        coverUrl = series.coverUrl,
+                                        title = series.title,
+                                        modifier = Modifier.size(40.dp, 60.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        text = series.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                update.newChapters.forEach { chapter ->
+                                    val isSelected = chapter.chapterId in selectedChapterIds
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                                onToggleChapter(chapter.chapterId, !isSelected)
+                                            }
+                                            .padding(start = 12.dp, top = 6.dp, bottom = 6.dp)
+                                    ) {
+                                        Checkbox(
+                                            checked = isSelected,
+                                            onCheckedChange = { checked ->
+                                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                                onToggleChapter(chapter.chapterId, checked)
+                                            }
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = chapter.title,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(onClick = onClose) {
+                        Text(strings.mangaUpdatesBtnCancel)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                            onDownload()
+                        },
+                        enabled = selectedCount > 0
+                    ) {
+                        Text(strings.get("manga_updates_btn_download", selectedCount))
+                    }
+                }
+            }
+        }
+    }
+}

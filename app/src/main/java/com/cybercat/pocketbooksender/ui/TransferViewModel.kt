@@ -203,8 +203,8 @@ class TransferViewModel @Inject constructor(
         queueManager.updateMangaSeries(id, series)
     }
 
-    fun updateQueuedMangaSeries(series: String) {
-        queueManager.updateQueuedMangaSeries(series)
+    fun updateQueuedMangaSeries(oldSeries: String?, series: String) {
+        queueManager.updateQueuedMangaSeries(oldSeries, series)
     }
 
     fun uploadAll() {

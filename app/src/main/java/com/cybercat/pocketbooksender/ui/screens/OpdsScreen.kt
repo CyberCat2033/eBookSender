@@ -129,6 +129,11 @@ fun OpdsScreen(
     onSelectAllMangaChapters: () -> Unit,
     onClearMangaChapterSelection: () -> Unit,
     onDownloadSelectedMangaChapters: () -> Unit,
+    onToggleSubscriptionUpdateChapter: (String, Boolean) -> Unit,
+    onSelectAllSubscriptionUpdateChapters: () -> Unit,
+    onClearSubscriptionUpdateChapters: () -> Unit,
+    onDownloadSubscriptionUpdates: () -> Unit,
+    onCloseSubscriptionUpdates: () -> Unit,
     onAuthUsernameChanged: (String) -> Unit,
     onAuthPasswordChanged: (String) -> Unit,
     onDismissAuthDialog: () -> Unit,
@@ -165,7 +170,11 @@ fun OpdsScreen(
         onMangaBack()
     }
 
-    BackHandler(enabled = mangaSearchActive && mangaState.selectedSeries == null && !mangaSelectionActive && !mangaState.browserVisible) {
+    BackHandler(enabled = webMode == WebContentMode.Manga && mangaState.subscriptionUpdatesVisible && !mangaState.isDownloading) {
+        onCloseSubscriptionUpdates()
+    }
+
+    BackHandler(enabled = mangaSearchActive && mangaState.selectedSeries == null && !mangaSelectionActive && !mangaState.browserVisible && !mangaState.subscriptionUpdatesVisible) {
         onMangaSearchChanged("")
     }
 
@@ -330,6 +339,11 @@ fun OpdsScreen(
                         onSetMangaSeriesSubscribed = onSetMangaSeriesSubscribed,
                         onCheckSubscriptions = onCheckMangaSubscriptions,
                         onDownloadSelected = onDownloadSelectedMangaChapters,
+                        onToggleSubscriptionUpdateChapter = onToggleSubscriptionUpdateChapter,
+                        onSelectAllSubscriptionUpdateChapters = onSelectAllSubscriptionUpdateChapters,
+                        onClearSubscriptionUpdateChapters = onClearSubscriptionUpdateChapters,
+                        onDownloadSubscriptionUpdates = onDownloadSubscriptionUpdates,
+                        onCloseSubscriptionUpdates = onCloseSubscriptionUpdates,
                     )
                 } else {
                     val catalog = state.catalog

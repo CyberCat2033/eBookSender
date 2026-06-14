@@ -255,5 +255,14 @@
   "opds_auth_btn_login": "Login",
   "opds_username_label": "Username",
   "opds_password_label": "Password",
-  "catalog_error_failed_to_delete": "Failed to delete files"
+  "catalog_error_failed_to_delete": "Failed to delete files",
+  "manga_updates_title": "New Manga Chapters",
+  "manga_updates_btn_download": "Download Selected (%1$d)",
+  "manga_updates_btn_cancel": "Cancel",
+  "manga_updates_select_all": "Select All",
+  "manga_updates_deselect_all": "Deselect All",
+  "manga_updates_no_new": "No new chapters found",
+  "manga_updates_select_series_to_rename": "Select series to rename:",
+  "manga_updates_all_series": "All series",
+  "manga_updates_rename_desc": "Renaming series for %1$d chapters of series \"%2$s\"."
 }

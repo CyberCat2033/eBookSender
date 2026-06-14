@@ -6,6 +6,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesDetails
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.data.manga.MangaSourceSummary
+import com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult
 
 data class MangaUiState(
     val sources: List<MangaSourceSummary> = emptyList(),
@@ -26,6 +27,9 @@ data class MangaUiState(
     val downloadedChapters: List<MangaChapterDownload> = emptyList(),
     val savedSeries: List<MangaSeriesBookmark> = emptyList(),
     val isCheckingSubscriptions: Boolean = false,
+    val subscriptionUpdates: List<MangaSubscriptionCheckResult> = emptyList(),
+    val subscriptionUpdatesVisible: Boolean = false,
+    val selectedSubscriptionUpdateChapterIds: Set<String> = emptySet(),
     val lastReadChapterText: String? = null,
     val statusMessage: String? = null,
     val errorMessage: String? = null,

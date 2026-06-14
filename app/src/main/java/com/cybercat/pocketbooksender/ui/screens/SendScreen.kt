@@ -114,7 +114,7 @@ fun SendScreen(
     onCategoryChanged: (String, BookCategory) -> Unit,
     onDocumentsTagChanged: (String, String) -> Unit,
     onMangaSeriesChanged: (String, String) -> Unit,
-    onQueuedMangaSeriesChanged: (String) -> Unit,
+    onQueuedMangaSeriesChanged: (String?, String) -> Unit,
     onUploadAll: () -> Unit,
 ) {
     val strings = LocalStrings.current
@@ -166,12 +166,12 @@ fun SendScreen(
 
     if (showMangaBatchEditor && canBatchRenameManga) {
         MangaBatchEditorDialog(
-            count = activeMangaQueue.size,
-            currentSeries = activeMangaQueue.commonMangaSeries(),
+            activeMangaQueue = activeMangaQueue,
             suggestions = state.mangaSeriesSuggestions,
+            enableHaptics = state.settings.enableHaptics,
             onDismiss = { showMangaBatchEditor = false },
-            onApply = { series ->
-                onQueuedMangaSeriesChanged(series)
+            onApply = { oldSeries, series ->
+                onQueuedMangaSeriesChanged(oldSeries, series)
             },
         )
     }
@@ -410,22 +410,65 @@ private fun AnimatedRemovalItem(
 
 @Composable
 private fun MangaBatchEditorDialog(
-    count: Int,
-    currentSeries: String,
+    activeMangaQueue: List<UploadItem>,
     suggestions: List<String>,
+    enableHaptics: Boolean,
     onDismiss: () -> Unit,
-    onApply: (String) -> Unit,
+    onApply: (String?, String) -> Unit,
 ) {
-    var series by remember(currentSeries) { mutableStateOf(currentSeries) }
+    val uniqueSeries = remember(activeMangaQueue) {
+        activeMangaQueue.mapNotNull { item -> item.mangaSeries?.takeIf(String::isNotBlank) }
+            .distinctBy { it.lowercase() }
+    }
 
+    var targetSeries by remember { mutableStateOf<String?>(uniqueSeries.firstOrNull()) }
+    var series by remember(targetSeries) { mutableStateOf(targetSeries ?: "") }
+
+    val context = LocalContext.current
+    val view = LocalView.current
     val strings = LocalStrings.current
     AnimatedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(strings.sendRenameMangaTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (uniqueSeries.size > 1) {
+                    Text(
+                        text = strings.mangaUpdatesSelectSeriesToRename,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = targetSeries == null,
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                targetSeries = null
+                            },
+                            label = { Text(strings.mangaUpdatesAllSeries) }
+                        )
+                        uniqueSeries.forEach { s ->
+                            FilterChip(
+                                selected = targetSeries == s,
+                                onClick = {
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    targetSeries = s
+                                },
+                                label = { Text(s) }
+                            )
+                        }
+                    }
+                }
+
                 Text(
-                    text = strings.get("send_batch_rename_desc", count),
+                    text = if (targetSeries == null) {
+                        strings.get("send_batch_rename_desc", activeMangaQueue.size)
+                    } else {
+                        val countForTarget = activeMangaQueue.count { it.mangaSeries?.equals(targetSeries, ignoreCase = true) == true }
+                        strings.get("manga_updates_rename_desc", countForTarget, targetSeries ?: "")
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -446,7 +489,10 @@ private fun MangaBatchEditorDialog(
                         .forEach { suggestion ->
                             FilterChip(
                                 selected = series.equals(suggestion, ignoreCase = true),
-                                onClick = { series = suggestion },
+                                onClick = {
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    series = suggestion
+                                },
                                 label = { Text(suggestion) },
                             )
                         }
@@ -457,7 +503,8 @@ private fun MangaBatchEditorDialog(
             val dismiss = LocalDismissDialog.current
             TextButton(
                 onClick = {
-                    onApply(series.trim())
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                    onApply(targetSeries, series.trim())
                     dismiss()
                 },
                 enabled = series.isNotBlank(),
@@ -467,7 +514,10 @@ private fun MangaBatchEditorDialog(
         },
         dismissButton = {
             val dismiss = LocalDismissDialog.current
-            TextButton(onClick = dismiss) {
+            TextButton(onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                dismiss()
+            }) {
                 Text(strings.sendRenameMangaCancel)
             }
         },
@@ -539,6 +589,16 @@ private fun ConnectionPanel(
                     label = { Text(strings.sendLabelFtp) },
                     leadingIcon = {
                         Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (state.ftpInput.isNotEmpty()) {
+                            IconButton(onClick = {
+                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onFtpInputChanged("")
+                            }) {
+                                Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                            }
+                        }
                     },
                     placeholder = { Text(strings.sendPlaceholderFtp) },
                 )

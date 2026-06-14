@@ -255,5 +255,14 @@
   "opds_auth_btn_login": "Войти",
   "opds_username_label": "Имя пользователя",
   "opds_password_label": "Пароль",
-  "catalog_error_failed_to_delete": "Не удалось удалить файлы"
+  "catalog_error_failed_to_delete": "Не удалось удалить файлы",
+  "manga_updates_title": "Новые главы манги",
+  "manga_updates_btn_download": "Скачать выбранные (%1$d)",
+  "manga_updates_btn_cancel": "Отмена",
+  "manga_updates_select_all": "Выбрать все",
+  "manga_updates_deselect_all": "Снять выделение",
+  "manga_updates_no_new": "Новых глав не обнаружено",
+  "manga_updates_select_series_to_rename": "Выберите серию для изменения:",
+  "manga_updates_all_series": "Все серии",
+  "manga_updates_rename_desc": "Изменение названия серии для %1$d глав серии «%2$s»."
 }

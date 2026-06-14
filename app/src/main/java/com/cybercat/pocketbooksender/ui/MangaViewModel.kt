@@ -12,6 +12,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaDownloadProgress
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesDetails
+import com.cybercat.pocketbooksender.data.manga.MangaChapterDownloadTarget
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.UploadItem
@@ -328,8 +329,8 @@ class MangaViewModel @Inject constructor(
             runCatching {
                 mangaRepository.checkSubscriptions()
             }.onSuccess { results ->
-                val firstWithNewChapters = results.firstOrNull { it.newChapters.isNotEmpty() }
-                if (firstWithNewChapters == null) {
+                val updatesWithNews = results.filter { it.newChapters.isNotEmpty() }
+                if (updatesWithNews.isEmpty()) {
                     _mangaState.update { state ->
                         state.copy(
                             isCheckingSubscriptions = false,
@@ -341,42 +342,20 @@ class MangaViewModel @Inject constructor(
                     return@onSuccess
                 }
 
-                val page = firstWithNewChapters.page
-                val selectedIds = firstWithNewChapters.newChapters
-                    .mapTo(mutableSetOf()) { it.chapterId }
-                val newCount = selectedIds.size
-                val subscribedWithNews = results.count { it.newChapters.isNotEmpty() }
-                val lastRead = lastReadChapterText(page.details, catalogRepository.catalog.value)
+                val allNewChapterIds = updatesWithNews.flatMap { update ->
+                    update.newChapters.map { it.chapterId }
+                }.toSet()
 
-                // Trigger navigation/switch to manga pane externally if observed by ui shell
-                // We'll update the browser mode directly!
-                // Wait! To update opds webMode we need to access OpdsViewModel.
-                // But in PocketBookSenderApp, it can just observe manga series updates and handle it!
-                // Actually, let's keep the State change in _mangaState. In ui layer, we can handle webMode switch based on search/subscription details.
-                // However, we can also let this ViewModel handle mangaState updates, and let the shell decide.
                 _mangaState.update { state ->
                     state.copy(
-                        selectedSeries = page.details,
-                        selectedSeriesScrollRequest = state.selectedSeriesScrollRequest + 1,
-                        chapters = page.chapters,
-                        selectedChapterIds = selectedIds,
                         isCheckingSubscriptions = false,
-                        isLoading = false,
-                        browserVisible = false,
-                        lastReadChapterText = lastRead,
-                        statusMessage = localizationManager.currentStrings.value.get("manga_status_new_chapters_selected", newCount),
+                        subscriptionUpdates = updatesWithNews,
+                        subscriptionUpdatesVisible = true,
+                        selectedSubscriptionUpdateChapterIds = allNewChapterIds,
+                        statusMessage = null,
                         errorMessage = null,
                     )
                 }
-
-                val strings = localizationManager.currentStrings.value
-                showMangaStatus(
-                    if (subscribedWithNews > 1) {
-                        strings.get("manga_status_new_chapters_multiple_series", newCount, subscribedWithNews)
-                    } else {
-                        strings.get("manga_status_new_chapters_selected", newCount)
-                    },
-                )
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
                 _mangaState.update { state ->
@@ -384,6 +363,121 @@ class MangaViewModel @Inject constructor(
                         isCheckingSubscriptions = false,
                         statusMessage = null,
                         errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotCheckSubscriptions,
+                    )
+                }
+            }
+        }
+    }
+
+    fun toggleSubscriptionUpdateChapter(chapterId: String, selected: Boolean) {
+        _mangaState.update { state ->
+            val selectedIds = if (selected) {
+                state.selectedSubscriptionUpdateChapterIds + chapterId
+            } else {
+                state.selectedSubscriptionUpdateChapterIds - chapterId
+            }
+            state.copy(selectedSubscriptionUpdateChapterIds = selectedIds)
+        }
+    }
+
+    fun selectAllSubscriptionUpdateChapters() {
+        _mangaState.update { state ->
+            val allIds = state.subscriptionUpdates.flatMap { update ->
+                update.newChapters.map { it.chapterId }
+            }.toSet()
+            state.copy(selectedSubscriptionUpdateChapterIds = allIds)
+        }
+    }
+
+    fun clearSubscriptionUpdateChapters() {
+        _mangaState.update { state ->
+            state.copy(selectedSubscriptionUpdateChapterIds = emptySet())
+        }
+    }
+
+    fun closeSubscriptionUpdates() {
+        _mangaState.update { state ->
+            state.copy(
+                subscriptionUpdatesVisible = false,
+                subscriptionUpdates = emptyList(),
+                selectedSubscriptionUpdateChapterIds = emptySet(),
+            )
+        }
+    }
+
+    fun downloadSubscriptionUpdates() {
+        val snapshot = _mangaState.value
+        val selectedIds = snapshot.selectedSubscriptionUpdateChapterIds
+        val targets = snapshot.subscriptionUpdates.flatMap { update ->
+            update.newChapters
+                .filter { it.chapterId in selectedIds }
+                .map { chapter -> MangaChapterDownloadTarget(update.page.details, chapter) }
+        }
+
+        if (targets.isEmpty()) {
+            _mangaState.update { it.copy(errorMessage = localizationManager.currentStrings.value.mangaErrorSelectChaptersFirst) }
+            return
+        }
+
+        val strings = localizationManager.currentStrings.value
+        _mangaState.update { state ->
+            state.copy(
+                subscriptionUpdatesVisible = false,
+                isDownloading = true,
+                downloadProgress = MangaDownloadUiProgress(
+                    title = strings.mangaStatusDownloadPreparing,
+                    detail = when (targets.size) {
+                        1 -> strings.mangaStatusDownloadOneChapterSelected
+                        else -> strings.get("manga_status_download_chapters_selected", targets.size)
+                    },
+                    currentChapterTitle = null,
+                    progress = null,
+                ),
+                errorMessage = null,
+                statusMessage = null,
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                mangaRepository.downloadMultipleSeriesChapters(
+                    sourceId = snapshot.selectedSourceId,
+                    targets = targets,
+                    onProgress = { progress ->
+                        _mangaState.update { state ->
+                            state.copy(
+                                downloadProgress = progress.toUiProgress(
+                                    previousProgress = state.downloadProgress?.progress,
+                                ),
+                            )
+                        }
+                    },
+                )
+            }.onSuccess { result ->
+                if (result.downloaded.isNotEmpty()) {
+                    addDownloadedMangaFiles(result.downloaded)
+                }
+
+                _mangaState.update { state ->
+                    state.copy(
+                        isDownloading = false,
+                        downloadProgress = null,
+                        subscriptionUpdates = emptyList(),
+                        selectedSubscriptionUpdateChapterIds = emptySet(),
+                        errorMessage = formatMangaFailures(result.failedMessages),
+                    )
+                }
+
+                if (result.downloaded.isNotEmpty()) {
+                    showMangaStatus(localizationManager.currentStrings.value.get("manga_status_added_to_queue", result.downloaded.size))
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _mangaState.update { state ->
+                    state.copy(
+                        isDownloading = false,
+                        downloadProgress = null,
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotDownload,
                     )
                 }
             }
@@ -440,7 +534,7 @@ class MangaViewModel @Inject constructor(
                 )
             }.onSuccess { result ->
                 if (result.downloaded.isNotEmpty()) {
-                    addDownloadedMangaFiles(series, result.downloaded)
+                    addDownloadedMangaFiles(result.downloaded)
                 }
 
                 _mangaState.update { state ->
@@ -472,7 +566,6 @@ class MangaViewModel @Inject constructor(
     }
 
     private fun addDownloadedMangaFiles(
-        series: MangaSeriesDetails,
         downloaded: List<MangaDownloadedChapter>,
     ) {
         val items = downloaded.map { item ->
@@ -485,7 +578,7 @@ class MangaViewModel @Inject constructor(
                 extension = ext,
                 category = BookCategory.Manga,
                 title = item.chapter.title,
-                mangaSeries = series.title,
+                mangaSeries = item.series.title,
                 mangaVolume = item.chapter.title,
                 plannedPath = "",
             )

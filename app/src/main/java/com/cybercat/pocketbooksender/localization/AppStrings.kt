@@ -294,6 +294,17 @@ class AppStrings(
 
     // Catalog Errors
     val catalogErrorFailedToDelete: String get() = get("catalog_error_failed_to_delete")
+
+    // Manga Updates Dialog
+    val mangaUpdatesTitle: String get() = get("manga_updates_title")
+    val mangaUpdatesBtnDownload: String get() = get("manga_updates_btn_download")
+    val mangaUpdatesBtnCancel: String get() = get("manga_updates_btn_cancel")
+    val mangaUpdatesSelectAll: String get() = get("manga_updates_select_all")
+    val mangaUpdatesDeselectAll: String get() = get("manga_updates_deselect_all")
+    val mangaUpdatesNoNew: String get() = get("manga_updates_no_new")
+    val mangaUpdatesSelectSeriesToRename: String get() = get("manga_updates_select_series_to_rename")
+    val mangaUpdatesAllSeries: String get() = get("manga_updates_all_series")
+    val mangaUpdatesRenameDesc: String get() = get("manga_updates_rename_desc")
 }
 
 val LocalStrings = androidx.compose.runtime.staticCompositionLocalOf<AppStrings> {

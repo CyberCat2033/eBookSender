@@ -215,12 +215,15 @@ class UploadQueueManager @Inject constructor(
         }
     }
 
-    fun updateQueuedMangaSeries(series: String) {
+    fun updateQueuedMangaSeries(oldSeries: String?, series: String) {
         val trimmedSeries = series.trim()
         if (trimmedSeries.isBlank()) return
         _queue.update { current ->
             val updated = current.map { item ->
-                if (item.category == BookCategory.Manga && item.status != UploadStatus.Uploaded) {
+                if (item.category == BookCategory.Manga &&
+                    item.status != UploadStatus.Uploaded &&
+                    (oldSeries == null || item.mangaSeries?.equals(oldSeries, ignoreCase = true) == true)
+                ) {
                     replan(item.copy(mangaSeries = trimmedSeries), activeSettings)
                 } else {
                     item
@@ -240,6 +243,16 @@ class UploadQueueManager @Inject constructor(
         val extension = displayName.bookExtension().ifBlank { "bin" }
         val title = displayName.bookTitleWithoutExtension()
         val category = classifier.classify(displayName)
+        
+        var mangaSeries: String? = null
+        var mangaVolume: String? = null
+        
+        if (category == BookCategory.Manga) {
+            val parsed = parseMangaFilename(displayName)
+            mangaSeries = parsed.first ?: settings.defaultMangaSeries
+            mangaVolume = parsed.second ?: title
+        }
+
         val preliminary = UploadItem(
             id = UUID.randomUUID().toString(),
             sourceUri = uri.toString(),
@@ -249,13 +262,33 @@ class UploadQueueManager @Inject constructor(
             title = title,
             author = if (category == BookCategory.Books) "Unknown Author" else null,
             documentsTag = if (category == BookCategory.Documents) settings.defaultDocumentsTag else null,
-            mangaSeries = if (category == BookCategory.Manga) settings.defaultMangaSeries else null,
-            mangaVolume = if (category == BookCategory.Manga) title else null,
+            mangaSeries = mangaSeries,
+            mangaVolume = mangaVolume,
             plannedPath = "",
             status = UploadStatus.Preparing,
         )
 
         return replan(preliminary, settings)
+    }
+
+    private fun parseMangaFilename(displayName: String): Pair<String?, String?> {
+        val title = displayName.bookTitleWithoutExtension().trim()
+        val patterns = listOf(
+            Regex("""^(.*?)\s+-\s+(.+)$"""), // "Naruto - 01", "Naruto - Chapter 1"
+            Regex("""^(.*?)\s*_\s*(\d+.*)$"""), // "Naruto_01", "Naruto_ch1"
+            Regex("""^(.*?)\s+([vV]?\d+.*)$"""), // "Naruto 01", "Naruto v01", "Naruto ch01"
+        )
+        for (pattern in patterns) {
+            val match = pattern.matchEntire(title)
+            if (match != null) {
+                val series = match.groupValues[1].trim().replace('_', ' ')
+                val volume = match.groupValues[2].trim()
+                if (series.isNotBlank() && volume.isNotBlank()) {
+                    return Pair(series, volume)
+                }
+            }
+        }
+        return Pair(null, null)
     }
 
     private suspend fun loadMetadata(item: UploadItem) {

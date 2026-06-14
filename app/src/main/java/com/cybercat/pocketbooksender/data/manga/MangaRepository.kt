@@ -201,13 +201,12 @@ class MangaRepository @Inject constructor(
         }
     }
 
-    suspend fun downloadChapters(
+    suspend fun downloadMultipleSeriesChapters(
         sourceId: String,
-        series: MangaSeriesDetails,
-        chapters: List<MangaChapter>,
+        targets: List<MangaChapterDownloadTarget>,
         onProgress: suspend (MangaDownloadProgress) -> Unit = {},
     ): MangaDownloadResult = withContext(Dispatchers.IO) {
-        if (chapters.isEmpty()) {
+        if (targets.isEmpty()) {
             throw IllegalArgumentException("No manga chapters selected")
         }
 
@@ -218,16 +217,16 @@ class MangaRepository @Inject constructor(
         val pageSemaphore = Semaphore(MaxParallelPages)
 
         val outcomes = coroutineScope {
-            chapters.map { chapter ->
+            targets.map { target ->
                 async {
                     chapterSemaphore.withPermit {
                         downloadChapter(
                             sourceId = sourceId,
-                            series = series,
-                            chapter = chapter,
+                            series = target.series,
+                            chapter = target.chapter,
                             adapter = adapter,
                             outputDir = outputDir,
-                            totalChapters = chapters.size,
+                            totalChapters = targets.size,
                             completedChapters = completedChapters,
                             pageSemaphore = pageSemaphore,
                             onProgress = onProgress,
@@ -249,6 +248,16 @@ class MangaRepository @Inject constructor(
             downloaded = downloaded,
             failedMessages = errors,
         )
+    }
+
+    suspend fun downloadChapters(
+        sourceId: String,
+        series: MangaSeriesDetails,
+        chapters: List<MangaChapter>,
+        onProgress: suspend (MangaDownloadProgress) -> Unit = {},
+    ): MangaDownloadResult {
+        val targets = chapters.map { MangaChapterDownloadTarget(series, it) }
+        return downloadMultipleSeriesChapters(sourceId, targets, onProgress)
     }
 
     private suspend fun downloadChapter(
@@ -344,6 +353,7 @@ class MangaRepository @Inject constructor(
 
             ChapterDownloadOutcome(
                 downloaded = MangaDownloadedChapter(
+                    series = series,
                     chapter = chapter,
                     file = outputFile,
                 ),
@@ -569,8 +579,14 @@ data class MangaDownloadResult(
 )
 
 data class MangaDownloadedChapter(
+    val series: MangaSeriesDetails,
     val chapter: MangaChapter,
     val file: File,
+)
+
+data class MangaChapterDownloadTarget(
+    val series: MangaSeriesDetails,
+    val chapter: MangaChapter,
 )
 
 data class MangaDownloadProgress(
