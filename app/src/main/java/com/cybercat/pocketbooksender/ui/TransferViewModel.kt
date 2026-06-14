@@ -51,6 +51,7 @@ class TransferViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val transferCoordinator: TransferCoordinator,
     private val ftpGateway: FtpGateway,
+    private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
 ) : ViewModel() {
 
     private val _ftpInput = MutableStateFlow("")
@@ -144,7 +145,7 @@ class TransferViewModel @Inject constructor(
         val parsedDevice = FtpUrlParser.parse(rawLink)
             .getOrElse { error ->
                 _isConnecting.value = false
-                _errorMessage.value = error.message ?: "Invalid FTP link"
+                _errorMessage.value = error.message ?: localizationManager.currentStrings.value.transferErrorInvalidFtp
                 return
             }
 
@@ -210,11 +211,11 @@ class TransferViewModel @Inject constructor(
         val snapshot = uiState.value
         val device = snapshot.connectedDevice
         if (device == null) {
-            _errorMessage.value = "Connect PocketBook before upload"
+            _errorMessage.value = localizationManager.currentStrings.value.transferErrorConnectBeforeUpload
             return
         }
         if (snapshot.queue.isEmpty()) {
-            _errorMessage.value = "Queue is empty"
+            _errorMessage.value = localizationManager.currentStrings.value.transferErrorQueueEmpty
             return
         }
 
@@ -224,7 +225,7 @@ class TransferViewModel @Inject constructor(
                 it.status == UploadStatus.Skipped
         }
         if (uploadableItems.isEmpty()) {
-            _errorMessage.value = "No pending files to upload"
+            _errorMessage.value = localizationManager.currentStrings.value.transferErrorNoPendingFiles
             return
         }
 
@@ -336,12 +337,13 @@ class TransferViewModel @Inject constructor(
     }
 
     private fun Throwable.toFtpConnectionMessage(device: PocketBookDevice): String {
+        val strings = localizationManager.currentStrings.value
         val reason = when (this) {
-            is UnknownHostException -> "Host ${device.host} cannot be resolved"
-            is ConnectException -> "Connection to ${device.host}:${device.port} refused"
-            is SocketTimeoutException -> "Timeout connecting to ${device.host}:${device.port}"
+            is UnknownHostException -> strings.get("transfer_error_reason_host_unresolved", device.host)
+            is ConnectException -> strings.get("transfer_error_reason_connection_refused", device.host, device.port)
+            is SocketTimeoutException -> strings.get("transfer_error_reason_connection_timeout", device.host, device.port)
             else -> message ?: this::class.java.simpleName
         }
-        return "Cannot connect to ${device.host}:${device.port}: $reason"
+        return strings.get("transfer_error_cannot_connect", device.host, device.port, reason)
     }
 }

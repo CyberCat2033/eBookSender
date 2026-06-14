@@ -30,6 +30,7 @@ import kotlinx.coroutines.withContext
 class TransferForegroundService : Service() {
     @Inject lateinit var ftpGateway: FtpGateway
     @Inject lateinit var transferCoordinator: TransferCoordinator
+    @Inject lateinit var localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -40,14 +41,14 @@ class TransferForegroundService : Service() {
 
         val request = transferCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
         if (request == null) {
-            startForeground(NOTIFICATION_ID, buildProgressNotification("Nothing to upload", 0, 0))
+            startForeground(NOTIFICATION_ID, buildProgressNotification(localizationManager.currentStrings.value.transferNotificationNothingToUpload, 0, 0))
             stopSelf(startId)
             return START_NOT_STICKY
         }
 
         startForeground(
             NOTIFICATION_ID,
-            buildProgressNotification("Uploading books", 0, request.items.size),
+            buildProgressNotification(localizationManager.currentStrings.value.transferNotificationUploadingBooks, 0, request.items.size),
         )
 
         serviceScope.launch {
@@ -77,7 +78,7 @@ class TransferForegroundService : Service() {
                         total = total,
                     ),
                 )
-                notifyProgress("Uploading ${index + 1} of $total", index, total)
+                notifyProgress(localizationManager.currentStrings.value.get("transfer_notification_uploading_progress", index + 1, total), index, total)
 
                 val result = uploadItem(request, item)
                 result
@@ -96,12 +97,12 @@ class TransferForegroundService : Service() {
                         transferCoordinator.emit(
                             TransferEvent.ItemFailed(
                                 itemId = item.id,
-                                message = error.message ?: "FTP upload failed",
+                                message = error.message ?: localizationManager.currentStrings.value.transferErrorFtpUploadFailed,
                             ),
                         )
                     }
 
-                notifyProgress("Uploaded $uploaded, failed $failed", uploaded + failed, total)
+                notifyProgress(localizationManager.currentStrings.value.get("transfer_notification_progress_summary", uploaded, failed), uploaded + failed, total)
             }
         } finally {
             transferCoordinator.emit(
@@ -127,7 +128,7 @@ class TransferForegroundService : Service() {
         val input = preparedInput.openStream() ?: contentResolver.openInputStream(preparedInput.uri)
             ?: run {
                 preparedInput.cleanup()
-                return Result.failure(IllegalStateException("Cannot open ${item.originalName}"))
+                return Result.failure(IllegalStateException(localizationManager.currentStrings.value.get("transfer_error_cannot_open_file", item.originalName)))
             }
 
         val fileSize = preparedInput.size.takeIf { it > 0L } ?: getUriSize(uri)
@@ -171,7 +172,7 @@ class TransferForegroundService : Service() {
                 CbzMetadataRewriter.findSingleCommonRootFolder(input)
             }
             val source = contentResolver.openInputStream(uri)
-                ?: throw IllegalStateException("Cannot open ${item.originalName}")
+                ?: throw IllegalStateException(localizationManager.currentStrings.value.get("transfer_error_cannot_open_file", item.originalName))
             source.use { input ->
                 tempFile.outputStream().use { output ->
                     CbzMetadataRewriter.rewrite(
@@ -234,10 +235,11 @@ class TransferForegroundService : Service() {
     }
 
     private fun showFinishedNotification(uploaded: Int, failed: Int) {
+        val strings = localizationManager.currentStrings.value
         val text = if (failed == 0) {
-            "Uploaded $uploaded files"
+            strings.get("transfer_notification_complete_success", uploaded)
         } else {
-            "Uploaded $uploaded, failed $failed"
+            strings.get("transfer_notification_progress_summary", uploaded, failed)
         }
 
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -246,7 +248,7 @@ class TransferForegroundService : Service() {
             nextCompletionNotificationId(),
             NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_upload)
-                .setContentTitle("PocketBook transfer complete")
+                .setContentTitle(strings.transferNotificationCompleteTitle)
                 .setContentText(text)
                 .setContentIntent(contentIntent())
                 .setAutoCancel(true)
@@ -262,7 +264,7 @@ class TransferForegroundService : Service() {
     ): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_upload)
-            .setContentTitle("PocketBook Sender")
+            .setContentTitle(localizationManager.currentStrings.value.transferNotificationTitle)
             .setContentText(text)
             .setContentIntent(contentIntent())
             .setOngoing(true)

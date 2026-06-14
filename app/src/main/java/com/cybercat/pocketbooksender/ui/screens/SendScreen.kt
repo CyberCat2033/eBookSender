@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -547,6 +548,7 @@ private fun ConnectionPanel(
                         },
                         enabled = !state.isConnecting,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                     ) {
                         Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
@@ -563,6 +565,7 @@ private fun ConnectionPanel(
                         },
                         enabled = !state.isConnecting,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                     ) {
                         Icon(Icons.Outlined.WifiTethering, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
@@ -629,6 +632,7 @@ private fun ActionRow(
             },
             enabled = canAddFiles,
             modifier = Modifier.weight(1f).fillMaxHeight(),
+            contentPadding = PaddingValues(horizontal = 8.dp),
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
@@ -641,6 +645,7 @@ private fun ActionRow(
             },
             enabled = canUpload,
             modifier = Modifier.weight(1f).fillMaxHeight(),
+            contentPadding = PaddingValues(horizontal = 8.dp),
         ) {
             Icon(Icons.Outlined.Upload, contentDescription = null)
             Spacer(Modifier.width(8.dp))

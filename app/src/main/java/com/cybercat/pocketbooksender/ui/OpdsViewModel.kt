@@ -35,6 +35,7 @@ class OpdsViewModel @Inject constructor(
     private val opdsRepository: OpdsRepository,
     private val settingsRepository: SettingsRepository,
     private val queueManager: UploadQueueManager,
+    private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
 ) : ViewModel() {
 
     private val _opdsState = MutableStateFlow(OpdsUiState())
@@ -108,11 +109,11 @@ class OpdsViewModel @Inject constructor(
                     url = url.trim(),
                 )
             }.onSuccess {
-                showOpdsStatus("Source saved")
+                showOpdsStatus(localizationManager.currentStrings.value.opdsStatusSourceSaved)
             }.onFailure { error ->
                 _opdsState.update { state ->
                     state.copy(
-                        errorMessage = error.message ?: "Cannot save OPDS source",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotSaveSource,
                         statusMessage = null,
                     )
                 }
@@ -135,7 +136,7 @@ class OpdsViewModel @Inject constructor(
         if (trimmedUrl.isBlank()) {
             _opdsState.update {
                 it.copy(
-                    errorMessage = "OPDS URL is empty",
+                    errorMessage = localizationManager.currentStrings.value.opdsErrorUrlEmpty,
                     statusMessage = null,
                 )
             }
@@ -147,7 +148,7 @@ class OpdsViewModel @Inject constructor(
             url = trimmedUrl,
             history = previous.currentUrl?.let { currentUrl ->
                 previous.history + OpdsHistoryEntry(
-                    title = previous.catalog?.title ?: "Catalog",
+                    title = previous.catalog?.title ?: localizationManager.currentStrings.value.opdsHistoryFallbackTitle,
                     url = currentUrl,
                 )
             } ?: previous.history,
@@ -176,7 +177,7 @@ class OpdsViewModel @Inject constructor(
         if (query.isBlank()) {
             _opdsState.update {
                 it.copy(
-                    errorMessage = "Search query is empty",
+                    errorMessage = localizationManager.currentStrings.value.opdsErrorSearchEmpty,
                     statusMessage = null,
                 )
             }
@@ -186,7 +187,7 @@ class OpdsViewModel @Inject constructor(
         if (currentUrl == null || catalog == null) {
             _opdsState.update {
                 it.copy(
-                    errorMessage = "Open OPDS catalog first",
+                    errorMessage = localizationManager.currentStrings.value.opdsErrorOpenCatalogFirst,
                     statusMessage = null,
                 )
             }
@@ -200,7 +201,7 @@ class OpdsViewModel @Inject constructor(
         if (searchLink == null) {
             _opdsState.update {
                 it.copy(
-                    errorMessage = "This catalog page does not expose OPDS search",
+                    errorMessage = localizationManager.currentStrings.value.opdsErrorNoSearchSupport,
                     statusMessage = null,
                 )
             }
@@ -223,7 +224,7 @@ class OpdsViewModel @Inject constructor(
                     runCatching { loadOpdsSearchCatalog(searchUrl, query) }.getOrNull()
                 }
                 if (catalogs.isEmpty()) {
-                    throw IllegalStateException("Cannot open OPDS search")
+                    throw IllegalStateException(localizationManager.currentStrings.value.opdsErrorCannotOpenSearch)
                 }
                 catalogs
             }.onSuccess { catalogs ->
@@ -246,7 +247,7 @@ class OpdsViewModel @Inject constructor(
                 _opdsState.update { state ->
                     state.copy(
                         isLoading = false,
-                        errorMessage = error.message ?: "Cannot build OPDS search URL",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotBuildSearchUrl,
                         statusMessage = null,
                     )
                 }
@@ -262,7 +263,7 @@ class OpdsViewModel @Inject constructor(
         if (baseUrl == null) {
             _opdsState.update {
                 it.copy(
-                    errorMessage = "Open OPDS catalog first",
+                    errorMessage = localizationManager.currentStrings.value.opdsErrorOpenCatalogFirst,
                     statusMessage = null,
                 )
             }
@@ -285,13 +286,13 @@ class OpdsViewModel @Inject constructor(
                 _opdsState.update { state ->
                     state.copy(isDownloading = false)
                 }
-                showOpdsStatus("Added to queue: ${file.name}")
+                showOpdsStatus(localizationManager.currentStrings.value.get("opds_status_added_to_queue", file.name))
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
                 _opdsState.update { state ->
                     state.copy(
                         isDownloading = false,
-                        errorMessage = error.message ?: "Cannot download OPDS book",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotDownload,
                         statusMessage = null,
                     )
                 }
@@ -304,7 +305,7 @@ class OpdsViewModel @Inject constructor(
         if (baseUrl == null) {
             _opdsState.update {
                 it.copy(
-                    errorMessage = "Open OPDS catalog first",
+                    errorMessage = localizationManager.currentStrings.value.opdsErrorOpenCatalogFirst,
                     statusMessage = null,
                 )
             }
@@ -317,7 +318,7 @@ class OpdsViewModel @Inject constructor(
         if (downloadable.isEmpty()) {
             _opdsState.update {
                 it.copy(
-                    errorMessage = "No selected downloadable entries",
+                    errorMessage = localizationManager.currentStrings.value.opdsErrorNoDownloadableEntries,
                     statusMessage = null,
                 )
             }
@@ -358,7 +359,7 @@ class OpdsViewModel @Inject constructor(
                 state.copy(
                     isDownloading = false,
                     errorMessage = if (failedCount > 0) {
-                        "Failed to download $failedCount entries"
+                        localizationManager.currentStrings.value.get("opds_error_failed_to_download_entries", failedCount)
                     } else {
                         null
                     },
@@ -366,7 +367,7 @@ class OpdsViewModel @Inject constructor(
             }
 
             if (downloadedFiles.isNotEmpty()) {
-                showOpdsStatus("Added to queue: ${downloadedFiles.size} files")
+                showOpdsStatus(localizationManager.currentStrings.value.get("opds_status_added_to_queue_multiple", downloadedFiles.size))
             }
         }
     }
@@ -401,7 +402,7 @@ class OpdsViewModel @Inject constructor(
                 _opdsState.update { state ->
                     state.copy(
                         isLoading = false,
-                        errorMessage = error.message ?: "Cannot open OPDS catalog",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotOpenCatalog,
                         statusMessage = null,
                     )
                 }

@@ -145,14 +145,14 @@ class SettingsViewModel @Inject constructor(
         val device = connectionManager.connectedDevice.value ?: return false
         return ftpGateway.rename(device, oldName, newName)
             .onSuccess {
-                showTemporaryStatus("Renamed '$oldName' to '$newName' on device")
+                showTemporaryStatus(localizationManager.currentStrings.value.get("settings_renamed_on_device", oldName, newName))
             }
             .onFailure { error ->
                 val errorMsg = error.message.orEmpty()
                 val statusText = when {
                     errorMsg.contains("550") || errorMsg.contains("exist", ignoreCase = true) ->
-                        "Could not rename: folder '$newName' already exists"
-                    else -> "Could not rename folder on device: ${error.localizedMessage ?: "unknown error"}"
+                        localizationManager.currentStrings.value.get("settings_rename_failed_exists", newName)
+                    else -> localizationManager.currentStrings.value.get("settings_rename_failed_error", error.localizedMessage ?: "unknown error")
                 }
                 showTemporaryStatus(statusText)
             }
@@ -218,7 +218,7 @@ class SettingsViewModel @Inject constructor(
             }
 
             if (totalBytes == 0L) {
-                showTemporaryStatus("Nothing to clear")
+                showTemporaryStatus(localizationManager.currentStrings.value.settingsNothingToClear)
                 return@launch
             }
 
@@ -228,7 +228,7 @@ class SettingsViewModel @Inject constructor(
             runCatching { File(context.cacheDir, "pocketbook-catalog").deleteRecursively() }
 
             val sizeInMb = totalBytes.toDouble() / (1024.0 * 1024.0)
-            val message = String.format(java.util.Locale.US, "Cleared %.2f MB", sizeInMb)
+            val message = localizationManager.currentStrings.value.get("settings_cleared_cache", sizeInMb)
             showTemporaryStatus(message)
         }
     }

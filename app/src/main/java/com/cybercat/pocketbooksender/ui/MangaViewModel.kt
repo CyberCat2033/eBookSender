@@ -34,6 +34,7 @@ class MangaViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val catalogRepository: DeviceCatalogRepository,
     private val queueManager: UploadQueueManager,
+    private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
 ) : ViewModel() {
 
     private val _mangaState = MutableStateFlow(MangaUiState())
@@ -148,7 +149,7 @@ class MangaViewModel @Inject constructor(
         val snapshot = _mangaState.value
         val query = snapshot.searchInput.trim()
         if (query.isBlank()) {
-            _mangaState.update { it.copy(errorMessage = "Manga search query is empty") }
+            _mangaState.update { it.copy(errorMessage = localizationManager.currentStrings.value.mangaErrorSearchEmpty) }
             return
         }
 
@@ -183,7 +184,7 @@ class MangaViewModel @Inject constructor(
                     )
                 }
                 if (results.isEmpty()) {
-                    showMangaStatus("No manga found")
+                    showMangaStatus(localizationManager.currentStrings.value.mangaStatusNoMangaFound)
                 }
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
@@ -191,7 +192,7 @@ class MangaViewModel @Inject constructor(
                     state.copy(
                         isLoading = false,
                         browserVisible = false,
-                        errorMessage = error.message ?: "Cannot search manga source",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotSearch,
                         statusMessage = null,
                     )
                 }
@@ -236,7 +237,7 @@ class MangaViewModel @Inject constructor(
                     state.copy(
                         isLoading = false,
                         browserVisible = false,
-                        errorMessage = error.message ?: "Cannot open manga series",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotOpenSeries,
                         statusMessage = null,
                     )
                 }
@@ -287,7 +288,7 @@ class MangaViewModel @Inject constructor(
                 if (error is kotlinx.coroutines.CancellationException) throw error
                 _mangaState.update { state ->
                     state.copy(
-                        errorMessage = error.message ?: "Cannot update favorite manga",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotUpdateFavorite,
                         statusMessage = null,
                     )
                 }
@@ -304,7 +305,7 @@ class MangaViewModel @Inject constructor(
                 if (error is kotlinx.coroutines.CancellationException) throw error
                 _mangaState.update { state ->
                     state.copy(
-                        errorMessage = error.message ?: "Cannot update manga subscription",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotUpdateSubscription,
                         statusMessage = null,
                     )
                 }
@@ -318,7 +319,7 @@ class MangaViewModel @Inject constructor(
         _mangaState.update { state ->
             state.copy(
                 isCheckingSubscriptions = true,
-                statusMessage = "Checking subscriptions",
+                statusMessage = localizationManager.currentStrings.value.mangaStatusCheckingSubscriptions,
                 errorMessage = null,
             )
         }
@@ -336,7 +337,7 @@ class MangaViewModel @Inject constructor(
                             errorMessage = null,
                         )
                     }
-                    showMangaStatus("No new manga chapters")
+                    showMangaStatus(localizationManager.currentStrings.value.mangaStatusNoNewChapters)
                     return@onSuccess
                 }
 
@@ -363,16 +364,17 @@ class MangaViewModel @Inject constructor(
                         isLoading = false,
                         browserVisible = false,
                         lastReadChapterText = lastRead,
-                        statusMessage = "$newCount new chapters selected",
+                        statusMessage = localizationManager.currentStrings.value.get("manga_status_new_chapters_selected", newCount),
                         errorMessage = null,
                     )
                 }
 
+                val strings = localizationManager.currentStrings.value
                 showMangaStatus(
                     if (subscribedWithNews > 1) {
-                        "$newCount new chapters selected, $subscribedWithNews series have updates"
+                        strings.get("manga_status_new_chapters_multiple_series", newCount, subscribedWithNews)
                     } else {
-                        "$newCount new chapters selected"
+                        strings.get("manga_status_new_chapters_selected", newCount)
                     },
                 )
             }.onFailure { error ->
@@ -381,7 +383,7 @@ class MangaViewModel @Inject constructor(
                     state.copy(
                         isCheckingSubscriptions = false,
                         statusMessage = null,
-                        errorMessage = error.message ?: "Cannot check manga subscriptions",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotCheckSubscriptions,
                     )
                 }
             }
@@ -392,24 +394,25 @@ class MangaViewModel @Inject constructor(
         val snapshot = _mangaState.value
         val series = snapshot.selectedSeries
         if (series == null) {
-            _mangaState.update { it.copy(errorMessage = "Open manga series first") }
+            _mangaState.update { it.copy(errorMessage = localizationManager.currentStrings.value.mangaErrorOpenSeriesFirst) }
             return
         }
 
         val selectedChapters = snapshot.selectedChapters
         if (selectedChapters.isEmpty()) {
-            _mangaState.update { it.copy(errorMessage = "Select manga chapters first") }
+            _mangaState.update { it.copy(errorMessage = localizationManager.currentStrings.value.mangaErrorSelectChaptersFirst) }
             return
         }
 
+        val strings = localizationManager.currentStrings.value
         _mangaState.update { state ->
             state.copy(
                 isDownloading = true,
                 downloadProgress = MangaDownloadUiProgress(
-                    title = "Preparing manga download",
+                    title = strings.mangaStatusDownloadPreparing,
                     detail = when (selectedChapters.size) {
-                        1 -> "1 chapter selected"
-                        else -> "${selectedChapters.size} chapters selected"
+                        1 -> strings.mangaStatusDownloadOneChapterSelected
+                        else -> strings.get("manga_status_download_chapters_selected", selectedChapters.size)
                     },
                     currentChapterTitle = null,
                     progress = null,
@@ -453,7 +456,7 @@ class MangaViewModel @Inject constructor(
                 }
 
                 if (result.downloaded.isNotEmpty()) {
-                    showMangaStatus("Added to queue: ${result.downloaded.size} chapters")
+                    showMangaStatus(localizationManager.currentStrings.value.get("manga_status_added_to_queue", result.downloaded.size))
                 }
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) throw error
@@ -461,7 +464,7 @@ class MangaViewModel @Inject constructor(
                     state.copy(
                         isDownloading = false,
                         downloadProgress = null,
-                        errorMessage = error.message ?: "Cannot download manga chapters",
+                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotDownload,
                     )
                 }
             }
@@ -511,7 +514,7 @@ class MangaViewModel @Inject constructor(
                 )
             }
             if (shouldShowLoginSuccess) {
-                showMangaStatus("Successfully signed in to com-x.life")
+                showMangaStatus(localizationManager.currentStrings.value.mangaStatusLoginSuccess)
             }
         }
     }
@@ -530,7 +533,7 @@ class MangaViewModel @Inject constructor(
 
         val file = group.lastReadFile ?: return null
         val progress = when {
-            file.completed -> "completed"
+            file.completed -> localizationManager.currentStrings.value.mangaProgressCompleted
             file.readProgressPercent != null -> "${file.readProgressPercent}%"
             else -> null
         }
@@ -598,36 +601,37 @@ class MangaViewModel @Inject constructor(
             .coerceAtMost(progressCap)
             .coerceAtLeast(previousSafeProgress)
 
+        val strings = localizationManager.currentStrings.value
         val step = when {
-            detail.equals("Preparing", ignoreCase = true) -> "Preparing chapter"
-            detail.equals("Downloading archive", ignoreCase = true) -> "Downloading archive"
-            detail.equals("Archive downloaded", ignoreCase = true) -> "Archive saved"
+            detail.equals("Preparing", ignoreCase = true) -> strings.mangaProgressStepPreparing
+            detail.equals("Downloading archive", ignoreCase = true) -> strings.mangaProgressStepDownloadingArchive
+            detail.equals("Archive downloaded", ignoreCase = true) -> strings.mangaProgressStepArchiveSaved
             detail.equals("Archive unavailable, downloading pages", ignoreCase = true) ->
-                "Archive unavailable, switching to pages"
+                strings.mangaProgressStepSwitchingToPages
             !detail.isNullOrBlank() -> detail
-            totalPages > 0 -> "Downloading pages"
-            else -> "Downloading chapter"
+            totalPages > 0 -> strings.mangaProgressStepDownloadingPages
+            else -> strings.mangaProgressStepDownloadingChapter
         }
         val chapterProgressText = if (allChaptersComplete) {
-            "All chapters saved"
+            strings.mangaProgressAllChaptersSaved
         } else {
-            "$completedChapterCount of $safeTotalChapters done"
+            strings.get("manga_progress_chapters_done", completedChapterCount, safeTotalChapters)
         }
         val detailText = when {
             allChaptersComplete ->
                 chapterProgressText
             archiveTotal != null && detail.equals("Downloading archive", ignoreCase = true) ->
-                "$chapterProgressText - archive ${archiveBytesRead.formatBytes()} of ${archiveTotal.formatBytes()}"
+                strings.get("manga_progress_detail_archive", chapterProgressText, archiveBytesRead.formatBytes(), archiveTotal.formatBytes())
             totalPages > 0 && completedPages >= totalPages ->
-                "$chapterProgressText - finalizing chapter"
+                strings.get("manga_progress_detail_finalizing", chapterProgressText)
             totalPages > 0 && detail.isNullOrBlank() ->
-                "$chapterProgressText - page $completedPages of $totalPages"
+                strings.get("manga_progress_detail_page", chapterProgressText, completedPages, totalPages)
             else ->
-                "$chapterProgressText - $step"
+                strings.get("manga_progress_detail_generic", chapterProgressText, step)
         }
 
         return MangaDownloadUiProgress(
-            title = "${(progress * 100).toInt()}% downloaded",
+            title = strings.get("manga_download_progress_title", (progress * 100).toInt()),
             detail = detailText,
             currentChapterTitle = chapterTitle,
             progress = progress,
@@ -639,7 +643,7 @@ class MangaViewModel @Inject constructor(
         val visible = failedMessages.take(3).joinToString("\n")
         val hiddenCount = failedMessages.size - 3
         return if (hiddenCount > 0) {
-            "$visible\n...and $hiddenCount more failed"
+            localizationManager.currentStrings.value.get("manga_error_failures_summary", visible, hiddenCount)
         } else {
             visible
         }

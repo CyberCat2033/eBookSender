@@ -23,6 +23,7 @@ class CatalogViewModel @Inject constructor(
     private val deviceCatalogRepository: DeviceCatalogRepository,
     private val connectionManager: ConnectionManager,
     private val settingsRepository: SettingsRepository,
+    private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
 ) : ViewModel() {
 
     private val _isEditMode = MutableStateFlow(false)
@@ -142,7 +143,7 @@ class CatalogViewModel @Inject constructor(
                 _selectedFilePaths.value = emptySet()
                 _isEditMode.value = false
             }.onFailure { error ->
-                _deleteErrorMessage.value = error.message ?: "Failed to delete files"
+                _deleteErrorMessage.value = error.message ?: localizationManager.currentStrings.value.catalogErrorFailedToDelete
             }
             _isDeleting.value = false
         }
