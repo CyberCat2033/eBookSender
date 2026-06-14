@@ -41,7 +41,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material3.AlertDialog
+import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.LocalDismissDialog
+import com.cybercat.pocketbooksender.ui.LocalDismissDialogAfter
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -95,13 +97,14 @@ private fun ValidatedSettingsField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
+    resetKey: Any = Unit,
     leadingIcon: ImageVector? = null,
     placeholder: String = "",
     imeAction: ImeAction = ImeAction.Next,
     onPreviewChange: ((String) -> Unit)? = null,
     validation: (String) -> String = { it }
 ) {
-    var textFieldValue by remember(value) {
+    var textFieldValue by remember(value, resetKey) {
         mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
     }
     val focusManager = LocalFocusManager.current
@@ -252,39 +255,65 @@ fun SettingsScreen(
     val view = LocalView.current
     val strings = LocalStrings.current
 
-    state.pendingRename?.let { pending ->
-        AlertDialog(
-            onDismissRequest = onCancelPendingRename,
-            title = { Text(strings.settingsDialogTitle) },
-            text = {
-                val folderDescription = when (pending.folderType) {
-                    FolderType.Books -> strings.settingsBooksFolder
-                    FolderType.Documents -> strings.settingsDocsFolder
-                    FolderType.Manga -> strings.settingsMangaFolder
-                }
-                Text(strings.get("settings_dialog_body", folderDescription, pending.newName))
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.CONFIRM)
-                        onConfirmPendingRename()
+    // --- Rename warning dialog: local lifecycle for animated dismiss ---
+    var showRenameWarning by remember { mutableStateOf(false) }
+    var pendingRenameSnapshot by remember { mutableStateOf<PendingRename?>(null) }
+    var folderFieldResetKey by remember { mutableStateOf(0) }
+    val hadPendingRename = remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.pendingRename) {
+        val hasPending = state.pendingRename != null
+        if (hasPending) {
+            pendingRenameSnapshot = state.pendingRename
+            showRenameWarning = true
+        }
+        // When pendingRename disappears (cancel OR confirm), reset folder fields
+        if (hadPendingRename.value && !hasPending) folderFieldResetKey++
+        hadPendingRename.value = hasPending
+    }
+
+    if (showRenameWarning) {
+        pendingRenameSnapshot?.let { pending ->
+            AnimatedAlertDialog(
+                onDismissRequest = {
+                    showRenameWarning = false
+                    onCancelPendingRename()
+                },
+                title = { Text(strings.settingsDialogTitle) },
+                text = {
+                    val folderDescription = when (pending.folderType) {
+                        FolderType.Books -> strings.settingsBooksFolder
+                        FolderType.Documents -> strings.settingsDocsFolder
+                        FolderType.Manga -> strings.settingsMangaFolder
                     }
-                ) {
-                    Text(strings.settingsDialogConfirm)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                        onCancelPendingRename()
+                    Text(strings.get("settings_dialog_body", folderDescription, pending.newName))
+                },
+                confirmButton = {
+                    val dismiss = LocalDismissDialog.current
+                    TextButton(
+                        onClick = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.CONFIRM)
+                            onConfirmPendingRename()
+                            dismiss()
+                        }
+                    ) {
+                        Text(strings.settingsDialogConfirm)
                     }
-                ) {
-                    Text(strings.settingsDialogCancel)
-                }
-            }
-        )
+                },
+                dismissButton = {
+                    val dismiss = LocalDismissDialog.current
+                    TextButton(
+                        onClick = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onCancelPendingRename()
+                            dismiss()
+                        }
+                    ) {
+                        Text(strings.settingsDialogCancel)
+                    }
+                },
+            )
+        }
     }
 
     Scaffold(
@@ -319,6 +348,7 @@ fun SettingsScreen(
                     value = state.settings.booksFolderName,
                     onValueChange = onBooksFolderNameChanged,
                     label = strings.settingsBooksFolder,
+                    resetKey = folderFieldResetKey,
                     leadingIcon = Icons.Outlined.Folder,
                     validation = { input ->
                         val clean = input.trim().replace(Regex("[\\\\/:*?\"<>|]"), "")
@@ -329,6 +359,7 @@ fun SettingsScreen(
                     value = state.settings.documentsFolderName,
                     onValueChange = onDocumentsFolderNameChanged,
                     label = strings.settingsDocsFolder,
+                    resetKey = folderFieldResetKey,
                     leadingIcon = Icons.Outlined.Folder,
                     validation = { input ->
                         val clean = input.trim().replace(Regex("[\\\\/:*?\"<>|]"), "")
@@ -339,6 +370,7 @@ fun SettingsScreen(
                     value = state.settings.mangaFolderName,
                     onValueChange = onMangaFolderNameChanged,
                     label = strings.settingsMangaFolder,
+                    resetKey = folderFieldResetKey,
                     leadingIcon = Icons.Outlined.Folder,
                     imeAction = ImeAction.Next,
                     validation = { input ->
@@ -521,10 +553,23 @@ fun SettingsScreen(
                 }
 
                 if (showLanguageDialog) {
-                    AlertDialog(
+                    AnimatedAlertDialog(
                         onDismissRequest = { showLanguageDialog = false },
                         title = { Text(strings.settingsLanguageDialogTitle) },
                         text = {
+                            val dismissAfter = LocalDismissDialogAfter.current
+                            val selectLanguage: (String) -> Unit = { languageCode ->
+                                view.performHapticIfAllowed(
+                                    context,
+                                    state.settings.enableHaptics,
+                                    HapticFeedbackConstants.VIRTUAL_KEY,
+                                )
+                                dismissAfter {
+                                    if (languageCode != state.settings.languageCode) {
+                                        onLanguageChanged(languageCode)
+                                    }
+                                }
+                            }
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -536,9 +581,7 @@ fun SettingsScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                            onLanguageChanged("system")
-                                            showLanguageDialog = false
+                                            selectLanguage("system")
                                         }
                                         .padding(vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -546,9 +589,7 @@ fun SettingsScreen(
                                     androidx.compose.material3.RadioButton(
                                         selected = state.settings.languageCode == "system",
                                         onClick = {
-                                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                            onLanguageChanged("system")
-                                            showLanguageDialog = false
+                                            selectLanguage("system")
                                         }
                                     )
                                     Spacer(Modifier.width(8.dp))
@@ -561,9 +602,7 @@ fun SettingsScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
-                                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                                onLanguageChanged(locale.code)
-                                                showLanguageDialog = false
+                                                selectLanguage(locale.code)
                                             }
                                             .padding(vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically
@@ -571,9 +610,7 @@ fun SettingsScreen(
                                         androidx.compose.material3.RadioButton(
                                             selected = state.settings.languageCode == locale.code,
                                             onClick = {
-                                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                                onLanguageChanged(locale.code)
-                                                showLanguageDialog = false
+                                                selectLanguage(locale.code)
                                             }
                                         )
                                         Spacer(Modifier.width(8.dp))
@@ -582,12 +619,12 @@ fun SettingsScreen(
                                 }
                             }
                         },
-                        confirmButton = {},
                         dismissButton = {
-                            TextButton(onClick = { showLanguageDialog = false }) {
+                            val dismiss = LocalDismissDialog.current
+                            TextButton(onClick = dismiss) {
                                 Text(strings.settingsDialogCancel)
                             }
-                        }
+                        },
                     )
                 }
 

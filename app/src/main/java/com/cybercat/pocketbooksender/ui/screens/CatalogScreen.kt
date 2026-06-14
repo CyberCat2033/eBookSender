@@ -49,7 +49,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Checkbox
@@ -103,6 +102,8 @@ import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
 import com.cybercat.pocketbooksender.ui.CatalogUiState
+import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -200,28 +201,38 @@ fun CatalogScreen(
     }
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var deleteAfterDismiss by remember { mutableStateOf(false) }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
+        AnimatedAlertDialog(
+            onDismissRequest = {
+                showDeleteConfirm = false
+                if (deleteAfterDismiss) {
+                    deleteAfterDismiss = false
+                    onDeleteSelectedFiles()
+                }
+            },
             title = { Text(strings.catalogDeleteTitle) },
             text = { Text(strings.get("catalog_delete_body", state.selectedFilePaths.size)) },
             confirmButton = {
+                val dismiss = LocalDismissDialog.current
                 TextButton(
                     onClick = {
                         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
-                        showDeleteConfirm = false
-                        onDeleteSelectedFiles()
+                        deleteAfterDismiss = true
+                        dismiss()
                     }
                 ) {
                     Text(strings.catalogDeleteBtn, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
+                val dismiss = LocalDismissDialog.current
                 TextButton(
                     onClick = {
                         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                        showDeleteConfirm = false
+                        deleteAfterDismiss = false
+                        dismiss()
                     }
                 ) {
                     Text(strings.catalogDeleteCancel)
@@ -231,15 +242,16 @@ fun CatalogScreen(
     }
 
     if (state.deleteErrorMessage != null) {
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = onClearDeleteError,
             title = { Text(strings.catalogDeleteErrorTitle) },
             text = { Text(state.deleteErrorMessage) },
             confirmButton = {
+                val dismiss = LocalDismissDialog.current
                 TextButton(
                     onClick = {
                         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                        onClearDeleteError()
+                        dismiss()
                     }
                 ) {
                     Text(strings.catalogDeleteErrorBtn)
@@ -249,9 +261,8 @@ fun CatalogScreen(
     }
 
     if (state.isDeleting) {
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = {},
-            confirmButton = {},
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -261,7 +272,6 @@ fun CatalogScreen(
                     Text(strings.catalogDeletingState, style = MaterialTheme.typography.titleMedium)
                 }
             },
-            dismissButton = null
         )
     }
 

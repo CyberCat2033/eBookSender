@@ -139,8 +139,10 @@ CBR handling:
   - Books/Documents/Manga filename templates
   - dynamic color toggle
   - language code preference
+- Material 3 dialogs use shared fade/scale animations across Settings, Catalog, Web/OPDS, and send-queue batch editing.
 - App language localization & support for external translations:
   - Choose language from Settings, including a "System language" option.
+  - Applying a language waits until the language picker finishes its close animation, avoiding a mid-dialog UI repaint.
   - Automatically queries system locale settings to determine the interface language on first run.
   - Basic locales (`en.json`, `ru.json`) are packaged in `assets/locales/`.
   - Community members can drop `.json` translation files into `<rootPath>/PocketBookSender/locales/` on the device.
@@ -149,6 +151,7 @@ CBR handling:
   - Integrates with CompositionLocal `LocalStrings` for reactive runtime language switching without app restarts.
 - Disconnected folder rename warnings:
   - Changing folder settings while disconnected displays a warning dialog prompting the user to either force save locally or cancel.
+  - Canceling this warning resets the edited folder field back to the last saved value.
   - This warning can be disabled globally from the interface settings menu.
 - Full `BackHandler` support in the Web (OPDS/Manga) tab to prevent unexpected app closes:
   - Dismisses the login browser if open.
@@ -221,7 +224,7 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 # Release APK size: 2.3 MB
 ```
 
-The latest release verification also covered catalog edit-mode selection fixes, animated Material 3 selection/deletion transitions, settings-based manga path planning for downloaded chapters, and CBZ internal metadata normalization before upload.
+The latest release verification also covered animated Material 3 dialogs, delayed language application after the picker closes, folder rename warning cancel rollback, catalog edit-mode selection fixes, settings-based manga path planning for downloaded chapters, and CBZ internal metadata normalization before upload.
 
 Both debug and optimized/signed release versions are verified:
 

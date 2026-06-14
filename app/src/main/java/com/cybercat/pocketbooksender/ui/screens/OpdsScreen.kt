@@ -41,8 +41,9 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SelectAll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -180,20 +181,26 @@ fun OpdsScreen(
             onPasswordChanged = { newSourcePassword = it },
             onDismiss = { showAddSourceDialog = false },
             onSaveSource = {
+                // Dismiss handled by animated dismiss inside AddSourceDialog
                 onSaveSource(newSourceTitle, newSourceUrl, newSourceUsername.ifBlank { null }, newSourcePassword.ifBlank { null })
-                showAddSourceDialog = false
             },
         )
     }
 
-    if (state.showAuthDialog) {
+    // Local lifecycle for credential dialog so animated exit can play before ViewModel state clears
+    var credentialsDialogVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(state.showAuthDialog) {
+        if (state.showAuthDialog) credentialsDialogVisible = true
+    }
+
+    if (credentialsDialogVisible) {
         OpdsCredentialsDialog(
             sourceTitle = state.authDialogSourceTitle,
             username = state.authDialogUsername,
             password = state.authDialogPassword,
             onUsernameChanged = onAuthUsernameChanged,
             onPasswordChanged = onAuthPasswordChanged,
-            onDismiss = onDismissAuthDialog,
+            onDismiss = { credentialsDialogVisible = false; onDismissAuthDialog() },
             onSave = onSaveCredentials,
         )
     }
@@ -572,7 +579,7 @@ private fun AddSourceDialog(
     onSaveSource: () -> Unit,
 ) {
     val strings = LocalStrings.current
-    AlertDialog(
+    AnimatedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(strings.opdsAddTitle) },
         text = {
@@ -611,15 +618,17 @@ private fun AddSourceDialog(
             }
         },
         confirmButton = {
+            val dismiss = LocalDismissDialog.current
             Button(
-                onClick = onSaveSource,
+                onClick = { onSaveSource(); dismiss() },
                 enabled = url.isNotBlank(),
             ) {
                 Text(strings.opdsBtnSave)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            val dismiss = LocalDismissDialog.current
+            TextButton(onClick = dismiss) {
                 Text(strings.opdsBtnCancel)
             }
         },
@@ -721,7 +730,7 @@ private fun OpdsCredentialsDialog(
     onSave: () -> Unit,
 ) {
     val strings = LocalStrings.current
-    AlertDialog(
+    AnimatedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(strings.opdsAuthRequiredTitle) },
         text = {
@@ -750,12 +759,14 @@ private fun OpdsCredentialsDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onSave) {
+            val dismiss = LocalDismissDialog.current
+            Button(onClick = { onSave(); dismiss() }) {
                 Text(strings.opdsAuthBtnLogin)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            val dismiss = LocalDismissDialog.current
+            TextButton(onClick = dismiss) {
                 Text(strings.opdsBtnCancel)
             }
         },

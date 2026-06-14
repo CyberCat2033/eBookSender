@@ -41,7 +41,6 @@ import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.outlined.WifiTethering
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ElevatedCard
@@ -93,6 +92,8 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
+import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.TransferUiState
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
@@ -171,7 +172,6 @@ fun SendScreen(
             onDismiss = { showMangaBatchEditor = false },
             onApply = { series ->
                 onQueuedMangaSeriesChanged(series)
-                showMangaBatchEditor = false
             },
         )
     }
@@ -419,7 +419,7 @@ private fun MangaBatchEditorDialog(
     var series by remember(currentSeries) { mutableStateOf(currentSeries) }
 
     val strings = LocalStrings.current
-    AlertDialog(
+    AnimatedAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(strings.sendRenameMangaTitle) },
         text = {
@@ -454,15 +454,20 @@ private fun MangaBatchEditorDialog(
             }
         },
         confirmButton = {
+            val dismiss = LocalDismissDialog.current
             TextButton(
-                onClick = { onApply(series.trim()) },
+                onClick = {
+                    onApply(series.trim())
+                    dismiss()
+                },
                 enabled = series.isNotBlank(),
             ) {
                 Text(strings.sendRenameMangaApply)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            val dismiss = LocalDismissDialog.current
+            TextButton(onClick = dismiss) {
                 Text(strings.sendRenameMangaCancel)
             }
         },
