@@ -342,8 +342,8 @@ class MangaViewModel @Inject constructor(
                     return@onSuccess
                 }
 
-                val allNewChapterIds = updatesWithNews.flatMap { update ->
-                    update.newChapters.map { it.chapterId }
+                val allNewChapterKeys = updatesWithNews.flatMap { update ->
+                    update.newChapters.map { it.subscriptionUpdateSelectionKey() }
                 }.toSet()
 
                 _mangaState.update { state ->
@@ -351,7 +351,7 @@ class MangaViewModel @Inject constructor(
                         isCheckingSubscriptions = false,
                         subscriptionUpdates = updatesWithNews,
                         subscriptionUpdatesVisible = true,
-                        selectedSubscriptionUpdateChapterIds = allNewChapterIds,
+                        selectedSubscriptionUpdateChapterKeys = allNewChapterKeys,
                         statusMessage = null,
                         errorMessage = null,
                     )
@@ -369,29 +369,29 @@ class MangaViewModel @Inject constructor(
         }
     }
 
-    fun toggleSubscriptionUpdateChapter(chapterId: String, selected: Boolean) {
+    fun toggleSubscriptionUpdateChapter(chapterKey: String, selected: Boolean) {
         _mangaState.update { state ->
-            val selectedIds = if (selected) {
-                state.selectedSubscriptionUpdateChapterIds + chapterId
+            val selectedKeys = if (selected) {
+                state.selectedSubscriptionUpdateChapterKeys + chapterKey
             } else {
-                state.selectedSubscriptionUpdateChapterIds - chapterId
+                state.selectedSubscriptionUpdateChapterKeys - chapterKey
             }
-            state.copy(selectedSubscriptionUpdateChapterIds = selectedIds)
+            state.copy(selectedSubscriptionUpdateChapterKeys = selectedKeys)
         }
     }
 
     fun selectAllSubscriptionUpdateChapters() {
         _mangaState.update { state ->
-            val allIds = state.subscriptionUpdates.flatMap { update ->
-                update.newChapters.map { it.chapterId }
+            val allKeys = state.subscriptionUpdates.flatMap { update ->
+                update.newChapters.map { it.subscriptionUpdateSelectionKey() }
             }.toSet()
-            state.copy(selectedSubscriptionUpdateChapterIds = allIds)
+            state.copy(selectedSubscriptionUpdateChapterKeys = allKeys)
         }
     }
 
     fun clearSubscriptionUpdateChapters() {
         _mangaState.update { state ->
-            state.copy(selectedSubscriptionUpdateChapterIds = emptySet())
+            state.copy(selectedSubscriptionUpdateChapterKeys = emptySet())
         }
     }
 
@@ -400,17 +400,17 @@ class MangaViewModel @Inject constructor(
             state.copy(
                 subscriptionUpdatesVisible = false,
                 subscriptionUpdates = emptyList(),
-                selectedSubscriptionUpdateChapterIds = emptySet(),
+                selectedSubscriptionUpdateChapterKeys = emptySet(),
             )
         }
     }
 
     fun downloadSubscriptionUpdates() {
         val snapshot = _mangaState.value
-        val selectedIds = snapshot.selectedSubscriptionUpdateChapterIds
+        val selectedKeys = snapshot.selectedSubscriptionUpdateChapterKeys
         val targets = snapshot.subscriptionUpdates.flatMap { update ->
             update.newChapters
-                .filter { it.chapterId in selectedIds }
+                .filter { it.subscriptionUpdateSelectionKey() in selectedKeys }
                 .map { chapter -> MangaChapterDownloadTarget(update.page.details, chapter) }
         }
 
@@ -441,7 +441,6 @@ class MangaViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 mangaRepository.downloadMultipleSeriesChapters(
-                    sourceId = snapshot.selectedSourceId,
                     targets = targets,
                     onProgress = { progress ->
                         _mangaState.update { state ->
@@ -458,12 +457,35 @@ class MangaViewModel @Inject constructor(
                     addDownloadedMangaFiles(result.downloaded)
                 }
 
+                val downloadedKeys = result.downloaded.mapTo(mutableSetOf()) { downloaded ->
+                    downloaded.chapter.subscriptionUpdateSelectionKey()
+                }
+                val remainingUpdates = if (result.failedMessages.isEmpty()) {
+                    emptyList()
+                } else {
+                    snapshot.subscriptionUpdates.mapNotNull { update ->
+                        val remainingChapters = update.newChapters.filter { chapter ->
+                            val key = chapter.subscriptionUpdateSelectionKey()
+                            key in selectedKeys && key !in downloadedKeys
+                        }
+                        if (remainingChapters.isEmpty()) {
+                            null
+                        } else {
+                            update.copy(newChapters = remainingChapters)
+                        }
+                    }
+                }
+                val remainingKeys = remainingUpdates.flatMap { update ->
+                    update.newChapters.map { chapter -> chapter.subscriptionUpdateSelectionKey() }
+                }.toSet()
+
                 _mangaState.update { state ->
                     state.copy(
                         isDownloading = false,
                         downloadProgress = null,
-                        subscriptionUpdates = emptyList(),
-                        selectedSubscriptionUpdateChapterIds = emptySet(),
+                        subscriptionUpdates = remainingUpdates,
+                        subscriptionUpdatesVisible = remainingUpdates.isNotEmpty(),
+                        selectedSubscriptionUpdateChapterKeys = remainingKeys,
                         errorMessage = formatMangaFailures(result.failedMessages),
                     )
                 }
@@ -477,6 +499,7 @@ class MangaViewModel @Inject constructor(
                     state.copy(
                         isDownloading = false,
                         downloadProgress = null,
+                        subscriptionUpdatesVisible = snapshot.subscriptionUpdates.isNotEmpty(),
                         errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotDownload,
                     )
                 }

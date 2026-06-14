@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Image
@@ -74,6 +76,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -89,6 +92,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.cybercat.pocketbooksender.ui.BitmapCache
 import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
 import com.cybercat.pocketbooksender.localization.LocalStrings
+import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.subscriptionUpdateSelectionKey
+import com.cybercat.pocketbooksender.ui.subscriptionUpdateSeriesKey
+import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import androidx.compose.ui.platform.LocalView
 import android.view.HapticFeedbackConstants
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
@@ -414,7 +421,7 @@ fun MangaPane(
     if (state.subscriptionUpdatesVisible && state.subscriptionUpdates.isNotEmpty()) {
         MangaSubscriptionUpdatesDialog(
             updates = state.subscriptionUpdates,
-            selectedChapterIds = state.selectedSubscriptionUpdateChapterIds,
+            selectedChapterKeys = state.selectedSubscriptionUpdateChapterKeys,
             onToggleChapter = onToggleSubscriptionUpdateChapter,
             onSelectAll = onSelectAllSubscriptionUpdateChapters,
             onClearAll = onClearSubscriptionUpdateChapters,
@@ -1472,7 +1479,7 @@ private const val HtmlExtractDelayMillis = 900L
 @Composable
 fun MangaSubscriptionUpdatesDialog(
     updates: List<com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult>,
-    selectedChapterIds: Set<String>,
+    selectedChapterKeys: Set<String>,
     onToggleChapter: (String, Boolean) -> Unit,
     onSelectAll: () -> Unit,
     onClearAll: () -> Unit,
@@ -1483,56 +1490,78 @@ fun MangaSubscriptionUpdatesDialog(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
-    val selectedCount = selectedChapterIds.size
+    val selectedCount = selectedChapterKeys.size
+    val seriesKeys = remember(updates) {
+        updates.map { update -> update.page.details.subscriptionUpdateSeriesKey() }
+    }
+    val updatesStateKey = remember(seriesKeys) { seriesKeys.joinToString(separator = "\n") }
+    var collapsedSeriesKeys by rememberSaveable(updatesStateKey) { mutableStateOf<List<String>>(emptyList()) }
+    var downloadAfterDismiss by remember { mutableStateOf(false) }
 
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onClose,
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 520.dp),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-        ) {
+    fun toggleSeriesCollapsed(seriesKey: String) {
+        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+        collapsedSeriesKeys = if (seriesKey in collapsedSeriesKeys) {
+            collapsedSeriesKeys - seriesKey
+        } else {
+            collapsedSeriesKeys + seriesKey
+        }
+    }
+
+    AnimatedAlertDialog(
+        onDismissRequest = {
+            if (downloadAfterDismiss) {
+                downloadAfterDismiss = false
+                onDownload()
+            } else {
+                onClose()
+            }
+        },
+        modifier = Modifier.heightIn(max = 520.dp),
+        title = {
+            val dismiss = LocalDismissDialog.current
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = strings.mangaUpdatesTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        dismiss()
+                    }
+                ) {
+                    Icon(Icons.Outlined.Close, contentDescription = "Close")
+                }
+            }
+        },
+        text = {
             Column(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .heightIn(max = 380.dp)
                     .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = strings.mangaUpdatesTitle,
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Close")
-                    }
-                }
-
-                Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     AssistChip(
                         onClick = {
                             view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                             onSelectAll()
                         },
-                        label = { Text(strings.mangaUpdatesSelectAll) }
+                        label = { Text(strings.mangaUpdatesSelectAll) },
                     )
                     AssistChip(
                         onClick = {
                             view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                             onClearAll()
                         },
-                        label = { Text(strings.mangaUpdatesDeselectAll) }
+                        label = { Text(strings.mangaUpdatesDeselectAll) },
                     )
                 }
 
@@ -1540,82 +1569,143 @@ fun MangaSubscriptionUpdatesDialog(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     updates.forEach { update ->
                         val series = update.page.details
-                        item(key = series.seriesId) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val seriesKey = series.subscriptionUpdateSeriesKey()
+                        val collapsed = seriesKey in collapsedSeriesKeys
+
+                        item(key = seriesKey) {
+                            val seriesInteractionSource = remember(seriesKey) { MutableInteractionSource() }
+
+                            Column {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(
+                                            interactionSource = seriesInteractionSource,
+                                            indication = null,
+                                        ) {
+                                            toggleSeriesCollapsed(seriesKey)
+                                        }
+                                        .padding(vertical = 4.dp),
                                 ) {
                                     MangaCover(
                                         coverUrl = series.coverUrl,
                                         title = series.title,
-                                        modifier = Modifier.size(40.dp, 60.dp)
+                                        modifier = Modifier.size(40.dp, 60.dp),
                                     )
                                     Spacer(Modifier.width(10.dp))
                                     Text(
                                         text = series.title,
                                         style = MaterialTheme.typography.titleSmall,
                                         maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    val rotationState by animateFloatAsState(
+                                        targetValue = if (collapsed) 0f else 180f,
+                                        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                                        label = "SubscriptionUpdateSeriesChevronRotation",
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Outlined.ExpandMore,
+                                        contentDescription = if (collapsed) {
+                                            strings.catalogActionExpand
+                                        } else {
+                                            strings.catalogActionCollapse
+                                        },
+                                        modifier = Modifier.rotate(rotationState),
                                     )
                                 }
 
-                                update.newChapters.forEach { chapter ->
-                                    val isSelected = chapter.chapterId in selectedChapterIds
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                                onToggleChapter(chapter.chapterId, !isSelected)
-                                            }
-                                            .padding(start = 12.dp, top = 6.dp, bottom = 6.dp)
+                                AnimatedVisibility(
+                                    visible = !collapsed,
+                                    enter = expandVertically(
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                        expandFrom = Alignment.Top,
+                                    ),
+                                    exit = shrinkVertically(
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                        shrinkTowards = Alignment.Top,
+                                    ),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(top = 6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp),
                                     ) {
-                                        Checkbox(
-                                            checked = isSelected,
-                                            onCheckedChange = { checked ->
-                                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                                onToggleChapter(chapter.chapterId, checked)
+                                        update.newChapters.forEach { chapter ->
+                                            val chapterKey = chapter.subscriptionUpdateSelectionKey()
+                                            val isSelected = chapterKey in selectedChapterKeys
+
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        view.performHapticIfAllowed(
+                                                            context,
+                                                            enableHaptics,
+                                                            HapticFeedbackConstants.VIRTUAL_KEY,
+                                                        )
+                                                        onToggleChapter(chapterKey, !isSelected)
+                                                    }
+                                                    .padding(start = 12.dp, top = 6.dp, bottom = 6.dp),
+                                            ) {
+                                                Checkbox(
+                                                    checked = isSelected,
+                                                    onCheckedChange = { checked ->
+                                                        view.performHapticIfAllowed(
+                                                            context,
+                                                            enableHaptics,
+                                                            HapticFeedbackConstants.VIRTUAL_KEY,
+                                                        )
+                                                        onToggleChapter(chapterKey, checked)
+                                                    },
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    text = chapter.title,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
                                             }
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            text = chapter.title,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-
-                Row(
-                    horizontalArrangement = Arrangement.End,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    TextButton(onClick = onClose) {
-                        Text(strings.mangaUpdatesBtnCancel)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
-                            onDownload()
-                        },
-                        enabled = selectedCount > 0
-                    ) {
-                        Text(strings.get("manga_updates_btn_download", selectedCount))
-                    }
+            }
+        },
+        dismissButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    downloadAfterDismiss = false
+                    dismiss()
                 }
+            ) {
+                Text(strings.mangaUpdatesBtnCancel)
+            }
+        },
+        confirmButton = {
+            val dismiss = LocalDismissDialog.current
+            Button(
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                    downloadAfterDismiss = true
+                    dismiss()
+                },
+                enabled = selectedCount > 0
+            ) {
+                Text(strings.get("manga_updates_btn_download", selectedCount))
             }
         }
-    }
+    )
 }

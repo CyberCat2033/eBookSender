@@ -202,7 +202,6 @@ class MangaRepository @Inject constructor(
     }
 
     suspend fun downloadMultipleSeriesChapters(
-        sourceId: String,
         targets: List<MangaChapterDownloadTarget>,
         onProgress: suspend (MangaDownloadProgress) -> Unit = {},
     ): MangaDownloadResult = withContext(Dispatchers.IO) {
@@ -210,7 +209,6 @@ class MangaRepository @Inject constructor(
             throw IllegalArgumentException("No manga chapters selected")
         }
 
-        val adapter = adapter(sourceId)
         val outputDir = File(context.cacheDir, "manga").apply { mkdirs() }
         val completedChapters = AtomicInteger(0)
         val chapterSemaphore = Semaphore(MaxParallelChapters)
@@ -220,6 +218,8 @@ class MangaRepository @Inject constructor(
             targets.map { target ->
                 async {
                     chapterSemaphore.withPermit {
+                        val sourceId = target.resolvedSourceId()
+                        val adapter = adapter(sourceId)
                         downloadChapter(
                             sourceId = sourceId,
                             series = target.series,
@@ -256,8 +256,11 @@ class MangaRepository @Inject constructor(
         chapters: List<MangaChapter>,
         onProgress: suspend (MangaDownloadProgress) -> Unit = {},
     ): MangaDownloadResult {
+        require(sourceId == series.sourceId) {
+            "Manga series source does not match selected source"
+        }
         val targets = chapters.map { MangaChapterDownloadTarget(series, it) }
-        return downloadMultipleSeriesChapters(sourceId, targets, onProgress)
+        return downloadMultipleSeriesChapters(targets, onProgress)
     }
 
     private suspend fun downloadChapter(
@@ -605,6 +608,22 @@ private data class ChapterDownloadOutcome(
     val historyItem: MangaChapterHistoryEntity?,
     val errorMessage: String?,
 )
+
+private fun MangaChapterDownloadTarget.resolvedSourceId(): String {
+    val seriesSourceId = series.sourceId.trim()
+    val chapterSourceId = chapter.sourceId.trim()
+    require(seriesSourceId.isNotBlank() || chapterSourceId.isNotBlank()) {
+        "Manga chapter target has no source"
+    }
+    require(
+        seriesSourceId.isBlank() ||
+            chapterSourceId.isBlank() ||
+            seriesSourceId == chapterSourceId
+    ) {
+        "Manga chapter source does not match series source"
+    }
+    return seriesSourceId.ifBlank { chapterSourceId }
+}
 
 private data class DownloadedMangaPage(
     val index: Int,

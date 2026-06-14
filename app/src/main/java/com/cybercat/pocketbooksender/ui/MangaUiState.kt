@@ -29,7 +29,7 @@ data class MangaUiState(
     val isCheckingSubscriptions: Boolean = false,
     val subscriptionUpdates: List<MangaSubscriptionCheckResult> = emptyList(),
     val subscriptionUpdatesVisible: Boolean = false,
-    val selectedSubscriptionUpdateChapterIds: Set<String> = emptySet(),
+    val selectedSubscriptionUpdateChapterKeys: Set<String> = emptySet(),
     val lastReadChapterText: String? = null,
     val statusMessage: String? = null,
     val errorMessage: String? = null,
