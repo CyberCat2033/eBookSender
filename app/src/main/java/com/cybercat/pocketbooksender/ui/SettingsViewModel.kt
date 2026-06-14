@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
+import com.cybercat.pocketbooksender.model.AppTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -65,11 +67,51 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setEnableHaptics(value) }
     }
 
+    fun setTheme(value: AppTheme) {
+        viewModelScope.launch { settingsRepository.setTheme(value) }
+    }
+
     fun clearDownloadCache() {
         viewModelScope.launch {
+            val cacheDirs = listOf(
+                File(context.cacheDir, "previews"),
+                File(context.cacheDir, "opds"),
+                File(context.cacheDir, "manga"),
+                File(context.cacheDir, "pocketbook-catalog")
+            )
+
+            var totalBytes = 0L
+            for (dir in cacheDirs) {
+                totalBytes += getFolderSize(dir)
+            }
+
+            if (totalBytes == 0L) {
+                showTemporaryStatus("Nothing to clear")
+                return@launch
+            }
+
             BitmapCache.clear(context)
-            showTemporaryStatus("Download cache cleared")
+            runCatching { File(context.cacheDir, "opds").deleteRecursively() }
+            runCatching { File(context.cacheDir, "manga").deleteRecursively() }
+            runCatching { File(context.cacheDir, "pocketbook-catalog").deleteRecursively() }
+
+            val sizeInMb = totalBytes.toDouble() / (1024.0 * 1024.0)
+            val message = String.format(java.util.Locale.US, "Cleared %.2f MB", sizeInMb)
+            showTemporaryStatus(message)
         }
+    }
+
+    private fun getFolderSize(file: File): Long {
+        if (!file.exists()) return 0L
+        if (file.isFile) return file.length()
+        var size = 0L
+        val files = file.listFiles()
+        if (files != null) {
+            for (f in files) {
+                size += getFolderSize(f)
+            }
+        }
+        return size
     }
 
     private fun showTemporaryStatus(message: String) {

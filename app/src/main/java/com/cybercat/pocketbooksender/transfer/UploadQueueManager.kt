@@ -121,6 +121,33 @@ class UploadQueueManager @Inject constructor(
         }
     }
 
+    fun addPreparedItems(items: List<UploadItem>) {
+        if (items.isEmpty()) return
+
+        val existing = _queue.value.queueIdentityKeys()
+        val newItems = items
+            .filterNot { item -> item.sourceUri in existing }
+            .map { item ->
+                if (item.status == UploadStatus.Preparing) {
+                    item
+                } else {
+                    item.copy(status = UploadStatus.Preparing)
+                }
+            }
+
+        if (newItems.isEmpty()) return
+
+        _queue.update { current ->
+            (current + newItems).deduplicateQueue()
+        }
+
+        newItems.forEach { item ->
+            scope.launch {
+                loadMetadata(item)
+            }
+        }
+    }
+
     fun removeItem(id: String) {
         _queue.update { current ->
             current.filterNot { it.id == id }

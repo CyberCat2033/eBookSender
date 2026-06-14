@@ -10,6 +10,7 @@ data class AppSettings(
     val conflictStrategy: ConflictStrategy = ConflictStrategy.Ask,
     val useDynamicColor: Boolean = true,
     val enableHaptics: Boolean = true,
+    val theme: AppTheme = AppTheme.System,
 )
 
 enum class ConflictStrategy {
@@ -17,4 +18,10 @@ enum class ConflictStrategy {
     Replace,
     Rename,
     Skip,
+}
+
+enum class AppTheme {
+    Light,
+    Dark,
+    System,
 }

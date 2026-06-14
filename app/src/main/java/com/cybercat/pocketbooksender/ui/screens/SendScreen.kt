@@ -116,9 +116,12 @@ fun SendScreen(
     var clearInProgress by remember { mutableStateOf(false) }
     var clearAnimatedRowCount by remember { mutableStateOf(0) }
     val queue = state.queue
-    val activeQueue = remember(queue, state.isTransferActive) {
-        if (state.isTransferActive) {
-            queue
+    val activeTransferItemIds = state.activeTransferItemIds
+    val activeQueue = remember(queue, state.isTransferActive, activeTransferItemIds) {
+        if (state.isTransferActive && activeTransferItemIds.isNotEmpty()) {
+            queue.filter { item ->
+                item.status != UploadStatus.Uploaded || item.id in activeTransferItemIds
+            }
         } else {
             queue.filterNot { it.status == UploadStatus.Uploaded }
         }
@@ -329,7 +332,10 @@ fun SendScreen(
                 enter = fadeIn() + slideInVertically { height -> height / 2 },
                 exit = fadeOut() + slideOutVertically { height -> height / 2 },
             ) {
-                UploadProgressOverlay(queue = state.queue)
+                val transferQueue = remember(state.queue, state.activeTransferItemIds) {
+                    state.queue.filter { item -> item.id in state.activeTransferItemIds }
+                }
+                UploadProgressOverlay(queue = transferQueue)
             }
         }
     }

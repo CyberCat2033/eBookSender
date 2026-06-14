@@ -55,6 +55,7 @@ class TransferViewModel @Inject constructor(
     private val _ftpInput = MutableStateFlow("")
     private val _isConnecting = MutableStateFlow(false)
     private val _isTransferActive = MutableStateFlow(false)
+    private val _activeTransferItemIds = MutableStateFlow<Set<String>>(emptySet())
     private val _errorMessage = MutableStateFlow<String?>(null)
     private val _ftpSuggestions = MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
 
@@ -64,6 +65,7 @@ class TransferViewModel @Inject constructor(
         _isConnecting,
         connectionManager.connectedDevice,
         _isTransferActive,
+        _activeTransferItemIds,
         queueManager.queue,
         settingsRepository.settings,
         _errorMessage,
@@ -74,11 +76,12 @@ class TransferViewModel @Inject constructor(
         val isConnecting = values[1] as Boolean
         val device = values[2] as PocketBookDevice?
         val isTransfer = values[3] as Boolean
-        val queue = values[4] as List<UploadItem>
-        val settings = values[5] as AppSettings
-        val error = values[6] as String?
-        val catalog = values[7] as DeviceCatalog
-        val suggestions = values[8] as Pair<List<String>, List<String>>
+        val activeTransferItemIds = values[4] as Set<String>
+        val queue = values[5] as List<UploadItem>
+        val settings = values[6] as AppSettings
+        val error = values[7] as String?
+        val catalog = values[8] as DeviceCatalog
+        val suggestions = values[9] as Pair<List<String>, List<String>>
         val tags = if (catalog.programming.isNotEmpty()) {
             catalog.programming.map(CatalogGroup::name)
         } else {
@@ -95,6 +98,7 @@ class TransferViewModel @Inject constructor(
             isConnecting = isConnecting,
             connectedDevice = device,
             isTransferActive = isTransfer,
+            activeTransferItemIds = activeTransferItemIds,
             queue = queue,
             settings = settings,
             errorMessage = error,
@@ -236,6 +240,7 @@ class TransferViewModel @Inject constructor(
             },
         )
 
+        _activeTransferItemIds.value = uploadableItems.map { it.id }.toSet()
         _isTransferActive.value = true
         _errorMessage.value = null
 
@@ -304,6 +309,7 @@ class TransferViewModel @Inject constructor(
             }
             is TransferEvent.Completed -> {
                 _isTransferActive.value = false
+                _activeTransferItemIds.value = emptySet()
                 val device = connectionManager.connectedDevice.value
                 if (device != null) {
                     refreshRemoteFolderSuggestions(device)

@@ -499,7 +499,7 @@ class MangaViewModel @Inject constructor(
                 mangaSeries = series.title,
                 mangaVolume = item.chapter.title,
                 plannedPath = "",
-                status = UploadStatus.Pending,
+                status = UploadStatus.Preparing,
             )
             // Replan path
             preliminary.copy(plannedPath = queueManager.let { 
@@ -511,9 +511,7 @@ class MangaViewModel @Inject constructor(
             })
         }
 
-        queueManager.updateQueue { current ->
-            current + items
-        }
+        queueManager.addPreparedItems(items)
     }
 
     private fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) {

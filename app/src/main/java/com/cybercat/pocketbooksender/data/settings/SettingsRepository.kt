@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.cybercat.pocketbooksender.model.AppSettings
+import com.cybercat.pocketbooksender.model.AppTheme
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,6 +29,7 @@ class SettingsRepository @Inject constructor(
             mangaFileNameTemplate = preferences[MANGA_FILE_NAME_TEMPLATE] ?: "{volume}",
             useDynamicColor = preferences[USE_DYNAMIC_COLOR] ?: true,
             enableHaptics = preferences[ENABLE_HAPTICS] ?: true,
+            theme = preferences[THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() } ?: AppTheme.System,
         )
     }
 
@@ -46,6 +48,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setEnableHaptics(value: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[ENABLE_HAPTICS] = value
+        }
+    }
+
+    suspend fun setTheme(value: AppTheme) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[THEME] = value.name
         }
     }
 
@@ -88,5 +96,6 @@ class SettingsRepository @Inject constructor(
         val MANGA_FILE_NAME_TEMPLATE = stringPreferencesKey("manga_file_name_template")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")
+        val THEME = stringPreferencesKey("theme")
     }
 }

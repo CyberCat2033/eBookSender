@@ -279,9 +279,6 @@ class LocalMetadataExtractor @Inject constructor(
     }
 
     private fun readFirstNaturalZipImage(uri: Uri): Bitmap? {
-        var bestEntryName: String? = null
-        var bytes: ByteArray? = null
-
         open(uri).use { input ->
             ZipInputStream(input).use { zip ->
                 while (true) {
@@ -297,19 +294,16 @@ class LocalMetadataExtractor @Inject constructor(
                         .trim()
 
                     if (normalizedName.lowercase().isImageName()) {
-                        val currentBest = bestEntryName?.replace('\\', '/')?.substringAfterLast("/")?.trim()
-                        if (currentBest == null || NaturalSort.compare(normalizedName, currentBest) < 0) {
-                            bestEntryName = entry.name
-                            bytes = zip.readCurrentEntry(MAX_IMAGE_BYTES)
-                            continue
-                        }
+                        val bitmap = decodeBitmap(zip.readCurrentEntry(MAX_IMAGE_BYTES))
+                        if (bitmap != null) return bitmap
+                        continue
                     }
                     zip.closeEntry()
                 }
             }
         }
 
-        return bytes?.let(::decodeBitmap)
+        return null
     }
 
     private fun extractRarPreview(uri: Uri): Bitmap? =
@@ -382,7 +376,9 @@ class LocalMetadataExtractor @Inject constructor(
         endsWith(".jpg") ||
             endsWith(".jpeg") ||
             endsWith(".png") ||
-            endsWith(".webp")
+            endsWith(".webp") ||
+            endsWith(".gif") ||
+            endsWith(".avif")
 
     private fun resolveZipPath(baseDir: String, href: String): String {
         val decoded = runCatching {

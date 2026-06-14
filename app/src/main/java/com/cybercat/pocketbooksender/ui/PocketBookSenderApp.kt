@@ -46,6 +46,7 @@ import com.cybercat.pocketbooksender.ui.screens.OpdsScreen
 import com.cybercat.pocketbooksender.ui.screens.SendScreen
 import com.cybercat.pocketbooksender.ui.screens.SettingsScreen
 import com.cybercat.pocketbooksender.ui.theme.PocketBookSenderTheme
+import com.cybercat.pocketbooksender.model.AppTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -101,7 +102,16 @@ fun PocketBookSenderApp(
         }
     }
 
-    PocketBookSenderTheme(useDynamicColor = settingsState.settings.useDynamicColor) {
+    val darkTheme = when (settingsState.settings.theme) {
+        AppTheme.Light -> false
+        AppTheme.Dark -> true
+        AppTheme.System -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+
+    PocketBookSenderTheme(
+        darkTheme = darkTheme,
+        useDynamicColor = settingsState.settings.useDynamicColor
+    ) {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
@@ -304,6 +314,7 @@ private fun AppNavHost(
                 onDynamicColorChanged = settingsViewModel::setUseDynamicColor,
                 onHapticFeedbackEnabledChanged = settingsViewModel::setEnableHaptics,
                 onClearDownloadCache = settingsViewModel::clearDownloadCache,
+                onThemeChanged = settingsViewModel::setTheme,
             )
         }
     }

@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -39,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.ui.SettingsUiState
+import com.cybercat.pocketbooksender.model.AppTheme
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -58,6 +63,7 @@ fun SettingsScreen(
     onDynamicColorChanged: (Boolean) -> Unit,
     onHapticFeedbackEnabledChanged: (Boolean) -> Unit,
     onClearDownloadCache: () -> Unit,
+    onThemeChanged: (AppTheme) -> Unit,
 ) {
     var latestStatusMessage by remember { mutableStateOf(state.settingsStatusMessage.orEmpty()) }
     val context = LocalContext.current
@@ -148,6 +154,40 @@ fun SettingsScreen(
                         label = { Text("Manga file name") },
                         singleLine = true,
                     )
+                }
+            }
+
+            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("App theme", style = MaterialTheme.typography.titleMedium)
+
+                    val options = listOf(
+                        AppTheme.Light to "Light",
+                        AppTheme.Dark to "Dark",
+                        AppTheme.System to "System"
+                    )
+
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        options.forEachIndexed { index, (option, label) ->
+                            SegmentedButton(
+                                selected = state.settings.theme == option,
+                                onClick = {
+                                    view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    onThemeChanged(option)
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
+                            ) {
+                                Text(label)
+                            }
+                        }
+                    }
                 }
             }
 

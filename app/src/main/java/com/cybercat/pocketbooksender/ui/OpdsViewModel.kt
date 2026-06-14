@@ -38,6 +38,7 @@ class OpdsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _opdsState = MutableStateFlow(OpdsUiState())
+    private var initialCatalogLoadRequested = false
 
     val uiState: StateFlow<OpdsUiState> = combine(
         opdsRepository.sources,
@@ -58,13 +59,22 @@ class OpdsViewModel @Inject constructor(
         // Auto-fill OPDS inputs if sources change
         opdsRepository.sources
             .onEach { sources ->
-                if (_opdsState.value.urlInput.isBlank() && sources.isNotEmpty()) {
+                if (sources.isEmpty()) return@onEach
+
+                val firstSource = sources.first()
+                if (_opdsState.value.urlInput.isBlank()) {
                     _opdsState.update { state ->
                         state.copy(
-                            urlInput = sources.first().url,
-                            titleInput = sources.first().title,
+                            urlInput = firstSource.url,
+                            titleInput = firstSource.title,
                         )
                     }
+                }
+
+                val snapshot = _opdsState.value
+                if (!initialCatalogLoadRequested && snapshot.currentUrl == null && snapshot.catalog == null) {
+                    initialCatalogLoadRequested = true
+                    loadOpdsCatalog(url = firstSource.url, history = emptyList())
                 }
             }
             .launchIn(viewModelScope)
