@@ -28,6 +28,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -59,6 +62,19 @@ class DeviceCatalogRepository @Inject constructor(
                     refresh(device)
                 } else {
                     clear()
+                }
+            }
+            .launchIn(scope)
+
+        settingsRepository.settings
+            .map { it.rootPath to (it.booksFolderName + "/" + it.documentsFolderName + "/" + it.mangaFolderName) }
+            .distinctUntilChanged()
+            .drop(1)
+            .onEach {
+                deletedPaths.clear()
+                val device = connectionManager.connectedDevice.value
+                if (device != null) {
+                    refresh(device)
                 }
             }
             .launchIn(scope)

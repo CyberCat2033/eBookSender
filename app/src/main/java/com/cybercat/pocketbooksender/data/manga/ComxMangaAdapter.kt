@@ -613,17 +613,17 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         return connection
     }
 
-    private fun requestAuthorizedArchiveUrl(
+    private suspend fun requestAuthorizedArchiveUrl(
         chapter: MangaChapter,
         fallbackUrl: String,
-    ): String {
+    ): String = withContext(Dispatchers.IO) {
         val newsId = chapter.seriesId.extractNewsId()
             ?: chapter.chapterId.extractReaderNewsId()
             ?: fallbackUrl.extractDownloadNewsId()
-            ?: return fallbackUrl
+            ?: return@withContext fallbackUrl
         val chapterId = chapter.chapterId.extractReaderChapterId()
             ?: fallbackUrl.extractDownloadChapterId()
-            ?: return fallbackUrl
+            ?: return@withContext fallbackUrl
         val ajaxUrl = "${HomeUrl}engine/ajax/controller.php?mod=api&action=chapters/download"
         val body = listOf(
             "news_id" to newsId.toString(),
@@ -673,7 +673,7 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
                 throw IOException(message)
             }
 
-            return json.firstString("data", "url", "link")
+            return@withContext json.firstString("data", "url", "link")
                 .resolveAgainst(fallbackUrl)
                 .takeIf { it.isNotBlank() }
                 ?: fallbackUrl
