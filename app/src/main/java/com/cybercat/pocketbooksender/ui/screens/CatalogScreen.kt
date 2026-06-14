@@ -293,7 +293,7 @@ fun CatalogScreen(
                                 onSetEditMode(false)
                             }
                         ) {
-                            Icon(Icons.Outlined.Close, contentDescription = "Exit edit mode")
+                            Icon(Icons.Outlined.Close, contentDescription = strings.catalogActionExitEdit)
                         }
                     }
                 },
@@ -310,7 +310,7 @@ fun CatalogScreen(
                                 },
                                 enabled = state.selectedFilePaths.isNotEmpty() && !catalog.isLoading,
                             ) {
-                                Icon(Icons.Outlined.Delete, contentDescription = "Delete selected")
+                                Icon(Icons.Outlined.Delete, contentDescription = strings.catalogActionDeleteSelected)
                             }
                         } else {
                             IconButton(
@@ -320,7 +320,7 @@ fun CatalogScreen(
                                 },
                                 enabled = isConnected && !catalog.isEmpty && !catalog.isLoading,
                             ) {
-                                Icon(Icons.Outlined.Edit, contentDescription = "Enter edit mode")
+                                Icon(Icons.Outlined.Edit, contentDescription = strings.catalogActionEnterEdit)
                             }
                         }
                     }
@@ -510,8 +510,8 @@ fun CatalogScreen(
                 if (!isConnected) {
                     item {
                         CatalogMessage(
-                            title = "PocketBook is not connected",
-                            text = "Connect by QR or FTP link on the Send tab first.",
+                            title = strings.catalogNotConnected,
+                            text = strings.catalogConnectPrompt,
                         )
                     }
                     return@LazyColumn
@@ -520,8 +520,8 @@ fun CatalogScreen(
                 if (catalog.isLoading && catalog.isEmpty) {
                     item {
                         CatalogMessage(
-                            title = "Reading PocketBook catalog",
-                            text = "Reading PocketBook library database with FTP fallback.",
+                            title = strings.catalogReadingTitle,
+                            text = strings.catalogReadingDesc,
                             isLoading = true,
                         )
                     }
@@ -530,7 +530,7 @@ fun CatalogScreen(
                 catalog.errorMessage?.let { message ->
                     item {
                         CatalogMessage(
-                            title = "Cannot read catalog",
+                            title = strings.catalogStatusCannotRead,
                             text = message,
                             isError = true,
                         )
@@ -540,8 +540,8 @@ fun CatalogScreen(
                 if (!catalog.isLoading && catalog.isEmpty) {
                     item {
                         CatalogMessage(
-                            title = "Catalog is empty",
-                            text = "No books were found under ${state.settings.booksFolderName}, ${state.settings.documentsFolderName}, or ${state.settings.mangaFolderName}.",
+                            title = strings.catalogMsgEmpty,
+                            text = strings.get("catalog_no_books_found", state.settings.booksFolderName, state.settings.documentsFolderName, state.settings.mangaFolderName),
                         )
                     }
                 }
@@ -832,6 +832,7 @@ private fun CatalogGroupCard(
 
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
 
     fun toggleGroup(checked: Boolean = !isGroupFullySelected) {
         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
@@ -868,7 +869,7 @@ private fun CatalogGroupCard(
                 )
                 ExpandableHeader(
                     title = group.name,
-                    subtitle = group.files.summary(),
+                    subtitle = group.files.summary(strings),
                     expanded = expanded,
                     enableHaptics = enableHaptics,
                     onToggle = { onExpandedChange(!expanded) },
@@ -927,6 +928,7 @@ private fun MangaSeriesCard(
 
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
 
     fun toggleGroup(checked: Boolean = !isGroupFullySelected) {
         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
@@ -964,8 +966,8 @@ private fun MangaSeriesCard(
                 ExpandableHeader(
                     title = group.name,
                     subtitle = group.latestFile?.let { file ->
-                        "Latest: ${file.mangaDisplayTitle()}${file.progressSuffix()}"
-                    } ?: "No files",
+                        strings.get("catalog_label_latest", "${file.mangaDisplayTitle()}${file.progressSuffix(strings)}")
+                    } ?: strings.catalogNoFiles,
                     subtitleMaxLines = 3,
                     expanded = expanded,
                     enableHaptics = enableHaptics,
@@ -1019,6 +1021,7 @@ private fun ExpandableHeader(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     val titleInteractionModifier = if (titleClickEnabled) {
         Modifier.combinedClickable(
             onClick = onTitleClick,
@@ -1068,7 +1071,7 @@ private fun ExpandableHeader(
         }) {
             Icon(
                 imageVector = Icons.Outlined.ExpandMore,
-                contentDescription = if (expanded) "Collapse" else "Expand",
+                contentDescription = if (expanded) strings.catalogActionCollapse else strings.catalogActionExpand,
                 modifier = Modifier.rotate(rotationState)
             )
         }
@@ -1089,6 +1092,7 @@ private fun FileList(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
 
     var currentFiles by remember { mutableStateOf(files) }
     val deletedPaths = remember { mutableStateListOf<String>() }
@@ -1182,30 +1186,32 @@ private fun FileList(
                         )
                         if (showProgress) {
                             val progressDetailText = when {
-                                file.completed -> "Completed"
+                                file.completed -> strings.catalogStatusCompleted
                                 file.currentPage != null && file.currentPage > 0 -> {
                                     if (file.totalPages != null && file.totalPages > 0) {
-                                        "Page ${file.currentPage} of ${file.totalPages}"
+                                        strings.get("catalog_page_ratio", file.currentPage, file.totalPages)
                                     } else {
-                                        "Page ${file.currentPage}"
+                                        strings.get("catalog_page_current", file.currentPage)
                                     }
                                 }
-                                else -> "Not started"
+                                else -> strings.catalogStatusNotStarted
                             }
 
-                            val lastReadText = file.lastOpenedAtMillis?.let { time ->
-                                val relative = DateUtils.getRelativeTimeSpanString(
+                            val relativeTime = file.lastOpenedAtMillis?.let { time ->
+                                DateUtils.getRelativeTimeSpanString(
                                     time,
                                     System.currentTimeMillis(),
                                     DateUtils.MINUTE_IN_MILLIS,
                                     DateUtils.FORMAT_ABBREV_RELATIVE
                                 ).toString()
-                                "Last read: $relative"
+                            }
+                            val lastReadText = relativeTime?.let { relative ->
+                                strings.get("catalog_label_last_read", relative)
                             }
 
                             val subtitleParts = buildList {
                                 if (!file.series.isNullOrBlank()) {
-                                    add("Series: ${file.series}")
+                                    add(strings.get("catalog_label_series", file.series))
                                 }
                                 add(progressDetailText)
                                 if (lastReadText != null) {
@@ -1347,14 +1353,14 @@ private data class CatalogPointerTarget(
     val path: String,
 )
 
-private fun List<CatalogFile>.summary(): String {
+private fun List<CatalogFile>.summary(strings: com.cybercat.pocketbooksender.localization.AppStrings): String {
     val withProgress = count { it.readProgressPercent != null }
     val completed = count(CatalogFile::completed)
     val fileCount = size
     return buildList {
-        add("$fileCount files")
-        if (withProgress > 0) add("$withProgress with progress")
-        if (completed > 0) add("$completed completed")
+        add(strings.get("catalog_group_files_count", fileCount))
+        if (withProgress > 0) add(strings.get("catalog_group_progress_count", withProgress))
+        if (completed > 0) add(strings.get("catalog_group_completed_count", completed))
     }.joinToString(", ")
 }
 
@@ -1364,20 +1370,20 @@ private fun CatalogFile.displayTitle(): String =
 private fun CatalogFile.mangaDisplayTitle(): String =
     name.bookTitleWithoutExtension().ifBlank { displayTitle() }
 
-private fun MangaSeriesGroup.subtitle(): String =
+private fun MangaSeriesGroup.subtitle(strings: com.cybercat.pocketbooksender.localization.AppStrings): String =
     lastReadFile?.let { file ->
-        "Last read: ${file.mangaDisplayTitle()}${file.progressSuffix()}"
+        strings.get("catalog_label_last_read", "${file.mangaDisplayTitle()}${file.progressSuffix(strings)}")
     } ?: latestFile?.let { file ->
-        "Latest: ${file.mangaDisplayTitle()}"
-    } ?: "No files"
+        strings.get("catalog_label_latest", file.mangaDisplayTitle())
+    } ?: strings.catalogNoFiles
 
-private fun CatalogFile.progressSuffix(): String =
-    progressText()?.let { " | $it" }.orEmpty()
+private fun CatalogFile.progressSuffix(strings: com.cybercat.pocketbooksender.localization.AppStrings): String =
+    progressText(strings)?.let { " | $it" }.orEmpty()
 
-private fun CatalogFile.progressText(): String? =
+private fun CatalogFile.progressText(strings: com.cybercat.pocketbooksender.localization.AppStrings): String? =
     when {
-        completed -> "Completed"
-        readProgressPercent != null -> "Read $readProgressPercent%"
+        completed -> strings.catalogStatusCompleted
+        readProgressPercent != null -> strings.get("catalog_read_percentage", readProgressPercent)
         else -> null
     }
 

@@ -91,6 +91,7 @@ import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.ui.TransferUiState
+import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.delay
 
@@ -112,6 +113,7 @@ fun SendScreen(
     onQueuedMangaSeriesChanged: (String) -> Unit,
     onUploadAll: () -> Unit,
 ) {
+    val strings = LocalStrings.current
     var clearTrigger by remember { mutableStateOf(0) }
     var clearInProgress by remember { mutableStateOf(false) }
     var clearAnimatedRowCount by remember { mutableStateOf(0) }
@@ -188,7 +190,7 @@ fun SendScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("PocketBook Sender") },
+                title = { Text(strings.appName) },
                 windowInsets = WindowInsets(0.dp),
                 actions = {
                     if (state.queue.isNotEmpty()) {
@@ -205,7 +207,7 @@ fun SendScreen(
                             },
                             enabled = !clearInProgress && !state.isTransferActive,
                         ) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Clear queue")
+                            Icon(Icons.Outlined.Delete, contentDescription = strings.sendBtnClearQueue)
                         }
                     }
                 },
@@ -413,13 +415,14 @@ private fun MangaBatchEditorDialog(
 ) {
     var series by remember(currentSeries) { mutableStateOf(currentSeries) }
 
+    val strings = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Batch rename manga") },
+        title = { Text(strings.sendRenameMangaTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Apply one manga series name to $count queued files.",
+                    text = strings.get("send_batch_rename_desc", count),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -428,7 +431,7 @@ private fun MangaBatchEditorDialog(
                     onValueChange = { series = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("Manga series") },
+                    label = { Text(strings.sendRenameMangaSeries) },
                 )
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -452,12 +455,12 @@ private fun MangaBatchEditorDialog(
                 onClick = { onApply(series.trim()) },
                 enabled = series.isNotBlank(),
             ) {
-                Text("Apply")
+                Text(strings.sendRenameMangaApply)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(strings.sendRenameMangaCancel)
             }
         },
     )
@@ -473,16 +476,18 @@ private fun ConnectionPanel(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
 
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = if (state.isConnected) Icons.Outlined.CheckCircle else Icons.Outlined.WifiTethering,
+                    imageVector = Icons.Outlined.WifiTethering,
                     contentDescription = null,
+                    modifier = Modifier.size(24.dp),
                     tint = if (state.isConnected) {
                         MaterialTheme.colorScheme.primary
                     } else {
@@ -493,14 +498,14 @@ private fun ConnectionPanel(
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = when {
-                            state.isConnected -> "PocketBook connected"
-                            state.isConnecting -> "Checking FTP..."
-                            else -> "Connect PocketBook"
+                            state.isConnected -> strings.sendMsgConnected
+                            state.isConnecting -> strings.sendStatusCheckingFtp
+                            else -> strings.sendHeaderConnectPocketbook
                         },
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = state.connectedDevice?.ftpUrl ?: "Scan QR or paste ftp://anonymous@host:2121/",
+                        text = state.connectedDevice?.ftpUrl ?: strings.sendScanQrDesc,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -512,7 +517,7 @@ private fun ConnectionPanel(
                         view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.REJECT)
                         onDisconnect()
                     }) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Disconnect")
+                        Icon(Icons.Outlined.Close, contentDescription = strings.sendBtnDisconnect)
                     }
                 }
             }
@@ -523,11 +528,11 @@ private fun ConnectionPanel(
                     onValueChange = onFtpInputChanged,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("FTP link or IP") },
+                    label = { Text(strings.sendLabelFtp) },
                     leadingIcon = {
                         Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
                     },
-                    placeholder = { Text("ftp://anonymous@192.168.1.37:2121/") },
+                    placeholder = { Text(strings.sendPlaceholderFtp) },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
@@ -540,7 +545,7 @@ private fun ConnectionPanel(
                     ) {
                         Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Scan QR")
+                        Text(strings.sendBtnScanQr)
                     }
                     Button(
                         onClick = {
@@ -556,7 +561,7 @@ private fun ConnectionPanel(
                     ) {
                         Icon(Icons.Outlined.WifiTethering, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text(if (state.isConnecting) "Checking" else "Connect")
+                        Text(if (state.isConnecting) strings.sendStatusChecking else strings.sendBtnConnect)
                     }
                 }
             }
@@ -607,6 +612,7 @@ private fun ActionRow(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -621,7 +627,7 @@ private fun ActionRow(
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Add files")
+            Text(strings.sendBtnAddFiles)
         }
         Button(
             onClick = {
@@ -633,7 +639,7 @@ private fun ActionRow(
         ) {
             Icon(Icons.Outlined.Upload, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("Upload")
+            Text(strings.sendBtnUpload)
         }
     }
 }
@@ -644,12 +650,13 @@ private fun QueueHeader(
     canBatchRenameManga: Boolean,
     onBatchRenameManga: () -> Unit,
 ) {
+    val strings = LocalStrings.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Queue",
+            text = strings.sendHeaderQueue,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
         )
@@ -668,7 +675,7 @@ private fun QueueHeader(
         Spacer(Modifier.weight(1f))
         if (canBatchRenameManga) {
             IconButton(onClick = onBatchRenameManga) {
-                Icon(Icons.Outlined.Edit, contentDescription = "Batch rename manga")
+                Icon(Icons.Outlined.Edit, contentDescription = strings.sendRenameMangaTitle)
             }
         }
     }
@@ -676,6 +683,7 @@ private fun QueueHeader(
 
 @Composable
 private fun EmptyQueue() {
+    val strings = LocalStrings.current
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -686,11 +694,11 @@ private fun EmptyQueue() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "No files selected",
+                text = strings.sendMsgNoFiles,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = "Add books from Android storage or share them into the app.",
+                text = strings.sendLabelAddBooksDesc,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -715,6 +723,7 @@ private fun UploadItemRow(
     var detailsExpanded by remember(item.id) { mutableStateOf(false) }
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
 
     ElevatedCard(modifier.fillMaxWidth()) {
         Column {
@@ -746,7 +755,7 @@ private fun UploadItemRow(
                         },
                         enabled = item.status != UploadStatus.Uploading && item.status != UploadStatus.Uploaded,
                     ) {
-                        Icon(Icons.Outlined.Delete, contentDescription = "Remove")
+                        Icon(Icons.Outlined.Delete, contentDescription = strings.sendBtnRemove)
                     }
                 }
 
@@ -834,8 +843,12 @@ private fun UploadItemRow(
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     val statusText = when (item.status) {
-                        UploadStatus.Uploading -> "Uploading (${(item.progress * 100).toInt()}%)"
-                        else -> item.status.name
+                        UploadStatus.Uploading -> strings.get("send_status_uploading", (item.progress * 100).toInt())
+                        UploadStatus.Pending -> strings.sendStatusPending
+                        UploadStatus.Preparing -> strings.sendStatusPreparing
+                        UploadStatus.Uploaded -> strings.sendStatusUploaded
+                        UploadStatus.Failed -> strings.sendStatusFailed
+                        UploadStatus.Skipped -> strings.sendStatusSkipped
                     }
 
                     Text(
@@ -891,8 +904,9 @@ private fun UploadedSection(
     var expanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
 
-    ElevatedCard(modifier.fillMaxWidth()) {
+    ElevatedCard(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -900,12 +914,12 @@ private fun UploadedSection(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = "Uploaded",
+                        text = strings.sendUploadedHeader,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "${items.size} books",
+                        text = strings.get("send_uploaded_books_count", items.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -921,7 +935,7 @@ private fun UploadedSection(
                 }) {
                     Icon(
                         imageVector = Icons.Outlined.ExpandMore,
-                        contentDescription = if (expanded) "Collapse uploaded" else "Show uploaded",
+                        contentDescription = if (expanded) strings.sendBtnCollapseUploaded else strings.sendBtnShowUploaded,
                         modifier = Modifier.rotate(rotationState)
                     )
                 }
@@ -1010,10 +1024,11 @@ private fun ItemTypeSummary(
                 animationSpec = spring(stiffness = Spring.StiffnessMedium),
                 label = "ChevronRotation"
             )
+            val strings = LocalStrings.current
             IconButton(onClick = onToggle) {
                 Icon(
                     imageVector = Icons.Outlined.ExpandMore,
-                    contentDescription = if (expanded) "Hide item details" else "Edit item details",
+                    contentDescription = if (expanded) strings.sendActionHideDetails else strings.sendActionEditDetails,
                     modifier = Modifier.rotate(rotationState)
                 )
             }
@@ -1028,13 +1043,14 @@ private fun DocumentsTagEditor(
     onTagChanged: (String) -> Unit,
     categoryName: String,
 ) {
+    val strings = LocalStrings.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = selectedTag,
             onValueChange = onTagChanged,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            label = { Text("$categoryName tag") },
+            label = { Text(strings.get("send_tag_field", categoryName)) },
         )
 
         Row(
@@ -1061,13 +1077,14 @@ private fun MangaSeriesEditor(
     suggestions: List<String>,
     onSeriesChanged: (String) -> Unit,
 ) {
+    val strings = LocalStrings.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = selectedSeries,
             onValueChange = onSeriesChanged,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            label = { Text("Manga series") },
+            label = { Text(strings.sendRenameMangaSeries) },
         )
 
         Row(
@@ -1191,6 +1208,7 @@ private fun UploadProgressOverlay(
         ),
         label = "OverallProgress"
     )
+    val strings = LocalStrings.current
     val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     val currentItem = uploadingItems.firstOrNull()
 
@@ -1214,7 +1232,7 @@ private fun UploadProgressOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (uploadedCount == totalCount) "Upload complete" else "Sending to PocketBook",
+                    text = if (uploadedCount == totalCount) strings.sendUploadComplete else strings.sendSendingStatus,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = contentColor,
@@ -1239,9 +1257,9 @@ private fun UploadProgressOverlay(
 
             Text(
                 text = if (failedCount > 0) {
-                    "Uploaded $uploadedCount of $totalCount files, failed $failedCount"
+                    strings.get("send_progress_detail_failed", uploadedCount, totalCount, failedCount)
                 } else {
-                    "Uploaded $uploadedCount of $totalCount files"
+                    strings.get("send_progress_detail", uploadedCount, totalCount)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = contentColor.copy(alpha = 0.8f),

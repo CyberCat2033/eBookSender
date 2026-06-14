@@ -312,7 +312,7 @@ fun MangaPane(
 
         if (state.isLoading) {
             item(key = "manga-loading") {
-                MangaLoadingCard("Loading manga source")
+                MangaLoadingCard(strings.mangaLoadingSource)
             }
         }
 
@@ -368,7 +368,7 @@ fun MangaPane(
 
         if (state.searchResults.isNotEmpty()) {
             item {
-                MangaSectionTitle("Search results", state.searchResults.size)
+                MangaSectionTitle(strings.mangaSearchResults, state.searchResults.size)
             }
             items(
                 items = state.searchResults,
@@ -589,11 +589,12 @@ private fun MangaDownloadProgressOverlay(
     selectedCount: Int,
     modifier: Modifier = Modifier,
 ) {
-    val titleText = progressInfo?.title ?: "Preparing manga download"
+    val strings = LocalStrings.current
+    val titleText = progressInfo?.title ?: strings.mangaDownloadPreparing
     val detailText = progressInfo?.detail ?: when (selectedCount) {
-        0 -> "Preparing chapters"
-        1 -> "1 chapter selected"
-        else -> "$selectedCount chapters selected"
+        0 -> strings.mangaDownloadPreparingChapters
+        1 -> strings.mangaDownloadOneChapter
+        else -> strings.get("manga_download_chapters_count", selectedCount)
     }
     val chapterText = progressInfo?.currentChapterTitle
     val progress = progressInfo?.progress
@@ -692,6 +693,7 @@ private fun SavedMangaPanel(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     val subscribedCount = savedSeries.count { series -> series.subscribed }
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
@@ -703,7 +705,7 @@ private fun SavedMangaPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "Saved manga",
+                    text = strings.mangaHeaderSaved,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -716,7 +718,7 @@ private fun SavedMangaPanel(
                 ) {
                     Icon(Icons.Outlined.Refresh, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (isCheckingSubscriptions) "Checking" else "Check new")
+                    Text(if (isCheckingSubscriptions) strings.mangaBtnChecking else strings.mangaBtnCheckNew)
                 }
             }
 
@@ -768,6 +770,7 @@ private fun MangaBrowserCard(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var showLoginDialog by remember { mutableStateOf(false) }
 
@@ -798,7 +801,7 @@ private fun MangaBrowserCard(
                         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                         showLoginDialog = true
                     }) {
-                        Text("Login")
+                        Text(strings.mangaBtnLogin)
                     }
                     IconButton(onClick = {
                         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
@@ -896,7 +899,7 @@ private fun ComxNativeLoginDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = "Com-X login",
+                    text = strings.mangaLoginTitle,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 OutlinedTextField(
@@ -1089,6 +1092,7 @@ private fun SelectedSeriesCard(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -1105,13 +1109,13 @@ private fun SelectedSeriesCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = "${chapters.size} chapters · $newCount new · $selectedCount selected",
+                        text = strings.get("manga_series_chapters_summary", chapters.size, newCount, selectedCount),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     lastDownloadedChapter?.let { chapter ->
                         Text(
-                            text = "Last downloaded: $chapter",
+                            text = strings.get("manga_last_downloaded", chapter),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -1120,7 +1124,7 @@ private fun SelectedSeriesCard(
                     }
                     lastReadChapter?.let { chapter ->
                         Text(
-                            text = "Last read: $chapter",
+                            text = strings.get("manga_last_read", chapter),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -1156,7 +1160,7 @@ private fun SelectedSeriesCard(
                         contentDescription = null,
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(if (isFavorite) "Favorite" else "Favorite")
+                    Text(if (isFavorite) strings.mangaBtnFavorite else strings.mangaBtnAddFavorite)
                 }
                 OutlinedButton(
                     onClick = {
@@ -1174,7 +1178,7 @@ private fun SelectedSeriesCard(
                         contentDescription = null,
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(if (isSubscribed) "Subscribed" else "Subscribe")
+                    Text(if (isSubscribed) strings.mangaBtnSubscribed else strings.mangaBtnSubscribe)
                 }
             }
         }
@@ -1193,6 +1197,7 @@ private fun MangaChapterRow(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     ElevatedCard(
         modifier
             .fillMaxWidth()
@@ -1224,7 +1229,7 @@ private fun MangaChapterRow(
                 )
                 chapter.numberForSort?.let { number ->
                     Text(
-                        text = "Chapter $number",
+                        text = strings.get("manga_chapter_number", number),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

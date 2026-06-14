@@ -178,9 +178,9 @@ fun OpdsScreen(
                 title = {
                     Text(
                         text = if (mangaSelectionActive) {
-                            "$selectedMangaChapterCount selected"
+                            strings.get("generic_selected_count", selectedMangaChapterCount)
                         } else {
-                            "Web"
+                            strings.navWeb
                         },
                     )
                 },
@@ -330,7 +330,7 @@ fun OpdsScreen(
 
                         if (state.isLoading) {
                             item {
-                                LoadingCard("Opening catalog")
+                                LoadingCard(strings.opdsStatusOpening)
                             }
                         }
 
@@ -360,7 +360,7 @@ fun OpdsScreen(
                             if (catalog.entries.isEmpty() && !state.isLoading) {
                                 item {
                                     StatusMessage(
-                                        text = "Catalog page is empty",
+                                        text = strings.opdsCatalogEmpty,
                                         isError = false,
                                     )
                                 }
@@ -720,6 +720,7 @@ private fun FeedLinksRow(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     Row(
         modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -734,7 +735,7 @@ private fun FeedLinksRow(
             ) {
                 Icon(Icons.Outlined.Folder, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(link.displayTitle())
+                Text(link.displayTitle(strings))
             }
         }
     }
@@ -751,6 +752,7 @@ private fun OpdsEntryCard(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     val isNavigation = remember(entry) { entry.acquisitions.isEmpty() && entry.navigation.isNotEmpty() }
 
     ElevatedCard(modifier.fillMaxWidth()) {
@@ -812,7 +814,7 @@ private fun OpdsEntryCard(
                         ) {
                             Icon(Icons.Outlined.Folder, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text(link.displayTitle())
+                            Text(link.displayTitle(strings))
                         }
                     }
                 }
@@ -976,10 +978,18 @@ private fun StatusMessage(
     }
 }
 
-private fun OpdsLink.displayTitle(): String =
-    title?.takeIf { it.isNotBlank() }
-        ?: rel?.substringAfterLast('/')?.replaceFirstChar { it.uppercase() }
-        ?: "Open"
+private fun OpdsLink.displayTitle(strings: com.cybercat.pocketbooksender.localization.AppStrings): String {
+    if (!title.isNullOrBlank()) return title
+    val relValue = rel?.substringAfterLast('/')?.lowercase() ?: return strings.opdsRelOpen
+    return when (relValue) {
+        "start" -> strings.opdsRelStart
+        "next" -> strings.opdsRelNext
+        "previous", "prev" -> strings.opdsRelPrevious
+        "up" -> strings.opdsRelUp
+        "open" -> strings.opdsRelOpen
+        else -> strings.opdsRelOpen
+    }
+}
 
 private fun OpdsLink.isBrowsableFeedLink(): Boolean {
     val relValue = rel.orEmpty()
