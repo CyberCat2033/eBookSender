@@ -10,10 +10,13 @@ import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.domain.FtpUrlParser
+import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.CatalogGroup
+import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
 import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import com.cybercat.pocketbooksender.transfer.TransferCoordinator
@@ -55,7 +58,8 @@ class TransferViewModel @Inject constructor(
     private val _errorMessage = MutableStateFlow<String?>(null)
     private val _ftpSuggestions = MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
 
-    val uiState: StateFlow<TransferUiState> = combine(
+    @Suppress("UNCHECKED_CAST")
+    val uiState: StateFlow<TransferUiState> = combine<Any?, TransferUiState>(
         _ftpInput,
         _isConnecting,
         connectionManager.connectedDevice,
@@ -65,7 +69,16 @@ class TransferViewModel @Inject constructor(
         _errorMessage,
         catalogRepository.catalog,
         _ftpSuggestions
-    ) { ftpInput, isConnecting, device, isTransfer, queue, settings, error, catalog, suggestions ->
+    ) { values ->
+        val ftpInput = values[0] as String
+        val isConnecting = values[1] as Boolean
+        val device = values[2] as PocketBookDevice?
+        val isTransfer = values[3] as Boolean
+        val queue = values[4] as List<UploadItem>
+        val settings = values[5] as AppSettings
+        val error = values[6] as String?
+        val catalog = values[7] as DeviceCatalog
+        val suggestions = values[8] as Pair<List<String>, List<String>>
         val tags = if (catalog.programming.isNotEmpty()) {
             catalog.programming.map(CatalogGroup::name)
         } else {

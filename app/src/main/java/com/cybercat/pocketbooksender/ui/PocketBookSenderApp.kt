@@ -53,9 +53,18 @@ import kotlinx.coroutines.launch
 fun PocketBookSenderApp(
     sharedUris: List<Uri>,
     onSharedUrisConsumed: () -> Unit,
-    viewModel: SenderViewModel = hiltViewModel(),
+    transferViewModel: TransferViewModel = hiltViewModel(),
+    catalogViewModel: CatalogViewModel = hiltViewModel(),
+    opdsViewModel: OpdsViewModel = hiltViewModel(),
+    mangaViewModel: MangaViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val transferState by transferViewModel.uiState.collectAsStateWithLifecycle()
+    val catalogState by catalogViewModel.uiState.collectAsStateWithLifecycle()
+    val opdsState by opdsViewModel.uiState.collectAsStateWithLifecycle()
+    val mangaState by mangaViewModel.uiState.collectAsStateWithLifecycle()
+    val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -69,7 +78,7 @@ fun PocketBookSenderApp(
 
     LaunchedEffect(sharedUris) {
         if (sharedUris.isNotEmpty()) {
-            viewModel.addUris(sharedUris)
+            transferViewModel.addUris(sharedUris)
             onSharedUrisConsumed()
         }
     }
@@ -81,7 +90,7 @@ fun PocketBookSenderApp(
                 MainDestination.Send.route -> sendListState.animateScrollToTop()
                 MainDestination.Catalog.route -> catalogListState.animateScrollToTop()
                 MainDestination.Opds.route -> {
-                    if (state.opds.webMode == WebContentMode.Manga) {
+                    if (opdsState.webMode == WebContentMode.Manga) {
                         mangaListState.animateScrollToTop()
                     } else {
                         opdsListState.animateScrollToTop()
@@ -92,7 +101,7 @@ fun PocketBookSenderApp(
         }
     }
 
-    PocketBookSenderTheme(useDynamicColor = state.settings.useDynamicColor) {
+    PocketBookSenderTheme(useDynamicColor = settingsState.settings.useDynamicColor) {
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
@@ -119,8 +128,16 @@ fun PocketBookSenderApp(
                     ) {
                         AppNavHost(
                             navController = navController,
-                            state = state,
-                            viewModel = viewModel,
+                            transferViewModel = transferViewModel,
+                            catalogViewModel = catalogViewModel,
+                            opdsViewModel = opdsViewModel,
+                            mangaViewModel = mangaViewModel,
+                            settingsViewModel = settingsViewModel,
+                            transferState = transferState,
+                            catalogState = catalogState,
+                            opdsState = opdsState,
+                            mangaState = mangaState,
+                            settingsState = settingsState,
                             sendListState = sendListState,
                             catalogListState = catalogListState,
                             opdsListState = opdsListState,
@@ -143,8 +160,16 @@ fun PocketBookSenderApp(
                 ) { innerPadding ->
                     AppNavHost(
                         navController = navController,
-                        state = state,
-                        viewModel = viewModel,
+                        transferViewModel = transferViewModel,
+                        catalogViewModel = catalogViewModel,
+                        opdsViewModel = opdsViewModel,
+                        mangaViewModel = mangaViewModel,
+                        settingsViewModel = settingsViewModel,
+                        transferState = transferState,
+                        catalogState = catalogState,
+                        opdsState = opdsState,
+                        mangaState = mangaState,
+                        settingsState = settingsState,
                         sendListState = sendListState,
                         catalogListState = catalogListState,
                         opdsListState = opdsListState,
@@ -170,8 +195,16 @@ private suspend fun LazyListState.animateScrollToTop() {
 @Composable
 private fun AppNavHost(
     navController: NavHostController,
-    state: SenderUiState,
-    viewModel: SenderViewModel,
+    transferViewModel: TransferViewModel,
+    catalogViewModel: CatalogViewModel,
+    opdsViewModel: OpdsViewModel,
+    mangaViewModel: MangaViewModel,
+    settingsViewModel: SettingsViewModel,
+    transferState: TransferUiState,
+    catalogState: CatalogUiState,
+    opdsState: OpdsUiState,
+    mangaState: MangaUiState,
+    settingsState: SettingsUiState,
     sendListState: LazyListState,
     catalogListState: LazyListState,
     opdsListState: LazyListState,
@@ -200,77 +233,77 @@ private fun AppNavHost(
     ) {
         composable(MainDestination.Send.route) {
             SendScreen(
-                state = state,
+                state = transferState,
                 listState = sendListState,
-                onFtpInputChanged = viewModel::onFtpInputChanged,
-                onConnect = viewModel::connect,
-                onQrScanned = viewModel::connectTo,
-                onDisconnect = viewModel::disconnect,
-                onAddUris = viewModel::addUris,
-                onRemoveItem = viewModel::removeItem,
-                onClearQueue = viewModel::clearQueue,
-                onCategoryChanged = viewModel::updateCategory,
-                onProgrammingTagChanged = viewModel::updateProgrammingTag,
-                onMangaSeriesChanged = viewModel::updateMangaSeries,
-                onQueuedMangaSeriesChanged = viewModel::updateQueuedMangaSeries,
-                onUploadAll = viewModel::uploadAll,
+                onFtpInputChanged = transferViewModel::onFtpInputChanged,
+                onConnect = transferViewModel::connect,
+                onQrScanned = transferViewModel::connectTo,
+                onDisconnect = transferViewModel::disconnect,
+                onAddUris = transferViewModel::addUris,
+                onRemoveItem = transferViewModel::removeItem,
+                onClearQueue = transferViewModel::clearQueue,
+                onCategoryChanged = transferViewModel::updateCategory,
+                onProgrammingTagChanged = transferViewModel::updateProgrammingTag,
+                onMangaSeriesChanged = transferViewModel::updateMangaSeries,
+                onQueuedMangaSeriesChanged = transferViewModel::updateQueuedMangaSeries,
+                onUploadAll = transferViewModel::uploadAll,
             )
         }
         composable(MainDestination.Catalog.route) {
             CatalogScreen(
-                catalog = state.deviceCatalog,
-                isConnected = state.isConnected,
-                enableHaptics = state.settings.enableHaptics,
+                catalog = catalogState.deviceCatalog,
+                isConnected = catalogState.connectedDevice != null,
+                enableHaptics = catalogState.settings.enableHaptics,
                 listState = catalogListState,
-                onRefresh = viewModel::refreshDeviceCatalog,
+                onRefresh = catalogViewModel::reloadDeviceCatalog,
             )
         }
         composable(MainDestination.Opds.route) {
             OpdsScreen(
-                state = state.opds,
-                mangaState = state.manga,
+                state = opdsState,
+                mangaState = mangaState,
                 opdsListState = opdsListState,
                 mangaListState = mangaListState,
-                onSearchChanged = viewModel::onOpdsSearchChanged,
-                onWebModeSelected = viewModel::selectWebMode,
-                onSaveSource = viewModel::saveOpdsSource,
-                onRemoveSource = viewModel::removeOpdsSource,
-                onOpenSource = viewModel::openOpdsUrl,
-                onOpenLink = viewModel::openOpdsLink,
-                onBack = viewModel::goBackOpds,
-                onMangaBack = viewModel::goBackManga,
-                onSearch = viewModel::searchOpds,
-                onDownload = viewModel::downloadOpdsAcquisition,
-                onMangaSearchChanged = viewModel::onMangaSearchChanged,
-                onMangaSearch = viewModel::searchManga,
-                onOpenMangaBrowser = viewModel::openMangaBrowser,
-                onCloseMangaBrowser = viewModel::closeMangaBrowser,
-                onMangaWebPageLoaded = viewModel::syncMangaWebPage,
-                onOpenMangaSeries = viewModel::openMangaSeries,
-                onToggleMangaChapter = viewModel::toggleMangaChapter,
-                onSetMangaSeriesFavorite = viewModel::setSelectedMangaFavorite,
-                onSetMangaSeriesSubscribed = viewModel::setSelectedMangaSubscribed,
-                onCheckMangaSubscriptions = viewModel::checkMangaSubscriptions,
-                onSelectNewMangaChapters = viewModel::selectNewMangaChapters,
-                onSelectAllMangaChapters = viewModel::selectAllMangaChapters,
-                onClearMangaChapterSelection = viewModel::clearMangaChapterSelection,
-                onDownloadSelectedMangaChapters = viewModel::downloadSelectedMangaChapters,
-                enableHaptics = state.settings.enableHaptics,
+                onSearchChanged = opdsViewModel::onSearchInputChanged,
+                onWebModeSelected = opdsViewModel::setWebContentMode,
+                onSaveSource = opdsViewModel::saveOpdsSource,
+                onRemoveSource = opdsViewModel::removeOpdsSource,
+                onOpenSource = opdsViewModel::openOpdsUrl,
+                onOpenLink = opdsViewModel::openOpdsLink,
+                onBack = opdsViewModel::goBackOpds,
+                onMangaBack = mangaViewModel::goBackManga,
+                onSearch = opdsViewModel::searchOpds,
+                onDownload = opdsViewModel::downloadOpdsAcquisition,
+                onMangaSearchChanged = mangaViewModel::onMangaSearchChanged,
+                onMangaSearch = mangaViewModel::searchManga,
+                onOpenMangaBrowser = mangaViewModel::openMangaBrowser,
+                onCloseMangaBrowser = mangaViewModel::closeMangaBrowser,
+                onMangaWebPageLoaded = mangaViewModel::syncMangaWebPage,
+                onOpenMangaSeries = mangaViewModel::openMangaSeries,
+                onToggleMangaChapter = mangaViewModel::toggleMangaChapter,
+                onSetMangaSeriesFavorite = mangaViewModel::setSelectedMangaFavorite,
+                onSetMangaSeriesSubscribed = mangaViewModel::setSelectedMangaSubscribed,
+                onCheckMangaSubscriptions = mangaViewModel::checkMangaSubscriptions,
+                onSelectNewMangaChapters = mangaViewModel::selectNewMangaChapters,
+                onSelectAllMangaChapters = mangaViewModel::selectAllMangaChapters,
+                onClearMangaChapterSelection = mangaViewModel::clearMangaChapterSelection,
+                onDownloadSelectedMangaChapters = mangaViewModel::downloadSelectedMangaChapters,
+                enableHaptics = settingsState.settings.enableHaptics,
             )
         }
         composable(MainDestination.Settings.route) {
             SettingsScreen(
-                state = state,
+                state = settingsState,
                 scrollState = settingsScrollState,
-                onRootPathChanged = viewModel::updateRootPath,
-                onDefaultProgrammingTagChanged = viewModel::updateDefaultProgrammingTag,
-                onDefaultMangaSeriesChanged = viewModel::updateDefaultMangaSeries,
-                onBookFileNameTemplateChanged = viewModel::updateBookFileNameTemplate,
-                onProgrammingFileNameTemplateChanged = viewModel::updateProgrammingFileNameTemplate,
-                onMangaFileNameTemplateChanged = viewModel::updateMangaFileNameTemplate,
-                onDynamicColorChanged = viewModel::updateDynamicColor,
-                onHapticFeedbackEnabledChanged = viewModel::updateHapticFeedbackEnabled,
-                onClearDownloadCache = viewModel::clearDownloadCache,
+                onRootPathChanged = settingsViewModel::setRootPath,
+                onDefaultProgrammingTagChanged = settingsViewModel::setDefaultProgrammingTag,
+                onDefaultMangaSeriesChanged = settingsViewModel::setDefaultMangaSeries,
+                onBookFileNameTemplateChanged = settingsViewModel::setBookFileNameTemplate,
+                onProgrammingFileNameTemplateChanged = settingsViewModel::setProgrammingFileNameTemplate,
+                onMangaFileNameTemplateChanged = settingsViewModel::setMangaFileNameTemplate,
+                onDynamicColorChanged = settingsViewModel::setUseDynamicColor,
+                onHapticFeedbackEnabledChanged = settingsViewModel::setEnableHaptics,
+                onClearDownloadCache = settingsViewModel::clearDownloadCache,
             )
         }
     }

@@ -251,9 +251,12 @@ class LocalMetadataExtractor @Inject constructor(
             PdfRenderer(descriptor).use { renderer ->
                 if (renderer.pageCount == 0) return null
                 renderer.openPage(0).use { page ->
-                    val width = PREVIEW_WIDTH
-                    val height = (width * page.height.toFloat() / page.width.toFloat()).toInt()
-                        .coerceAtLeast(1)
+                    val scale = minOf(
+                        PREVIEW_MAX_WIDTH / page.width.toFloat(),
+                        PREVIEW_MAX_HEIGHT / page.height.toFloat(),
+                    )
+                    val width = (page.width * scale).toInt().coerceAtLeast(1)
+                    val height = (page.height * scale).toInt().coerceAtLeast(1)
                     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
                     Canvas(bitmap).drawColor(Color.WHITE)
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -370,7 +373,7 @@ class LocalMetadataExtractor @Inject constructor(
         readBytesLimited(limit)
 
     private fun FileHeader.normalizedName(): String =
-        fileNameString
+        fileName
             .replace('\\', '/')
             .substringAfterLast("/")
             .trim()
@@ -408,7 +411,6 @@ class LocalMetadataExtractor @Inject constructor(
 
             val options = BitmapFactory.Options().apply {
                 inPreferredConfig = Bitmap.Config.RGB_565
-                inDither = true
                 inSampleSize = calculateInSampleSize(
                     width = bounds.outWidth,
                     height = bounds.outHeight,
@@ -447,7 +449,6 @@ class LocalMetadataExtractor @Inject constructor(
     private companion object {
         const val MAX_TEXT_BYTES = 32 * 1024 * 1024
         const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
-        const val PREVIEW_WIDTH = 360
         const val PREVIEW_MAX_WIDTH = 360
         const val PREVIEW_MAX_HEIGHT = 540
     }

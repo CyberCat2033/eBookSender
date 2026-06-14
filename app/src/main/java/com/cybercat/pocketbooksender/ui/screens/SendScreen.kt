@@ -90,14 +90,14 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
-import com.cybercat.pocketbooksender.ui.SenderUiState
+import com.cybercat.pocketbooksender.ui.TransferUiState
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendScreen(
-    state: SenderUiState,
+    state: TransferUiState,
     listState: LazyListState,
     onFtpInputChanged: (String) -> Unit,
     onConnect: () -> Unit,
@@ -458,7 +458,7 @@ private fun MangaBatchEditorDialog(
 
 @Composable
 private fun ConnectionPanel(
-    state: SenderUiState,
+    state: TransferUiState,
     onFtpInputChanged: (String) -> Unit,
     onConnect: () -> Unit,
     onQrScanned: (String) -> Unit,

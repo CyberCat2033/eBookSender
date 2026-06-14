@@ -38,7 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.cybercat.pocketbooksender.ui.SenderUiState
+import com.cybercat.pocketbooksender.ui.SettingsUiState
 import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -47,7 +47,7 @@ import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    state: SenderUiState,
+    state: SettingsUiState,
     scrollState: ScrollState,
     onRootPathChanged: (String) -> Unit,
     onDefaultProgrammingTagChanged: (String) -> Unit,

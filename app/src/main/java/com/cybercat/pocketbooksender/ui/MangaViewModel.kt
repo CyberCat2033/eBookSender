@@ -27,8 +27,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -44,13 +42,16 @@ class MangaViewModel @Inject constructor(
     private val _mangaState = MutableStateFlow(MangaUiState())
 
     val uiState: StateFlow<MangaUiState> = combine(
-        mangaRepository.sources,
         mangaRepository.downloadedStableKeys,
         mangaRepository.downloadedChapters,
         mangaRepository.savedSeries,
         catalogRepository.catalog,
         _mangaState
-    ) { sources, keys, chapters, saved, catalog, mangaState ->
+    ) { keys: Set<String>,
+        chapters: List<MangaChapterDownload>,
+        saved: List<MangaSeriesBookmark>,
+        catalog: DeviceCatalog,
+        mangaState: MangaUiState ->
         val selected = mangaState.selectedSeries
         val lastRead = if (selected != null) {
             lastReadChapterText(selected, catalog)
@@ -59,7 +60,7 @@ class MangaViewModel @Inject constructor(
         }
 
         mangaState.copy(
-            sources = sources,
+            sources = mangaRepository.sources,
             downloadedStableKeys = keys,
             downloadedChapters = chapters,
             savedSeries = saved,
@@ -72,14 +73,9 @@ class MangaViewModel @Inject constructor(
     )
 
     init {
-        // Auto-select first source if available
-        mangaRepository.sources
-            .onEach { sources ->
-                if (_mangaState.value.selectedSourceId.isBlank() && sources.isNotEmpty()) {
-                    selectMangaSource(sources.first().id)
-                }
-            }
-            .launchIn(viewModelScope)
+        if (_mangaState.value.selectedSourceId.isBlank() && mangaRepository.sources.isNotEmpty()) {
+            selectMangaSource(mangaRepository.sources.first().id)
+        }
     }
 
     fun onMangaSearchChanged(value: String) {

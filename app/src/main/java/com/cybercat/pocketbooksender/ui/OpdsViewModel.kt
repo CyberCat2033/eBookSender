@@ -8,6 +8,7 @@ import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsRepository
+import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.transfer.UploadQueueManager
 import dagger.hilt.android.lifecycle.HiltViewModel
