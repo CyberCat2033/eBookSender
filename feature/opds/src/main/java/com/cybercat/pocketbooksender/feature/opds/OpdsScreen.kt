@@ -1,0 +1,370 @@
+package com.cybercat.pocketbooksender.feature.opds
+
+import android.view.HapticFeedbackConstants
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
+import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
+import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
+import com.cybercat.pocketbooksender.data.opds.OpdsEntry
+import com.cybercat.pocketbooksender.data.opds.OpdsLink
+import com.cybercat.pocketbooksender.data.opds.OpdsSource
+import com.cybercat.pocketbooksender.localization.LocalStrings
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OpdsScreen(
+    state: OpdsUiState,
+    opdsListState: LazyListState,
+    onSearchChanged: (String) -> Unit,
+    onWebModeSelected: (WebContentMode) -> Unit,
+    onSaveSource: (String, String, String?, String?) -> Unit,
+    onRemoveSource: (String) -> Unit,
+    onOpenSource: (String) -> Unit,
+    onOpenLink: (OpdsLink) -> Unit,
+    onBack: () -> Unit,
+    onSearch: () -> Unit,
+    onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
+    onAuthUsernameChanged: (String) -> Unit,
+    onAuthPasswordChanged: (String) -> Unit,
+    onDismissAuthDialog: () -> Unit,
+    onSaveCredentials: () -> Unit,
+    onOpenCredentialsEdit: (OpdsSource) -> Unit,
+    enableHaptics: Boolean,
+    
+    // Slots for Manga to keep modules independent
+    mangaPane: @Composable () -> Unit,
+    mangaTopBarActions: @Composable () -> Unit,
+    mangaTopBarNavigationIcon: @Composable () -> Unit,
+    mangaFloatingActionButton: @Composable () -> Unit,
+    isMangaSelectionActive: Boolean,
+    mangaSelectedChapterCount: Int,
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    var showAddSourceDialog by remember { mutableStateOf(false) }
+    var newSourceUrl by remember { mutableStateOf("") }
+    var newSourceTitle by remember { mutableStateOf("") }
+    var newSourceUsername by remember { mutableStateOf("") }
+    var newSourcePassword by remember { mutableStateOf("") }
+    val webMode = state.webMode
+
+    BackHandler(enabled = webMode == WebContentMode.Opds && state.canGoBack) {
+        onBack()
+    }
+
+    if (showAddSourceDialog) {
+        AddSourceDialog(
+            url = newSourceUrl,
+            title = newSourceTitle,
+            username = newSourceUsername,
+            password = newSourcePassword,
+            onUrlChanged = { newSourceUrl = it },
+            onTitleChanged = { newSourceTitle = it },
+            onUsernameChanged = { newSourceUsername = it },
+            onPasswordChanged = { newSourcePassword = it },
+            onDismiss = { showAddSourceDialog = false },
+            onSaveSource = {
+                onSaveSource(newSourceTitle, newSourceUrl, newSourceUsername.ifBlank { null }, newSourcePassword.ifBlank { null })
+            },
+        )
+    }
+
+    var credentialsDialogVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(state.showAuthDialog) {
+        if (state.showAuthDialog) credentialsDialogVisible = true
+    }
+
+    if (credentialsDialogVisible) {
+        OpdsCredentialsDialog(
+            sourceTitle = state.authDialogSourceTitle,
+            username = state.authDialogUsername,
+            password = state.authDialogPassword,
+            onUsernameChanged = onAuthUsernameChanged,
+            onPasswordChanged = onAuthPasswordChanged,
+            onDismiss = { credentialsDialogVisible = false; onDismissAuthDialog() },
+            onSave = onSaveCredentials,
+        )
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (isMangaSelectionActive) {
+                            strings.get("generic_selected_count", mangaSelectedChapterCount)
+                        } else {
+                            strings.navWeb
+                        },
+                    )
+                },
+                windowInsets = WindowInsets(0.dp),
+                navigationIcon = {
+                    if (webMode == WebContentMode.Opds && state.canGoBack) {
+                        IconButton(
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onBack()
+                            },
+                            enabled = !state.isLoading,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = "Back",
+                            )
+                        }
+                    } else if (webMode == WebContentMode.Manga) {
+                        mangaTopBarNavigationIcon()
+                    }
+                },
+                actions = {
+                    if (isMangaSelectionActive) {
+                        mangaTopBarActions()
+                    } else if (webMode == WebContentMode.Opds) {
+                        IconButton(
+                            onClick = {
+                                newSourceUrl = ""
+                                newSourceTitle = ""
+                                newSourceUsername = ""
+                                newSourcePassword = ""
+                                showAddSourceDialog = true
+                            },
+                        ) {
+                            Icon(Icons.Outlined.Add, contentDescription = "Add OPDS source")
+                        }
+                    }
+                },
+            )
+        },
+        floatingActionButton = {
+            if (webMode == WebContentMode.Manga) {
+                mangaFloatingActionButton()
+            }
+        },
+    ) { innerPadding ->
+        BoxWithConstraints(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            val contentMaxWidth = if (maxWidth >= 900.dp) 980.dp else maxWidth
+            Column(
+                modifier = Modifier
+                    .widthIn(max = contentMaxWidth)
+                    .fillMaxSize()
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 16.dp),
+            ) {
+                WebModeSelector(
+                    selectedMode = webMode,
+                    enableHaptics = enableHaptics,
+                    onModeSelected = onWebModeSelected,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+
+                if (webMode == WebContentMode.Manga) {
+                    mangaPane()
+                } else {
+                    val catalog = state.catalog
+                    val entryRows = remember(catalog) { catalog?.entries?.withStableLazyKeys() ?: emptyList() }
+                    val feedLinks = remember(catalog) { catalog?.links?.filter(OpdsLink::isBrowsableFeedLink) ?: emptyList() }
+                    val hasSearch = remember(catalog) { catalog?.hasSearch() ?: false }
+                    LazyColumn(
+                        state = opdsListState,
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        item {
+                            SourcePicker(
+                                state = state,
+                                enableHaptics = enableHaptics,
+                                onOpenSource = onOpenSource,
+                                onRemoveSource = onRemoveSource,
+                                onEditCredentials = onOpenCredentialsEdit,
+                            )
+                        }
+
+                        state.errorMessage?.let { message ->
+                            item {
+                                StatusMessage(
+                                    text = message,
+                                    isError = true,
+                                )
+                            }
+                        }
+
+                        item {
+                            StatusMessageHost(text = state.statusMessage)
+                        }
+
+                        if (state.isLoading) {
+                            item {
+                                LoadingCard(strings.opdsStatusOpening)
+                            }
+                        }
+
+                        if (catalog != null) {
+                            item {
+                                SearchPanel(
+                                    query = state.searchInput,
+                                    isSearchAvailable = hasSearch,
+                                    enabled = !state.isLoading,
+                                    enableHaptics = enableHaptics,
+                                    onSearchChanged = onSearchChanged,
+                                    onSearch = onSearch,
+                                )
+                            }
+
+                            if (feedLinks.isNotEmpty()) {
+                                item {
+                                    FeedLinksRow(
+                                        links = feedLinks,
+                                        enabled = !state.isLoading,
+                                        enableHaptics = enableHaptics,
+                                        onOpenLink = onOpenLink,
+                                    )
+                                }
+                            }
+
+                            if (catalog.entries.isEmpty() && !state.isLoading) {
+                                item {
+                                    StatusMessage(
+                                        text = strings.opdsCatalogEmpty,
+                                        isError = false,
+                                    )
+                                }
+                            }
+
+                            itemsIndexed(
+                                entryRows,
+                                key = { _, row -> row.key },
+                                contentType = { _, _ -> "entry" },
+                            ) { _, row ->
+                                OpdsEntryCard(
+                                    entry = row.entry,
+                                    enabled = !state.isLoading && !state.isDownloading,
+                                    enableHaptics = enableHaptics,
+                                    onOpenLink = onOpenLink,
+                                    onDownload = onDownload,
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
+
+                            if (feedLinks.isNotEmpty()) {
+                                item {
+                                    FeedLinksRow(
+                                        links = feedLinks,
+                                        enabled = !state.isLoading,
+                                        enableHaptics = enableHaptics,
+                                        onOpenLink = onOpenLink,
+                                        modifier = Modifier.padding(top = 10.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        item {
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WebModeSelector(
+    selectedMode: WebContentMode,
+    enableHaptics: Boolean,
+    onModeSelected: (WebContentMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FilterChip(
+            selected = selectedMode == WebContentMode.Opds,
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                onModeSelected(WebContentMode.Opds)
+            },
+            modifier = Modifier
+                .width(104.dp)
+                .height(40.dp),
+            label = {
+                Text(
+                    text = "OPDS",
+                    maxLines = 1,
+                )
+            },
+            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null) },
+        )
+        FilterChip(
+            selected = selectedMode == WebContentMode.Manga,
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                onModeSelected(WebContentMode.Manga)
+            },
+            modifier = Modifier
+                .width(116.dp)
+                .height(40.dp),
+            label = {
+                Text(
+                    text = "Manga",
+                    maxLines = 1,
+                )
+            },
+            leadingIcon = { Icon(Icons.Outlined.Image, contentDescription = null) },
+        )
+    }
+}

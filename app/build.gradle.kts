@@ -104,4 +104,17 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     debugImplementation(libs.compose.ui.tooling)
+    implementation(project(":core:model"))
+    implementation(project(":core:common"))
+    implementation(project(":core:domain"))
+    implementation(project(":core:database"))
+    implementation(project(":core:datastore"))
+    implementation(project(":core:network"))
+    implementation(project(":core:data"))
+    implementation(project(":core:ui"))
+    implementation(project(":feature:settings"))
+    implementation(project(":feature:catalog"))
+    implementation(project(":feature:manga"))
+    implementation(project(":feature:opds"))
+    implementation(project(":feature:transfer"))
 }

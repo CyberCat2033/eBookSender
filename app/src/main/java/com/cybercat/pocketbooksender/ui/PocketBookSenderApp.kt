@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -39,12 +40,26 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavHostController
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Download
 import com.cybercat.pocketbooksender.ui.navigation.MainDestination
 import com.cybercat.pocketbooksender.ui.navigation.MainDestinations
-import com.cybercat.pocketbooksender.ui.screens.CatalogScreen
-import com.cybercat.pocketbooksender.ui.screens.OpdsScreen
-import com.cybercat.pocketbooksender.ui.screens.SendScreen
-import com.cybercat.pocketbooksender.ui.screens.SettingsScreen
+import com.cybercat.pocketbooksender.feature.catalog.CatalogScreen
+import com.cybercat.pocketbooksender.feature.catalog.CatalogViewModel
+import com.cybercat.pocketbooksender.feature.catalog.CatalogUiState
+import com.cybercat.pocketbooksender.feature.settings.SettingsScreen
+import com.cybercat.pocketbooksender.feature.settings.SettingsViewModel
+import com.cybercat.pocketbooksender.feature.settings.SettingsUiState
+import com.cybercat.pocketbooksender.feature.transfer.SendScreen
+import com.cybercat.pocketbooksender.feature.transfer.TransferViewModel
+import com.cybercat.pocketbooksender.feature.transfer.TransferUiState
+import com.cybercat.pocketbooksender.feature.opds.OpdsScreen
+import com.cybercat.pocketbooksender.feature.opds.OpdsViewModel
+import com.cybercat.pocketbooksender.feature.opds.OpdsUiState
+import com.cybercat.pocketbooksender.feature.opds.WebContentMode
+import com.cybercat.pocketbooksender.feature.manga.MangaViewModel
+import com.cybercat.pocketbooksender.feature.manga.MangaUiState
 import com.cybercat.pocketbooksender.ui.theme.PocketBookSenderTheme
 import com.cybercat.pocketbooksender.model.AppTheme
 import kotlinx.coroutines.Job
@@ -275,11 +290,14 @@ private fun AppNavHost(
             )
         }
         composable(MainDestination.Opds.route) {
+            val strings = com.cybercat.pocketbooksender.localization.LocalStrings.current
+            val view = androidx.compose.ui.platform.LocalView.current
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val enableHaptics = settingsState.settings.enableHaptics
+
             OpdsScreen(
                 state = opdsState,
-                mangaState = mangaState,
                 opdsListState = opdsListState,
-                mangaListState = mangaListState,
                 onSearchChanged = opdsViewModel::onSearchInputChanged,
                 onWebModeSelected = opdsViewModel::setWebContentMode,
                 onSaveSource = { title, url, username, password -> opdsViewModel.saveOpdsSource(title, url, username, password) },
@@ -287,34 +305,83 @@ private fun AppNavHost(
                 onOpenSource = opdsViewModel::openOpdsUrl,
                 onOpenLink = opdsViewModel::openOpdsLink,
                 onBack = opdsViewModel::goBackOpds,
-                onMangaBack = mangaViewModel::goBackManga,
                 onSearch = opdsViewModel::searchOpds,
                 onDownload = opdsViewModel::downloadOpdsAcquisition,
-                onMangaSearchChanged = mangaViewModel::onMangaSearchChanged,
-                onMangaSearch = mangaViewModel::searchManga,
-                onOpenMangaBrowser = mangaViewModel::openMangaBrowser,
-                onCloseMangaBrowser = mangaViewModel::closeMangaBrowser,
-                onMangaWebPageLoaded = mangaViewModel::syncMangaWebPage,
-                onOpenMangaSeries = mangaViewModel::openMangaSeries,
-                onToggleMangaChapter = mangaViewModel::toggleMangaChapter,
-                onSetMangaSeriesFavorite = mangaViewModel::setSelectedMangaFavorite,
-                onSetMangaSeriesSubscribed = mangaViewModel::setSelectedMangaSubscribed,
-                onCheckMangaSubscriptions = mangaViewModel::checkMangaSubscriptions,
-                onSelectNewMangaChapters = mangaViewModel::selectNewMangaChapters,
-                onSelectAllMangaChapters = mangaViewModel::selectAllMangaChapters,
-                onClearMangaChapterSelection = mangaViewModel::clearMangaChapterSelection,
-                onDownloadSelectedMangaChapters = mangaViewModel::downloadSelectedMangaChapters,
-                onToggleSubscriptionUpdateChapter = mangaViewModel::toggleSubscriptionUpdateChapter,
-                onSelectAllSubscriptionUpdateChapters = mangaViewModel::selectAllSubscriptionUpdateChapters,
-                onClearSubscriptionUpdateChapters = mangaViewModel::clearSubscriptionUpdateChapters,
-                onDownloadSubscriptionUpdates = mangaViewModel::downloadSubscriptionUpdates,
-                onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
                 onAuthUsernameChanged = opdsViewModel::onAuthUsernameChanged,
                 onAuthPasswordChanged = opdsViewModel::onAuthPasswordChanged,
                 onDismissAuthDialog = opdsViewModel::dismissCredentialsDialog,
                 onSaveCredentials = opdsViewModel::saveCredentials,
                 onOpenCredentialsEdit = opdsViewModel::openCredentialsDialog,
-                enableHaptics = settingsState.settings.enableHaptics,
+                enableHaptics = enableHaptics,
+                mangaPane = {
+                    com.cybercat.pocketbooksender.feature.manga.MangaPane(
+                        state = mangaState,
+                        enableHaptics = enableHaptics,
+                        listState = mangaListState,
+                        onSearchChanged = mangaViewModel::onMangaSearchChanged,
+                        onSearch = mangaViewModel::searchManga,
+                        onOpenBrowser = mangaViewModel::openMangaBrowser,
+                        onCloseBrowser = mangaViewModel::closeMangaBrowser,
+                        onWebPageLoaded = mangaViewModel::syncMangaWebPage,
+                        onOpenSeries = mangaViewModel::openMangaSeries,
+                        onToggleChapter = mangaViewModel::toggleMangaChapter,
+                        onSetMangaSeriesFavorite = mangaViewModel::setSelectedMangaFavorite,
+                        onSetMangaSeriesSubscribed = mangaViewModel::setSelectedMangaSubscribed,
+                        onCheckSubscriptions = mangaViewModel::checkMangaSubscriptions,
+                        onDownloadSelected = mangaViewModel::downloadSelectedMangaChapters,
+                        onToggleSubscriptionUpdateChapter = mangaViewModel::toggleSubscriptionUpdateChapter,
+                        onSelectAllSubscriptionUpdateChapters = mangaViewModel::selectAllSubscriptionUpdateChapters,
+                        onClearSubscriptionUpdateChapters = mangaViewModel::clearSubscriptionUpdateChapters,
+                        onDownloadSubscriptionUpdates = mangaViewModel::downloadSubscriptionUpdates,
+                        onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
+                    )
+                },
+                mangaTopBarNavigationIcon = {
+                    if (mangaState.selectedSeries != null) {
+                        IconButton(
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                                mangaViewModel.goBackManga()
+                            },
+                            enabled = !mangaState.isLoading && !mangaState.isDownloading,
+                        ) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = "Back",
+                            )
+                        }
+                    }
+                },
+                mangaTopBarActions = {
+                    com.cybercat.pocketbooksender.feature.manga.MangaSelectionActions(
+                        enabled = !mangaState.isDownloading,
+                        hasNewChapters = mangaState.hasNewChapters,
+                        hasChapters = mangaState.chapters.isNotEmpty(),
+                        enableHaptics = enableHaptics,
+                        onSelectNew = mangaViewModel::selectNewMangaChapters,
+                        onSelectAll = mangaViewModel::selectAllMangaChapters,
+                        onClear = mangaViewModel::clearMangaChapterSelection,
+                    )
+                },
+                mangaFloatingActionButton = {
+                    val selectedCount = mangaState.selectedChapterIds.size
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = selectedCount > 0 && !mangaState.isDownloading,
+                        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { height -> height },
+                        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { height -> height },
+                    ) {
+                        androidx.compose.material3.ExtendedFloatingActionButton(
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, android.view.HapticFeedbackConstants.CONFIRM)
+                                mangaViewModel.downloadSelectedMangaChapters()
+                            },
+                            icon = { Icon(androidx.compose.material.icons.Icons.Outlined.Download, contentDescription = null) },
+                            text = { Text(strings.get("opds_btn_download", selectedCount)) },
+                        )
+                    }
+                },
+                isMangaSelectionActive = mangaState.selectedChapterIds.isNotEmpty(),
+                mangaSelectedChapterCount = mangaState.selectedChapterIds.size,
             )
         }
         composable(MainDestination.Settings.route) {

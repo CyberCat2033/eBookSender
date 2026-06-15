@@ -1,0 +1,684 @@
+package com.cybercat.pocketbooksender.feature.opds
+
+import android.graphics.Bitmap
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image as ComposeImage
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
+import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
+import com.cybercat.pocketbooksender.data.opds.OpdsEntry
+import com.cybercat.pocketbooksender.data.opds.OpdsLink
+import com.cybercat.pocketbooksender.data.opds.OpdsSource
+import com.cybercat.pocketbooksender.data.opds.downloadFormatLabel
+import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
+import com.cybercat.pocketbooksender.localization.LocalStrings
+import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.LocalDismissDialog
+import com.cybercat.pocketbooksender.ui.BitmapCache
+import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+import kotlinx.coroutines.delay
+
+internal data class OpdsEntryRow(
+    val key: String,
+    val entry: OpdsEntry,
+)
+
+internal fun List<OpdsEntry>.withStableLazyKeys(): List<OpdsEntryRow> {
+    val seen = mutableMapOf<String, Int>()
+    return mapIndexed { index, entry ->
+        val acquisitionKey = entry.acquisitions.firstOrNull()?.href.orEmpty()
+        val navigationKey = entry.navigation.firstOrNull()?.href.orEmpty()
+        val baseKey = listOf(
+            entry.id.orEmpty(),
+            entry.title,
+            entry.authors.joinToString("|"),
+            acquisitionKey,
+            navigationKey,
+        )
+            .joinToString(":")
+            .ifBlank { "opds-entry" }
+        val duplicateIndex = seen.getOrDefault(baseKey, 0)
+        seen[baseKey] = duplicateIndex + 1
+        OpdsEntryRow(
+            key = if (duplicateIndex == 0) {
+                baseKey
+            } else {
+                "$baseKey:duplicate:$duplicateIndex:$index"
+            },
+            entry = entry,
+        )
+    }
+}
+
+@Composable
+internal fun AddSourceDialog(
+    url: String,
+    title: String,
+    username: String,
+    password: String,
+    onUrlChanged: (String) -> Unit,
+    onTitleChanged: (String) -> Unit,
+    onUsernameChanged: (String) -> Unit,
+    onPasswordChanged: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSaveSource: () -> Unit,
+) {
+    val strings = LocalStrings.current
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.opdsAddTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = onUrlChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsUrlField) },
+                    leadingIcon = { Icon(Icons.Outlined.Link, contentDescription = null) },
+                    placeholder = { Text(strings.opdsUrlPlaceholder) },
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = onTitleChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsTitleField) },
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = onUsernameChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsUsernameField) },
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = onPasswordChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsPasswordField) },
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+            }
+        },
+        confirmButton = {
+            val dismiss = LocalDismissDialog.current
+            Button(
+                onClick = { onSaveSource(); dismiss() },
+                enabled = url.isNotBlank(),
+            ) {
+                Text(strings.opdsBtnSave)
+            }
+        },
+        dismissButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(onClick = dismiss) {
+                Text(strings.opdsBtnCancel)
+            }
+        },
+    )
+}
+
+@Composable
+internal fun SourcePicker(
+    state: OpdsUiState,
+    enableHaptics: Boolean,
+    onOpenSource: (String) -> Unit,
+    onRemoveSource: (String) -> Unit,
+    onEditCredentials: (OpdsSource) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentUrl = state.currentUrl.orEmpty().trimEnd('/')
+    val selectedSource = state.sources.firstOrNull { source ->
+        currentUrl.startsWith(source.url.trimEnd('/'))
+    } ?: state.sources.firstOrNull()
+    val selectedTitle = selectedSource?.title ?: "No OPDS catalogs"
+    val context = LocalContext.current
+    val view = LocalView.current
+
+    Box(Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                expanded = true
+            },
+            enabled = state.sources.isNotEmpty() && !state.isLoading,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = selectedTitle,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Icon(Icons.Outlined.Folder, contentDescription = null)
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.fillMaxWidth(0.92f),
+        ) {
+            state.sources.forEach { source ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = source.title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    trailingIcon = {
+                        Row {
+                            IconButton(
+                                onClick = {
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    expanded = false
+                                    onEditCredentials(source)
+                                },
+                            ) {
+                                Icon(Icons.Outlined.VpnKey, contentDescription = "Edit credentials")
+                            }
+                            IconButton(
+                                onClick = {
+                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.REJECT)
+                                    expanded = false
+                                    onRemoveSource(source.id)
+                                },
+                            ) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "Delete OPDS source")
+                            }
+                        }
+                    },
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        expanded = false
+                        onOpenSource(source.url)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun OpdsCredentialsDialog(
+    sourceTitle: String,
+    username: String,
+    password: String,
+    onUsernameChanged: (String) -> Unit,
+    onPasswordChanged: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit,
+) {
+    val strings = LocalStrings.current
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.opdsAuthRequiredTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = sourceTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = onUsernameChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsUsernameLabel) },
+                    leadingIcon = { Icon(Icons.Outlined.VpnKey, contentDescription = null) },
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = onPasswordChanged,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(strings.opdsPasswordLabel) },
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+            }
+        },
+        confirmButton = {
+            val dismiss = LocalDismissDialog.current
+            Button(onClick = { onSave(); dismiss() }) {
+                Text(strings.opdsAuthBtnLogin)
+            }
+        },
+        dismissButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(onClick = dismiss) {
+                Text(strings.opdsBtnCancel)
+            }
+        },
+    )
+}
+
+@Composable
+internal fun SearchPanel(
+    query: String,
+    isSearchAvailable: Boolean,
+    enabled: Boolean,
+    enableHaptics: Boolean,
+    onSearchChanged: (String) -> Unit,
+    onSearch: () -> Unit,
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onSearchChanged,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                enabled = isSearchAvailable && enabled,
+                label = { Text(strings.opdsSearchCatalog) },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (query.isNotEmpty() && enabled) {
+                        IconButton(onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onSearchChanged("")
+                        }) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                        }
+                    }
+                }
+            )
+            Button(
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                    onSearch()
+                },
+                enabled = isSearchAvailable && enabled && query.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.Search, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(strings.opdsSearchPlaceholder)
+            }
+
+            if (!isSearchAvailable) {
+                Text(
+                    text = strings.opdsNoSearchSupport,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun FeedLinksRow(
+    links: List<OpdsLink>,
+    enabled: Boolean,
+    enableHaptics: Boolean,
+    onOpenLink: (OpdsLink) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    Row(
+        modifier = modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        links.forEach { link ->
+            OutlinedButton(
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    onOpenLink(link)
+                },
+                enabled = enabled,
+            ) {
+                Icon(Icons.Outlined.Folder, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(link.displayTitle(strings))
+            }
+        }
+    }
+}
+
+@Composable
+internal fun OpdsEntryCard(
+    entry: OpdsEntry,
+    enabled: Boolean,
+    enableHaptics: Boolean,
+    onOpenLink: (OpdsLink) -> Unit,
+    onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    val isNavigation = remember(entry) { entry.acquisitions.isEmpty() && entry.navigation.isNotEmpty() }
+
+    ElevatedCard(modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                EntryArtwork(
+                    coverUrl = entry.coverHref,
+                    isNavigation = isNavigation,
+                    title = entry.title,
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = entry.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (entry.authors.isNotEmpty()) {
+                        Text(
+                            text = entry.authors.joinToString(", "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            val cleanedSummary = remember(entry.summary) {
+                entry.summary?.takeIf { it.isNotBlank() }?.cleanSummary()
+            }
+            if (cleanedSummary != null) {
+                Text(
+                    text = cleanedSummary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            if (entry.navigation.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    entry.navigation.forEach { link ->
+                        OutlinedButton(
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                onOpenLink(link)
+                            },
+                            enabled = enabled,
+                        ) {
+                            Icon(Icons.Outlined.Folder, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(link.displayTitle(strings))
+                        }
+                    }
+                }
+            }
+
+            val supportedAcquisitions: List<Pair<OpdsAcquisition, String>> = remember(entry) {
+                entry.acquisitions
+                    .mapNotNull { acquisition ->
+                        acquisition.supportedDownloadFormat()?.let { format -> acquisition to format.label }
+                    }
+                    .distinctBy { (_, label) -> label }
+            }
+            val visibleAcquisitions: List<Pair<OpdsAcquisition, String>> = remember(entry, supportedAcquisitions) {
+                supportedAcquisitions.ifEmpty {
+                    entry.acquisitions
+                        .map { acquisition -> acquisition to acquisition.downloadFormatLabel() }
+                        .distinctBy { (_, label) -> label }
+                }
+            }
+
+            if (visibleAcquisitions.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    visibleAcquisitions.forEach { (acquisition, label) ->
+                        Button(
+                            onClick = {
+                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                                onDownload(entry, acquisition)
+                            },
+                            enabled = enabled,
+                        ) {
+                            Icon(Icons.Outlined.Download, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(label)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun EntryArtwork(
+    coverUrl: String?,
+    isNavigation: Boolean,
+    title: String,
+) {
+    val context = LocalContext.current
+    var bitmap by remember(coverUrl) { mutableStateOf<Bitmap?>(coverUrl?.let { BitmapCache.getFromMemory(it) }) }
+
+    LaunchedEffect(coverUrl) {
+        if (coverUrl != null && bitmap == null) {
+            delay(CoverLoadDelayMillis)
+            if (bitmap == null) {
+                bitmap = loadCachedRemoteBitmap(
+                    context = context,
+                    url = coverUrl,
+                    reqWidth = CoverRequestWidth,
+                    reqHeight = CoverRequestHeight,
+                )
+            }
+        }
+    }
+
+    Surface(
+        modifier = Modifier.size(width = 58.dp, height = 78.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        val cover = bitmap
+        if (cover != null) {
+            ComposeImage(
+                bitmap = cover.asImageBitmap(),
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = when {
+                        isNavigation -> Icons.Outlined.Folder
+                        coverUrl != null -> Icons.Outlined.Image
+                        else -> Icons.AutoMirrored.Outlined.MenuBook
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.padding(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LoadingCard(text: String) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun StatusMessageHost(text: String?) {
+    var lastText by remember { mutableStateOf(text.orEmpty()) }
+
+    LaunchedEffect(text) {
+        if (!text.isNullOrBlank()) {
+            lastText = text
+        }
+    }
+
+    AnimatedVisibility(
+        visible = text != null,
+        enter = fadeIn() + slideInVertically { height -> -height / 4 },
+        exit = fadeOut() + slideOutVertically { height -> -height / 4 },
+    ) {
+        StatusMessage(
+            text = lastText,
+            isError = false,
+        )
+    }
+}
+
+@Composable
+internal fun StatusMessage(
+    text: String,
+    isError: Boolean,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isError) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        },
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(14.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isError) {
+                MaterialTheme.colorScheme.onErrorContainer
+            } else {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            },
+        )
+    }
+}
+
+internal fun OpdsLink.displayTitle(strings: com.cybercat.pocketbooksender.localization.AppStrings): String {
+    val linkTitle = title
+    if (!linkTitle.isNullOrBlank()) return linkTitle
+    val relValue = rel?.substringAfterLast('/')?.lowercase() ?: return strings.opdsRelOpen
+    return when (relValue) {
+        "start" -> strings.opdsRelStart
+        "next" -> strings.opdsRelNext
+        "previous", "prev" -> strings.opdsRelPrevious
+        "up" -> strings.opdsRelUp
+        "open" -> strings.opdsRelOpen
+        else -> strings.opdsRelOpen
+    }
+}
+
+internal fun OpdsLink.isBrowsableFeedLink(): Boolean {
+    val relValue = rel.orEmpty()
+    val typeValue = type.orEmpty()
+    return relValue in setOf("next", "previous", "up", "start") ||
+        (relValue != "self" && typeValue.contains("profile=opds-catalog"))
+}
+
+internal fun OpdsCatalog.hasSearch(): Boolean =
+    links.any { link -> link.rel.orEmpty().equals("search", ignoreCase = true) }
+
+private val htmlTagRegex = Regex("<[^>]+>")
+private val whitespaceRegex = Regex("\\s+")
+
+internal fun String.cleanSummary(): String =
+    replace(htmlTagRegex, " ")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace(whitespaceRegex, " ")
+        .trim()
+
+private const val CoverLoadDelayMillis = 120L
+private const val CoverRequestWidth = 160
+private const val CoverRequestHeight = 220

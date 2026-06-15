@@ -15,4 +15,19 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "PocketBookSender"
-include(":app")
+include(
+    ":app",
+    ":core:model",
+    ":core:common",
+    ":core:domain",
+    ":core:database",
+    ":core:datastore",
+    ":core:network",
+    ":core:data",
+    ":core:ui",
+    ":feature:catalog",
+    ":feature:manga",
+    ":feature:opds",
+    ":feature:settings",
+    ":feature:transfer"
+)
