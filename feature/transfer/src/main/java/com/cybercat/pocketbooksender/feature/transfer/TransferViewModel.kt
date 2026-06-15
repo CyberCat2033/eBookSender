@@ -60,7 +60,7 @@ class TransferViewModel @Inject constructor(
     private val _isConnecting = MutableStateFlow(false)
     private val _isTransferActive = MutableStateFlow(false)
     private val _activeTransferItemIds = MutableStateFlow<Set<String>>(emptySet())
-    private val _errorMessage = MutableStateFlow<String?>(null)
+    private val _errorState = MutableStateFlow<FtpErrorState?>(null)
     private val _ftpSuggestions = MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
 
     @Suppress("UNCHECKED_CAST")
@@ -72,9 +72,10 @@ class TransferViewModel @Inject constructor(
         _activeTransferItemIds,
         queueManager.queue,
         settingsRepository.settings,
-        _errorMessage,
+        _errorState,
         catalogRepository.catalog,
-        _ftpSuggestions
+        _ftpSuggestions,
+        localizationManager.currentStrings,
     ) { values ->
         val ftpInput = values[0] as String
         val isConnecting = values[1] as Boolean
@@ -83,9 +84,21 @@ class TransferViewModel @Inject constructor(
         val activeTransferItemIds = values[4] as Set<String>
         val queue = values[5] as List<UploadItem>
         val settings = values[6] as AppSettings
-        val error = values[7] as String?
+        val errorState = values[7] as FtpErrorState?
         val catalog = values[8] as DeviceCatalog
         val suggestions = values[9] as Pair<List<String>, List<String>>
+        val strings = values[10] as com.cybercat.pocketbooksender.localization.AppStrings
+
+        val error = when (errorState) {
+            is FtpErrorState.Connection -> ftpErrorMapper.mapConnectionError(errorState.error, errorState.device, strings)
+            is FtpErrorState.InvalidUrl -> ftpErrorMapper.mapInvalidFtpError(errorState.error, strings)
+            is FtpErrorState.RawMessage -> errorState.message
+            is FtpErrorState.ConnectBeforeUpload -> strings.transferErrorConnectBeforeUpload
+            is FtpErrorState.QueueEmpty -> strings.transferErrorQueueEmpty
+            is FtpErrorState.NoPendingFiles -> strings.transferErrorNoPendingFiles
+            null -> null
+        }
+
         val tags = if (catalog.documents.isNotEmpty()) {
             catalog.documents.map(CatalogGroup::name)
         } else {
@@ -121,7 +134,7 @@ class TransferViewModel @Inject constructor(
             .onEach { device ->
                 if (device != null) {
                     _ftpInput.value = device.ftpUrl
-                    _errorMessage.value = null
+                    _errorState.value = null
                     refreshRemoteFolderSuggestions(device)
                 } else {
                     _ftpSuggestions.value = Pair(emptyList(), emptyList())
@@ -147,7 +160,7 @@ class TransferViewModel @Inject constructor(
         val parsedDevice = FtpUrlParser.parse(rawLink)
             .getOrElse { error ->
                 _isConnecting.value = false
-                _errorMessage.value = ftpErrorMapper.mapInvalidFtpError(error)
+                _errorState.value = FtpErrorState.InvalidUrl(error)
                 return
             }
 
@@ -158,7 +171,7 @@ class TransferViewModel @Inject constructor(
         _isConnecting.value = true
         connectionManager.disconnect()
         _ftpInput.value = device.ftpUrl
-        _errorMessage.value = null
+        _errorState.value = null
 
         viewModelScope.launch {
             ftpGateway.checkConnection(device)
@@ -166,12 +179,12 @@ class TransferViewModel @Inject constructor(
                     _isConnecting.value = false
                     connectionManager.connect(device)
                     _ftpInput.value = device.ftpUrl
-                    _errorMessage.value = null
+                    _errorState.value = null
                 }
                 .onFailure { error ->
                     _isConnecting.value = false
                     connectionManager.disconnect()
-                    _errorMessage.value = ftpErrorMapper.mapConnectionError(error, device)
+                    _errorState.value = FtpErrorState.Connection(error, device)
                 }
         }
     }
@@ -210,30 +223,25 @@ class TransferViewModel @Inject constructor(
     }
 
     fun uploadAll() {
-        val snapshot = uiState.value
-        val device = snapshot.connectedDevice
+        val device = uiState.value.connectedDevice
         if (device == null) {
-            _errorMessage.value = localizationManager.currentStrings.value.transferErrorConnectBeforeUpload
+            _errorState.value = FtpErrorState.ConnectBeforeUpload
             return
         }
-        if (snapshot.queue.isEmpty()) {
-            _errorMessage.value = localizationManager.currentStrings.value.transferErrorQueueEmpty
+        val items = uiState.value.queue
+        if (items.isEmpty()) {
+            _errorState.value = FtpErrorState.QueueEmpty
             return
         }
-
-        val uploadableItems = snapshot.queue.filter {
-            it.status == UploadStatus.Pending ||
-                it.status == UploadStatus.Failed ||
-                it.status == UploadStatus.Skipped
-        }
-        if (uploadableItems.isEmpty()) {
-            _errorMessage.value = localizationManager.currentStrings.value.transferErrorNoPendingFiles
+        val pending = items.filter { it.status == UploadStatus.Pending || it.status == UploadStatus.Failed || it.status == UploadStatus.Skipped }
+        if (pending.isEmpty()) {
+            _errorState.value = FtpErrorState.NoPendingFiles
             return
         }
 
         val requestId = transferCoordinator.submit(
             device = device,
-            items = uploadableItems.map { item ->
+            items = pending.map { item ->
                 TransferUploadItem(
                     id = item.id,
                     sourceUri = item.sourceUri,
@@ -248,13 +256,13 @@ class TransferViewModel @Inject constructor(
             },
         )
 
-        _activeTransferItemIds.value = uploadableItems.map { it.id }.toSet()
+        _activeTransferItemIds.value = pending.map { it.id }.toSet()
         _isTransferActive.value = true
-        _errorMessage.value = null
+        _errorState.value = null
 
         queueManager.updateQueue { current ->
             current.map { item ->
-                if (uploadableItems.any { it.id == item.id }) {
+                if (pending.any { it.id == item.id }) {
                     item.copy(status = UploadStatus.Pending, progress = 0.0f)
                 } else {
                     item
@@ -310,7 +318,7 @@ class TransferViewModel @Inject constructor(
                         }
                     }
                 }
-                _errorMessage.value = event.message
+                _errorState.value = FtpErrorState.RawMessage(event.message)
             }
             is TransferEvent.Completed -> {
                 _isTransferActive.value = false
@@ -336,4 +344,13 @@ class TransferViewModel @Inject constructor(
     }
 
 
+}
+
+sealed interface FtpErrorState {
+    data class Connection(val error: Throwable, val device: PocketBookDevice) : FtpErrorState
+    data class InvalidUrl(val error: Throwable) : FtpErrorState
+    data class RawMessage(val message: String) : FtpErrorState
+    object ConnectBeforeUpload : FtpErrorState
+    object QueueEmpty : FtpErrorState
+    object NoPendingFiles : FtpErrorState
 }

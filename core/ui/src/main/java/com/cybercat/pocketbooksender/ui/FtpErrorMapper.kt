@@ -1,6 +1,6 @@
 package com.cybercat.pocketbooksender.ui
 
-import com.cybercat.pocketbooksender.localization.LocalizationManager
+import com.cybercat.pocketbooksender.localization.AppStrings
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import java.io.InterruptedIOException
 import java.net.ConnectException
@@ -11,11 +11,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class FtpErrorMapper @Inject constructor(
-    private val localizationManager: LocalizationManager
-) {
-    fun mapConnectionError(error: Throwable, device: PocketBookDevice): String {
-        val strings = localizationManager.currentStrings.value
+class FtpErrorMapper @Inject constructor() {
+    fun mapConnectionError(error: Throwable, device: PocketBookDevice, strings: AppStrings): String {
         val causes = error.causalChain()
         val reason = when {
             causes.any { it is UnknownHostException } ->
@@ -29,8 +26,7 @@ class FtpErrorMapper @Inject constructor(
         return strings.get("transfer_error_cannot_connect", device.host, device.port, reason)
     }
 
-    fun mapInvalidFtpError(error: Throwable): String {
-        val strings = localizationManager.currentStrings.value
+    fun mapInvalidFtpError(error: Throwable, strings: AppStrings): String {
         return when (error.message) {
             "FTP URL is empty" -> strings.get("transfer_error_invalid_ftp_empty")
             "Only ftp:// links are supported" -> strings.get("transfer_error_invalid_ftp_scheme")
