@@ -44,6 +44,8 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; persists queue snapshots in app storage and checks restored file/URI access.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadCoordinator.kt` - app/feature boundary for foreground manga download requests and progress/completion events.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSelectionKeys.kt` - shared stable manga selection keys used by subscription update UI and background download completion.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaArchiveHelper.kt` - packaging tool for creating CBZ/ZIP files from downloaded manga page images.
+- `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/FtpErrorMapper.kt` - mapper class translating FTP connection errors and URL parsing failures to localized user-facing strings.
 
 ## Search and edit workflow
 
@@ -98,6 +100,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Bottom navigation reselection uses `LazyListState.animateScrollToTop()`.
   - Manga download FAB enters/exits with fade plus vertical slide from the bottom.
 - Gesture helpers: `core/ui/src/main/java/com/cybercat/pocketbooksender/util/GestureHelpers.kt`.
+  - `rememberDragSelectionState` encapsulates state tracking, drag distance calculation, and edge autoscrolling.
   - `detectDragGesturesAfterQuickLongPress` starts drag selection after a 300 ms quick long press and consumes active drag events before lazy-list scrolling.
   - `calculateAutoScrollDelta` drives edge autoscroll during drag selection; Catalog and Manga pair it with `LONG_PRESS` start feedback and `CLOCK_TICK` range-change feedback.
 - Catalog motion: `feature/catalog/.../CatalogScreen.kt` and `CatalogComponents.kt`.
