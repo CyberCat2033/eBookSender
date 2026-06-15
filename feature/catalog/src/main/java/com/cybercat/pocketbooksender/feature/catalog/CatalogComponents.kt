@@ -20,6 +20,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -418,8 +419,11 @@ internal fun ExpandableHeader(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
+    val titleInteractionSource = remember { MutableInteractionSource() }
     val titleInteractionModifier = if (titleClickEnabled) {
         Modifier.combinedClickable(
+            interactionSource = titleInteractionSource,
+            indication = null,
             onClick = onTitleClick,
             onLongClick = onTitleLongClick,
         )
@@ -514,6 +518,7 @@ internal fun FileList(
         currentFiles.forEach { file ->
             val isExiting = file.path in deletedPaths
             val isSelected = file.path in selectedFilePaths
+            val fileInteractionSource = remember(file.path) { MutableInteractionSource() }
 
             DisposableEffect(file.path) {
                 onDispose {
@@ -543,7 +548,11 @@ internal fun FileList(
                         .onGloballyPositioned { coordinates ->
                             onFileBoundsChanged(file.path, coordinates.boundsInRoot())
                         }
-                        .clickable(enabled = isEditMode) {
+                        .clickable(
+                            enabled = isEditMode,
+                            interactionSource = fileInteractionSource,
+                            indication = null,
+                        ) {
                             if (selectionClickSuppressed()) {
                                 return@clickable
                             }
