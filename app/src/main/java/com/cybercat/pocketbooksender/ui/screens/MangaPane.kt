@@ -1626,10 +1626,14 @@ fun MangaSubscriptionUpdatesDialog(
                                     enter = expandVertically(
                                         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                                         expandFrom = Alignment.Top,
+                                    ) + fadeIn(
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                                     ),
                                     exit = shrinkVertically(
                                         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                                         shrinkTowards = Alignment.Top,
+                                    ) + fadeOut(
+                                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                                     ),
                                 ) {
                                     Column(
