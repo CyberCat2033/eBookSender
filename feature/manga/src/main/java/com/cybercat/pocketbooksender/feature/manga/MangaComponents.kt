@@ -666,12 +666,12 @@ internal fun MangaSearchResultCard(
     val context = LocalContext.current
     val view = LocalView.current
     ElevatedCard(
-        modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) {
-                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                onOpenSeries(result.seriesId)
-            },
+        onClick = {
+            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            onOpenSeries(result.seriesId)
+        },
+        enabled = enabled,
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier
@@ -838,12 +838,12 @@ internal fun MangaChapterRow(
     val view = LocalView.current
     val strings = LocalStrings.current
     ElevatedCard(
-        modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) {
-                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                onToggle(chapter.chapterId, !selected)
-            },
+        onClick = {
+            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            onToggle(chapter.chapterId, !selected)
+        },
+        enabled = enabled,
+        modifier = modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier

@@ -23,6 +23,7 @@ These instructions define the required working rules for Codex in this repositor
 - Before adding haptic feedback or custom animation, check `CODEX_PROJECT_MAP.md` for the existing haptic and motion patterns.
 - Use `View.performHapticIfAllowed(...)` for haptics, respect `AppSettings.enableHaptics`, and choose feedback constants consistently with existing usage.
 - Reuse `AnimatedAlertDialog`, `StatusMessageHost`, gesture helpers, lazy-list animation specs, and existing overlay/expand/progress motion patterns before creating new motion code.
+- Keep press, ripple, and selection indications clipped to the same shape as the visible component. For rounded Material surfaces such as `Card`/`ElevatedCard`, prefer the component `onClick` overload or explicitly clip the indication to the surface shape; do not apply an outer rectangular `Modifier.clickable` to a rounded surface.
 - Keep user-facing strings in the localization system and update bundled locales when adding or changing visible text.
 
 ## Quality, security, and performance
