@@ -94,7 +94,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Bottom navigation reselection uses `LazyListState.animateScrollToTop()`.
   - Manga download FAB enters/exits with fade plus vertical slide from the bottom.
 - Gesture helpers: `core/ui/src/main/java/com/cybercat/pocketbooksender/util/GestureHelpers.kt`.
-  - `detectDragGesturesAfterQuickLongPress` starts drag selection after a 300 ms quick long press.
+  - `detectDragGesturesAfterQuickLongPress` starts drag selection after a 300 ms quick long press and consumes active drag events before lazy-list scrolling.
   - `calculateAutoScrollDelta` drives edge autoscroll during drag selection; Catalog and Manga pair it with `LONG_PRESS` start feedback and `CLOCK_TICK` range-change feedback.
 - Catalog motion: `feature/catalog/.../CatalogScreen.kt` and `CatalogComponents.kt`.
   - Top app bar title/actions use `AnimatedContent`; edit-mode close icon uses fade plus horizontal expand/shrink.
