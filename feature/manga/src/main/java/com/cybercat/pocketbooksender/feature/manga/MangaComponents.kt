@@ -655,57 +655,6 @@ internal fun buildComxLoginPostBody(
 private fun String.formEncode(): String =
     URLEncoder.encode(this, Charsets.UTF_8.name())
 
-internal suspend fun PointerInputScope.detectDragGesturesAfterQuickLongPress(
-    onDragStart: (Offset) -> Unit,
-    onDrag: (PointerInputChange, Offset) -> Unit,
-    onDragEnd: () -> Unit,
-    onDragCancel: () -> Unit,
-) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        var currentChange = down
-        val touchSlop = viewConfiguration.touchSlop
-
-        val longPressReached: Boolean = withTimeoutOrNull<Boolean>(MangaLongPressMillis) {
-            while (true) {
-                val event = awaitPointerEvent()
-                val change = event.changes.firstOrNull { it.id == down.id }
-                    ?: return@withTimeoutOrNull false
-                if (!change.pressed || change.isConsumed) return@withTimeoutOrNull false
-                if ((change.position - down.position).getDistance() > touchSlop) {
-                    return@withTimeoutOrNull false
-                }
-                currentChange = change
-            }
-            true
-        } ?: true
-
-        if (!longPressReached) return@awaitEachGesture
-
-        onDragStart(currentChange.position)
-        currentChange.consume()
-
-        while (true) {
-            val event = awaitPointerEvent()
-            val change = event.changes.firstOrNull { it.id == down.id }
-            if (change == null) {
-                onDragCancel()
-                break
-            }
-            if (!change.pressed) {
-                onDragEnd()
-                break
-            }
-
-            val dragAmount = change.positionChange()
-            if (dragAmount != Offset.Zero) {
-                onDrag(change, dragAmount)
-                change.consume()
-            }
-        }
-    }
-}
-
 @Composable
 internal fun MangaSearchResultCard(
     result: MangaSeriesSearchResult,
@@ -1011,89 +960,6 @@ internal fun MangaSectionTitle(title: String, count: Int) {
     }
 }
 
-@Composable
-internal fun MangaStatusMessage(
-    text: String,
-    isError: Boolean,
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = if (isError) {
-            MaterialTheme.colorScheme.errorContainer
-        } else {
-            MaterialTheme.colorScheme.secondaryContainer
-        },
-        tonalElevation = 2.dp,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(
-                imageVector = if (isError) Icons.Outlined.Close else Icons.Outlined.CheckCircle,
-                contentDescription = null,
-                tint = if (isError) {
-                    MaterialTheme.colorScheme.onErrorContainer
-                } else {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                },
-                modifier = Modifier.size(20.dp)
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isError) {
-                    MaterialTheme.colorScheme.onErrorContainer
-                } else {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                },
-            )
-        }
-    }
-}
-
-@Composable
-internal fun MangaStatusMessageHost(
-    text: String?,
-    isError: Boolean,
-) {
-    var lastText by remember { mutableStateOf(text.orEmpty()) }
-
-    LaunchedEffect(text) {
-        if (!text.isNullOrBlank()) {
-            lastText = text
-        }
-    }
-
-    AnimatedVisibility(
-        visible = text != null,
-        enter = fadeIn() + expandVertically() + slideInVertically { height -> -height / 4 },
-        exit = fadeOut() + shrinkVertically() + slideOutVertically { height -> -height / 4 },
-    ) {
-        MangaStatusMessage(
-            text = lastText,
-            isError = isError,
-        )
-    }
-}
-
-@Composable
-internal fun MangaLoadingCard(text: String) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CircularProgressIndicator(Modifier.size(24.dp))
-            Spacer(Modifier.width(12.dp))
-            Text(text = text, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
 
 internal fun WebView.extractHtml(onHtml: (String) -> Unit) {
     evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { encoded ->
@@ -1371,7 +1237,6 @@ internal fun MangaSubscriptionUpdatesDialog(
     )
 }
 
-internal const val MangaLongPressMillis = 300L
 private const val CoverLoadDelayMillis = 120L
 private const val CoverRequestWidth = 160
 private const val CoverRequestHeight = 220

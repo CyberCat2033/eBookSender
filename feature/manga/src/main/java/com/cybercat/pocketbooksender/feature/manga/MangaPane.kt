@@ -39,6 +39,12 @@ import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+import com.cybercat.pocketbooksender.util.calculateAutoScrollDelta
+import com.cybercat.pocketbooksender.util.detectDragGesturesAfterQuickLongPress
+import com.cybercat.pocketbooksender.ui.StatusMessageHost
+import com.cybercat.pocketbooksender.ui.LoadingCard
+
+
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -144,27 +150,11 @@ fun MangaPane(
                         }
 
                         fun autoScrollDelta(): Float {
-                            val edgeSize = 84.dp.toPx()
-                            val viewportHeight = size.height.toFloat()
-                            if (viewportHeight <= 0f) return 0f
-
-                            return when {
-                                currentY < edgeSize -> {
-                                    val distance = edgeSize - currentY
-                                    val ratio = distance / edgeSize
-                                    val maxSpeed = 120f
-                                    val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
-                                    -speed
-                                }
-                                currentY > viewportHeight - edgeSize -> {
-                                    val distance = currentY - (viewportHeight - edgeSize)
-                                    val ratio = distance / edgeSize
-                                    val maxSpeed = 120f
-                                    val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
-                                    speed
-                                }
-                                else -> 0f
-                            }
+                            return calculateAutoScrollDelta(
+                                currentY = currentY,
+                                viewportHeight = size.height.toFloat(),
+                                edgeSizePx = 84.dp.toPx()
+                            )
                         }
 
                         fun startAutoScroll() {
@@ -245,16 +235,16 @@ fun MangaPane(
             }
 
             item(key = "manga-error-host") {
-                MangaStatusMessageHost(text = state.errorMessage, isError = true)
+                StatusMessageHost(text = state.errorMessage, isError = true)
             }
 
             item(key = "manga-status-host") {
-                MangaStatusMessageHost(text = state.statusMessage, isError = false)
+                StatusMessageHost(text = state.statusMessage, isError = false)
             }
 
             if (state.isLoading) {
                 item(key = "manga-loading") {
-                    MangaLoadingCard(strings.mangaLoadingSource)
+                    LoadingCard(strings.mangaLoadingSource)
                 }
             }
 

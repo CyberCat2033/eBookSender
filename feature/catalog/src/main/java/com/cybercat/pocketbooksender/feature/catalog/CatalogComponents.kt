@@ -695,58 +695,6 @@ internal fun DeviceCatalog.fileSelectionTargets(
     manga.forEach { group -> addFiles(group.path, group.files) }
 }
 
-internal suspend fun PointerInputScope.detectDragGesturesAfterQuickLongPress(
-    onDragStart: (Offset) -> Unit,
-    onDrag: (PointerInputChange, Offset) -> Unit,
-    onDragEnd: () -> Unit,
-    onDragCancel: () -> Unit,
-) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        var currentChange = down
-        val touchSlop = viewConfiguration.touchSlop
-
-        val longPressReached: Boolean = withTimeoutOrNull<Boolean>(CatalogLongPressMillis) {
-            while (true) {
-                val event = awaitPointerEvent()
-                val change = event.changes.firstOrNull { it.id == down.id }
-                    ?: return@withTimeoutOrNull false
-                if (!change.pressed || change.isConsumed) return@withTimeoutOrNull false
-                if ((change.position - down.position).getDistance() > touchSlop) {
-                    return@withTimeoutOrNull false
-                }
-                currentChange = change
-            }
-            true
-        } ?: true
-
-        if (!longPressReached) return@awaitEachGesture
-
-        onDragStart(currentChange.position)
-        currentChange.consume()
-
-        while (true) {
-            val event = awaitPointerEvent()
-            val change = event.changes.firstOrNull { it.id == down.id }
-            if (change == null) {
-                onDragCancel()
-                break
-            }
-            if (!change.pressed) {
-                change.consume()
-                onDragEnd()
-                break
-            }
-
-            val dragAmount = change.positionChange()
-            if (dragAmount != Offset.Zero) {
-                onDrag(change, dragAmount)
-                change.consume()
-            }
-        }
-    }
-}
-
 internal data class CatalogPointerTarget(
     val index: Int,
     val path: String,
@@ -788,7 +736,6 @@ internal fun CatalogFile.progressText(strings: com.cybercat.pocketbooksender.loc
     }
 }
 
-internal const val CatalogLongPressMillis = 300L
 internal const val SuppressSelectionClickMillis = 250L
 internal const val SelectionMotionDurationMillis = 220
 internal const val RemovalMotionDurationMillis = 260

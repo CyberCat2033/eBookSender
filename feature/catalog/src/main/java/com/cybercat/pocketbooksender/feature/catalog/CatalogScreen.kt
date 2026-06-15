@@ -58,6 +58,9 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+import com.cybercat.pocketbooksender.util.calculateAutoScrollDelta
+import com.cybercat.pocketbooksender.util.detectDragGesturesAfterQuickLongPress
+
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -376,27 +379,11 @@ fun CatalogScreen(
                             }
 
                             fun autoScrollDelta(): Float {
-                                val edgeSize = 84.dp.toPx()
-                                val viewportHeight = size.height.toFloat()
-                                if (viewportHeight <= 0f) return 0f
-
-                                return when {
-                                    currentY < edgeSize -> {
-                                        val distance = edgeSize - currentY
-                                        val ratio = distance / edgeSize
-                                        val maxSpeed = 120f
-                                        val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
-                                        -speed
-                                    }
-                                    currentY > viewportHeight - edgeSize -> {
-                                        val distance = currentY - (viewportHeight - edgeSize)
-                                        val ratio = distance / edgeSize
-                                        val maxSpeed = 120f
-                                        val speed = (maxSpeed * ratio * ratio).coerceIn(5f, maxSpeed)
-                                        speed
-                                    }
-                                    else -> 0f
-                                }
+                                return calculateAutoScrollDelta(
+                                    currentY = currentY,
+                                    viewportHeight = size.height.toFloat(),
+                                    edgeSizePx = 84.dp.toPx()
+                                )
                             }
 
                             fun startAutoScroll() {
