@@ -530,51 +530,16 @@ internal fun EntryArtwork(
     isNavigation: Boolean,
     title: String,
 ) {
-    val context = LocalContext.current
-    var bitmap by remember(coverUrl) { mutableStateOf<Bitmap?>(coverUrl?.let { BitmapCache.getFromMemory(it) }) }
-
-    LaunchedEffect(coverUrl) {
-        if (coverUrl != null && bitmap == null) {
-            delay(CoverLoadDelayMillis)
-            if (bitmap == null) {
-                bitmap = loadCachedRemoteBitmap(
-                    context = context,
-                    url = coverUrl,
-                    reqWidth = CoverRequestWidth,
-                    reqHeight = CoverRequestHeight,
-                )
-            }
-        }
+    val placeholderIcon = when {
+        isNavigation -> androidx.compose.material.icons.Icons.Outlined.Folder
+        coverUrl != null -> androidx.compose.material.icons.Icons.Outlined.Image
+        else -> androidx.compose.material.icons.Icons.AutoMirrored.Outlined.MenuBook
     }
-
-    Surface(
-        modifier = Modifier.size(width = 58.dp, height = 78.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.small,
-    ) {
-        val cover = bitmap
-        if (cover != null) {
-            ComposeImage(
-                bitmap = cover.asImageBitmap(),
-                contentDescription = title,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = when {
-                        isNavigation -> Icons.Outlined.Folder
-                        coverUrl != null -> Icons.Outlined.Image
-                        else -> Icons.AutoMirrored.Outlined.MenuBook
-                    },
-                    contentDescription = null,
-                    modifier = Modifier.padding(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
+    com.cybercat.pocketbooksender.ui.RemoteCover(
+        coverUrl = coverUrl,
+        title = title,
+        placeholderIcon = placeholderIcon,
+    )
 }
 
 

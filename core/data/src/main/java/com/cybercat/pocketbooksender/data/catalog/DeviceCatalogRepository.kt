@@ -99,9 +99,22 @@ class DeviceCatalogRepository @Inject constructor(
         val deleted = deletedPaths.toSet()
         if (deleted.isEmpty()) return this
         return copy(
-            books = books.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
-            documents = documents.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
-            manga = manga.map { g -> g.copy(files = g.files.filterNot { it.path in deleted }) }.filter { it.files.isNotEmpty() },
+            books = books.mapNotNull { group ->
+                val files = group.files.filterNot { it.path in deleted }
+                group.copy(files = files).takeIf { it.files.isNotEmpty() }
+            },
+            documents = documents.mapNotNull { group ->
+                val files = group.files.filterNot { it.path in deleted }
+                group.copy(files = files).takeIf { it.files.isNotEmpty() }
+            },
+            manga = manga.mapNotNull { group ->
+                val files = group.files.filterNot { it.path in deleted }
+                group.copy(
+                    files = files,
+                    latestFile = group.latestFile?.takeIf { it.path !in deleted } ?: files.lastOrNull(),
+                    lastReadFile = group.lastReadFile?.takeIf { it.path !in deleted } ?: files.lastReadFile(),
+                ).takeIf { it.files.isNotEmpty() }
+            },
         )
     }
 

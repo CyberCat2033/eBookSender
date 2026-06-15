@@ -32,6 +32,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.cybercat.pocketbooksender.util.onFailureRethrowing
+import com.cybercat.pocketbooksender.util.launchTemporaryStatus
+
 
 @HiltViewModel
 class OpdsViewModel @Inject constructor(
@@ -313,8 +316,7 @@ class OpdsViewModel @Inject constructor(
                         statusMessage = null,
                     )
                 }
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+            }.onFailureRethrowing { error ->
                 if (error is OpdsAuthenticationRequiredException) {
                     val currentSources = opdsRepository.sources.first()
                     val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
@@ -372,8 +374,7 @@ class OpdsViewModel @Inject constructor(
                     state.copy(isDownloading = false)
                 }
                 showOpdsStatus(localizationManager.currentStrings.value.get("opds_status_added_to_queue", file.name))
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+            }.onFailureRethrowing { error ->
                 if (error is OpdsAuthenticationRequiredException) {
                     val currentSources = opdsRepository.sources.first()
                     val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
@@ -490,8 +491,7 @@ class OpdsViewModel @Inject constructor(
                         statusMessage = null,
                     )
                 }
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+            }.onFailureRethrowing { error ->
                 if (error is OpdsAuthenticationRequiredException) {
                     val currentSources = opdsRepository.sources.first()
                     val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
@@ -574,7 +574,8 @@ class OpdsViewModel @Inject constructor(
     }
 
     private fun showOpdsStatus(message: String) {
-        showTemporaryStatus(
+        viewModelScope.launchTemporaryStatus(
+            message = message,
             delayMillis = OpdsStatusMessageMillis,
             setMessage = { msg ->
                 _opdsState.update { state ->
@@ -585,13 +586,13 @@ class OpdsViewModel @Inject constructor(
                 _opdsState.update { state ->
                     if (state.statusMessage == msg) state.copy(statusMessage = null) else state
                 }
-            },
-            message = message,
+            }
         )
     }
 
     private fun showOpdsError(message: String) {
-        showTemporaryStatus(
+        viewModelScope.launchTemporaryStatus(
+            message = message,
             delayMillis = OpdsErrorMessageMillis,
             setMessage = { msg ->
                 _opdsState.update { state ->
@@ -602,22 +603,8 @@ class OpdsViewModel @Inject constructor(
                 _opdsState.update { state ->
                     if (state.errorMessage == msg) state.copy(errorMessage = null) else state
                 }
-            },
-            message = message,
+            }
         )
-    }
-
-    private fun showTemporaryStatus(
-        delayMillis: Long,
-        setMessage: (String) -> Unit,
-        clearIfStillCurrent: (String) -> Unit,
-        message: String,
-    ) {
-        setMessage(message)
-        viewModelScope.launch {
-            delay(delayMillis)
-            clearIfStillCurrent(message)
-        }
     }
 
     private fun String.searchTokens(): List<String> =

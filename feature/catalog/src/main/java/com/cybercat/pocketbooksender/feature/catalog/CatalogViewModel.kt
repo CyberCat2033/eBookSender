@@ -3,6 +3,7 @@ package com.cybercat.pocketbooksender.feature.catalog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
+import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.DeviceCatalog
@@ -24,6 +25,7 @@ class CatalogViewModel @Inject constructor(
     private val connectionManager: ConnectionManager,
     private val settingsRepository: SettingsRepository,
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
+    private val rescanCoordinator: PocketBookRescanCoordinator,
 ) : ViewModel() {
 
     private val _isEditMode = MutableStateFlow(false)
@@ -78,6 +80,7 @@ class CatalogViewModel @Inject constructor(
         val device = uiState.value.connectedDevice ?: return
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
+            rescanCoordinator.requestRescanAndWait(device)
             deviceCatalogRepository.refresh(device)
             val elapsedTime = System.currentTimeMillis() - startTime
             val remaining = 800L - elapsedTime

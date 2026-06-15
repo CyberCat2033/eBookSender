@@ -3,8 +3,8 @@ package com.cybercat.pocketbooksender.feature.settings
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.model.AppTheme
 import com.cybercat.pocketbooksender.model.PocketBookDevice
@@ -30,20 +30,24 @@ class SettingsViewModel @Inject constructor(
     private val connectionManager: ConnectionManager,
     private val ftpGateway: FtpGateway,
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
+    private val rescanCoordinator: PocketBookRescanCoordinator,
 ) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
     private val _pendingRename = MutableStateFlow<PendingRename?>(null)
+    private val _activeFolderRename = MutableStateFlow<FolderType?>(null)
 
     val uiState: StateFlow<SettingsUiState> = combine(
         settingsRepository.settings,
         _statusMessage,
         _pendingRename,
-        localizationManager.availableLocales
-    ) { settings, status, pending, locales ->
+        localizationManager.availableLocales,
+        _activeFolderRename
+    ) { settings, status, pending, locales, activeFolderRename ->
         SettingsUiState(
             settings = settings,
             settingsStatusMessage = status,
             pendingRename = pending,
+            activeFolderRename = activeFolderRename,
             availableLocales = locales
         )
     }.stateIn(
@@ -70,7 +74,7 @@ class SettingsViewModel @Inject constructor(
                         settingsRepository.setBooksFolderName(newName)
                     }
                 } else {
-                    if (renameFolderOnDevice(oldName, newName)) {
+                    if (renameFolderOnDevice(FolderType.Books, oldName, newName)) {
                         settingsRepository.setBooksFolderName(newName)
                     }
                 }
@@ -92,7 +96,7 @@ class SettingsViewModel @Inject constructor(
                         settingsRepository.setDocumentsFolderName(newName)
                     }
                 } else {
-                    if (renameFolderOnDevice(oldName, newName)) {
+                    if (renameFolderOnDevice(FolderType.Documents, oldName, newName)) {
                         settingsRepository.setDocumentsFolderName(newName)
                     }
                 }
@@ -114,7 +118,7 @@ class SettingsViewModel @Inject constructor(
                         settingsRepository.setMangaFolderName(newName)
                     }
                 } else {
-                    if (renameFolderOnDevice(oldName, newName)) {
+                    if (renameFolderOnDevice(FolderType.Manga, oldName, newName)) {
                         settingsRepository.setMangaFolderName(newName)
                     }
                 }
@@ -142,22 +146,31 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setWarnOnDisconnectedRename(value) }
     }
 
-    private suspend fun renameFolderOnDevice(oldName: String, newName: String): Boolean {
+    private suspend fun renameFolderOnDevice(folderType: FolderType, oldName: String, newName: String): Boolean {
         val device = connectionManager.connectedDevice.value ?: return false
-        return ftpGateway.rename(device, oldName, newName)
-            .onSuccess {
+        if (_activeFolderRename.value != null) return false
+
+        _activeFolderRename.value = folderType
+        return try {
+            val result = ftpGateway.rename(device, oldName, newName)
+            if (result.isSuccess) {
                 showTemporaryStatus(localizationManager.currentStrings.value.get("settings_renamed_on_device", oldName, newName))
-            }
-            .onFailure { error ->
-                val errorMsg = error.message.orEmpty()
+                rescanCoordinator.requestRescanAndWait(device)
+                true
+            } else {
+                val error = result.exceptionOrNull()
+                val errorMsg = error?.message.orEmpty()
                 val statusText = when {
                     errorMsg.contains("550") || errorMsg.contains("exist", ignoreCase = true) ->
                         localizationManager.currentStrings.value.get("settings_rename_failed_exists", newName)
-                    else -> localizationManager.currentStrings.value.get("settings_rename_failed_error", error.localizedMessage ?: "unknown error")
+                    else -> localizationManager.currentStrings.value.get("settings_rename_failed_error", error?.localizedMessage ?: "unknown error")
                 }
                 showTemporaryStatus(statusText)
+                false
             }
-            .isSuccess
+        } finally {
+            _activeFolderRename.value = null
+        }
     }
 
     fun setBookFileNameTemplate(value: String) {

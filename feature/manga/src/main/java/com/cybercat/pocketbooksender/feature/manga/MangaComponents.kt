@@ -100,6 +100,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaSeriesDetails
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.data.manga.MangaSourceSummary
 import com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult
+import com.cybercat.pocketbooksender.data.manga.buildComxLoginPostBody
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.BitmapCache
@@ -111,7 +112,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
-import java.net.URLEncoder
 
 @Composable
 internal fun MangaSearchPanel(
@@ -636,25 +636,6 @@ internal fun ComxNativeLoginDialog(
     }
 }
 
-internal fun buildComxLoginPostBody(
-    loginName: String,
-    loginPassword: String,
-    doNotRemember: Boolean,
-): ByteArray {
-    val fields = buildList {
-        add("login_name" to loginName)
-        add("login_password" to loginPassword)
-        if (doNotRemember) add("login_not_save" to "1")
-        add("login" to "submit")
-    }
-    return fields.joinToString("&") { (key, value) ->
-        "${key.formEncode()}=${value.formEncode()}"
-    }.toByteArray(Charsets.UTF_8)
-}
-
-private fun String.formEncode(): String =
-    URLEncoder.encode(this, Charsets.UTF_8.name())
-
 @Composable
 internal fun MangaSearchResultCard(
     result: MangaSeriesSearchResult,
@@ -891,51 +872,12 @@ internal fun MangaCover(
     title: String,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    var bitmap by remember(coverUrl) { mutableStateOf<Bitmap?>(coverUrl?.let { BitmapCache.getFromMemory(it) }) }
-
-    LaunchedEffect(coverUrl) {
-        if (coverUrl != null && bitmap == null) {
-            delay(CoverLoadDelayMillis)
-            val cookie = withContext(Dispatchers.IO) {
-                runCatching { CookieManager.getInstance().getCookie(coverUrl) }.getOrNull()
-            }
-            if (bitmap == null) {
-                bitmap = loadCachedRemoteBitmap(
-                    context = context,
-                    url = coverUrl,
-                    cookie = cookie,
-                    reqWidth = CoverRequestWidth,
-                    reqHeight = CoverRequestHeight,
-                )
-            }
-        }
-    }
-
-    Surface(
-        modifier = modifier.size(width = 58.dp, height = 78.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.small,
-    ) {
-        val cover = bitmap
-        if (cover != null) {
-            ComposeImage(
-                bitmap = cover.asImageBitmap(),
-                contentDescription = title,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        } else {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Outlined.Image,
-                    contentDescription = null,
-                    modifier = Modifier.padding(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
+    com.cybercat.pocketbooksender.ui.RemoteCover(
+        coverUrl = coverUrl,
+        title = title,
+        modifier = modifier,
+        useCookies = true,
+    )
 }
 
 @Composable
@@ -1282,4 +1224,3 @@ fun MangaSelectionActions(
         Icon(Icons.Outlined.Close, contentDescription = "Clear chapter selection")
     }
 }
-

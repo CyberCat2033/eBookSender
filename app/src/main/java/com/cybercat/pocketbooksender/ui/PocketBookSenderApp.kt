@@ -1,5 +1,8 @@
 package com.cybercat.pocketbooksender.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ScrollState
@@ -26,9 +29,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.fadeIn
@@ -127,6 +135,7 @@ fun PocketBookSenderApp(
         darkTheme = darkTheme,
         useDynamicColor = settingsState.settings.useDynamicColor
     ) {
+        SyncSystemBarsWithTheme(darkTheme = darkTheme)
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
@@ -208,6 +217,35 @@ fun PocketBookSenderApp(
             }
         }
     }
+}
+
+@Composable
+@Suppress("DEPRECATION")
+private fun SyncSystemBarsWithTheme(darkTheme: Boolean) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val colorScheme = MaterialTheme.colorScheme
+
+    if (view.isInEditMode) return
+
+    SideEffect {
+        val window = context.findActivity()?.window ?: return@SideEffect
+        val background = colorScheme.background.toArgb()
+
+        window.statusBarColor = background
+        window.navigationBarColor = colorScheme.surface.toArgb()
+        window.decorView.setBackgroundColor(background)
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !darkTheme
+            isAppearanceLightNavigationBars = !darkTheme
+        }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 private suspend fun LazyListState.animateScrollToTop() {

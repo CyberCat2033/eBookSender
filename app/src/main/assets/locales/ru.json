@@ -184,6 +184,9 @@
   "catalog_status_completed": "Прочитано",
 
   "transfer_error_invalid_ftp": "Некорректная FTP-ссылка",
+  "transfer_error_invalid_ftp_empty": "FTP-ссылка пуста",
+  "transfer_error_invalid_ftp_scheme": "Поддерживаются только ссылки ftp://",
+  "transfer_error_invalid_ftp_host": "В FTP-ссылке не указан хост",
   "transfer_error_connect_before_upload": "Подключите PocketBook перед загрузкой",
   "transfer_error_queue_empty": "Очередь пуста",
   "transfer_error_no_pending_files": "Нет файлов для загрузки в очереди",

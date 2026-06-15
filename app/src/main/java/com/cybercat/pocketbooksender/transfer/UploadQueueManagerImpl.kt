@@ -15,8 +15,11 @@ import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
@@ -64,6 +67,13 @@ class UploadQueueManagerImpl @Inject constructor(
             withContext(Dispatchers.IO) {
                 persistQueue(_queue.value)
             }
+            _queue.value.forEach { item ->
+                if (item.preview == null && item.status != UploadStatus.Uploaded) {
+                    launch {
+                        loadMetadata(item)
+                    }
+                }
+            }
         }
 
         _queue
@@ -72,6 +82,7 @@ class UploadQueueManagerImpl @Inject constructor(
                 if (queueRestored) {
                     withContext(Dispatchers.IO) {
                         persistQueue(items)
+                        cleanupCoverCacheFiles(items)
                     }
                 }
             }
@@ -267,7 +278,13 @@ class UploadQueueManagerImpl @Inject constructor(
 
     override fun updateQueue(updateBlock: (List<UploadItem>) -> List<UploadItem>) {
         _queue.update { current ->
-            updateBlock(current).deduplicateQueue()
+            updateBlock(current).map { item ->
+                if (item.status == UploadStatus.Uploaded && item.preview != null) {
+                    item.copy(preview = null)
+                } else {
+                    item
+                }
+            }.deduplicateQueue()
         }
     }
 
@@ -282,10 +299,20 @@ class UploadQueueManagerImpl @Inject constructor(
                     val item = payload.optJSONObject(index)?.toUploadItemOrNull() ?: continue
                     val canReadSource = canReadSource(Uri.parse(item.sourceUri))
                     val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
+                    
+                    val previewBitmap = if (restoredStatus != UploadStatus.Uploaded) {
+                        val cachedCoverFile = getCoverCacheFile(item.id)
+                        if (cachedCoverFile.isFile) {
+                            runCatching {
+                                BitmapFactory.decodeFile(cachedCoverFile.absolutePath)
+                            }.getOrNull()
+                        } else null
+                    } else null
+
                     add(
                         replan(
                             item.copy(
-                                preview = null,
+                                preview = previewBitmap,
                                 status = restoredStatus,
                                 progress = if (restoredStatus == UploadStatus.Uploaded) 1f else 0f,
                             ),
@@ -373,12 +400,25 @@ class UploadQueueManagerImpl @Inject constructor(
 
     private suspend fun loadMetadata(item: UploadItem) {
         val metadata = metadataExtractor.extract(item.sourceUri, item.originalName)
+        val preview = metadata.preview
+
+        if (preview != null) {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val file = getCoverCacheFile(item.id)
+                    file.parentFile?.mkdirs()
+                    FileOutputStream(file).use { out ->
+                        preview.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                    }
+                }
+            }
+        }
 
         _queue.update { current ->
             val updatedList = current.map { currentItem ->
-                if (currentItem.id != item.id || currentItem.status != UploadStatus.Preparing) {
+                if (currentItem.id != item.id) {
                     currentItem
-                } else {
+                } else if (currentItem.status == UploadStatus.Preparing) {
                     val title = metadata.title.ifBlank { currentItem.title }
                     val author = metadata.authors
                         .joinToString(", ")
@@ -398,10 +438,15 @@ class UploadQueueManagerImpl @Inject constructor(
                         seriesIndex = metadata.seriesIndex,
                         publisher = metadata.publisher,
                         coverUri = metadata.coverUri,
-                        preview = metadata.preview,
+                        preview = preview,
                         status = UploadStatus.Pending,
                     )
                     replan(updated, activeSettings)
+                } else {
+                    currentItem.copy(
+                        preview = preview ?: currentItem.preview,
+                        coverUri = metadata.coverUri ?: currentItem.coverUri
+                    )
                 }
             }
             updatedList.deduplicateQueue()
@@ -549,6 +594,32 @@ class UploadQueueManagerImpl @Inject constructor(
 
     private inline fun <reified T : Enum<T>> enumValueOrNull(value: String?): T? =
         value?.let { runCatching { enumValueOf<T>(it) }.getOrNull() }
+
+    private fun getCoverCacheDir(): File {
+        return File(context.filesDir, "covers").apply { mkdirs() }
+    }
+
+    private fun getCoverCacheFile(itemId: String): File {
+        return File(getCoverCacheDir(), "$itemId.jpg")
+    }
+
+    private fun cleanupCoverCacheFiles(items: List<UploadItem>) {
+        val dir = getCoverCacheDir()
+        if (!dir.isDirectory) return
+
+        val activeIds = items.filter { it.status != UploadStatus.Uploaded }.map { it.id }.toSet()
+
+        runCatching {
+            dir.listFiles()?.forEach { file ->
+                if (file.isFile) {
+                    val id = file.nameWithoutExtension
+                    if (id !in activeIds) {
+                        file.delete()
+                    }
+                }
+            }
+        }
+    }
 
     private companion object {
         const val QueueStoreFileName = "upload_queue.json"

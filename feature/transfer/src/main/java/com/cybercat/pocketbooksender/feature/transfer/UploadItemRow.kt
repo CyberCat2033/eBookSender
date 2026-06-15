@@ -162,7 +162,7 @@ fun UploadItemRow(
                         }
 
                         if (item.category == BookCategory.Manga) {
-                            MangaSeriesEditor(
+                            MangaSeriesRenamePanel(
                                 selectedSeries = item.mangaSeries.orEmpty(),
                                 suggestions = mangaSeriesSuggestions,
                                 onSeriesChanged = onMangaSeriesChanged,
@@ -333,40 +333,6 @@ private fun DocumentsTagEditor(
                     FilterChip(
                         selected = selectedTag.equals(suggestion, ignoreCase = true),
                         onClick = { onTagChanged(suggestion) },
-                        label = { Text(suggestion) },
-                    )
-                }
-        }
-    }
-}
-
-@Composable
-private fun MangaSeriesEditor(
-    selectedSeries: String,
-    suggestions: List<String>,
-    onSeriesChanged: (String) -> Unit,
-) {
-    val strings = LocalStrings.current
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = selectedSeries,
-            onValueChange = onSeriesChanged,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(strings.sendRenameMangaSeries) },
-        )
-
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            suggestions
-                .filter { it.isNotBlank() }
-                .distinctBy { it.lowercase() }
-                .forEach { suggestion ->
-                    FilterChip(
-                        selected = selectedSeries.equals(suggestion, ignoreCase = true),
-                        onClick = { onSeriesChanged(suggestion) },
                         label = { Text(suggestion) },
                     )
                 }

@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import com.cybercat.pocketbooksender.MainActivity
 import com.cybercat.pocketbooksender.R
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
 import com.cybercat.pocketbooksender.model.BookCategory
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
@@ -31,6 +32,7 @@ class TransferForegroundService : Service() {
     @Inject lateinit var ftpGateway: FtpGateway
     @Inject lateinit var transferCoordinator: TransferCoordinator
     @Inject lateinit var localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
+    @Inject lateinit var rescanCoordinator: PocketBookRescanCoordinator
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -105,6 +107,9 @@ class TransferForegroundService : Service() {
                 notifyProgress(localizationManager.currentStrings.value.get("transfer_notification_progress_summary", uploaded, failed), uploaded + failed, total)
             }
         } finally {
+            if (uploaded > 0) {
+                rescanCoordinator.requestRescanAndWait(request.device)
+            }
             transferCoordinator.emit(
                 TransferEvent.Completed(
                     uploaded = uploaded,

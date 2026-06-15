@@ -6,6 +6,7 @@ data class SettingsUiState(
     val settings: AppSettings = AppSettings(),
     val settingsStatusMessage: String? = null,
     val pendingRename: PendingRename? = null,
+    val activeFolderRename: FolderType? = null,
     val availableLocales: List<com.cybercat.pocketbooksender.localization.LocaleInfo> = emptyList(),
 )
 

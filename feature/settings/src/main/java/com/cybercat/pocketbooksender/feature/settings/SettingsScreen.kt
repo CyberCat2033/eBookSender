@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -45,6 +46,7 @@ import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialogAfter
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -64,6 +66,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -99,7 +102,9 @@ private fun ValidatedSettingsField(
     placeholder: String = "",
     imeAction: ImeAction = ImeAction.Next,
     onPreviewChange: ((String) -> Unit)? = null,
-    validation: (String) -> String = { it }
+    validation: (String) -> String = { it },
+    isSaving: Boolean = false,
+    actionEnabled: Boolean = true,
 ) {
     var textFieldValue by remember(value, resetKey) {
         mutableStateOf(TextFieldValue(text = value, selection = TextRange(value.length)))
@@ -108,12 +113,22 @@ private fun ValidatedSettingsField(
     val context = LocalContext.current
     val view = LocalView.current
     val isChanged = textFieldValue.text != value
+    val canCommitChange = isChanged && !isSaving && actionEnabled
+
+    fun commitChange(clearFocus: Boolean) {
+        if (!canCommitChange) return
+        view.performHapticIfAllowed(context, true, HapticFeedbackConstants.CONFIRM)
+        onValueChange(validation(textFieldValue.text))
+        if (clearFocus) focusManager.clearFocus()
+    }
 
     OutlinedTextField(
         value = textFieldValue,
         onValueChange = { newValue ->
-            textFieldValue = newValue
-            onPreviewChange?.invoke(newValue.text)
+            if (!isSaving) {
+                textFieldValue = newValue
+                onPreviewChange?.invoke(newValue.text)
+            }
         },
         modifier = Modifier
             .fillMaxWidth()
@@ -129,27 +144,47 @@ private fun ValidatedSettingsField(
         leadingIcon = leadingIcon?.let { icon ->
             { Icon(icon, contentDescription = null) }
         },
-        trailingIcon = if (isChanged) {
+        trailingIcon = if (isChanged || isSaving) {
             {
-                IconButton(onClick = {
-                    view.performHapticIfAllowed(context, true, HapticFeedbackConstants.CONFIRM)
-                    onValueChange(validation(textFieldValue.text))
-                    focusManager.clearFocus()
-                }) {
-                    Icon(
-                        imageVector = Icons.Outlined.Check,
-                        contentDescription = "Save",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AnimatedContent(
+                        targetState = isSaving,
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(durationMillis = 120))
+                                .togetherWith(fadeOut(animationSpec = tween(durationMillis = 90)))
+                        },
+                        label = "SettingsFieldSaveState",
+                    ) { saving ->
+                        if (saving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            IconButton(
+                                onClick = { commitChange(clearFocus = true) },
+                                enabled = canCommitChange,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Check,
+                                    contentDescription = "Save",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
                 }
             }
         } else null,
+        readOnly = isSaving,
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
         keyboardActions = KeyboardActions(
             onAny = {
-                view.performHapticIfAllowed(context, true, HapticFeedbackConstants.CONFIRM)
-                onValueChange(validation(textFieldValue.text))
+                commitChange(clearFocus = false)
                 if (imeAction == ImeAction.Done) {
                     focusManager.clearFocus()
                 } else {
@@ -224,6 +259,11 @@ private fun NamingPreview(
     }
 }
 
+private fun sanitizeFolderName(input: String, fallback: String): String {
+    val clean = input.trim().replace(Regex("[\\\\/:*?\"<>|]"), "")
+    return if (clean.isBlank() || clean.equals("system", ignoreCase = true)) fallback else clean
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -251,6 +291,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
+    val activeFolderRename = state.activeFolderRename
 
     // --- Rename warning dialog: local lifecycle for animated dismiss ---
     var showRenameWarning by remember { mutableStateOf(false) }
@@ -318,6 +359,13 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text(strings.settingsTitle) },
                 windowInsets = WindowInsets(0.dp),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    actionIconContentColor = MaterialTheme.colorScheme.onBackground,
+                ),
             )
         },
     ) { innerPadding ->
@@ -347,10 +395,9 @@ fun SettingsScreen(
                     label = strings.settingsBooksFolder,
                     resetKey = folderFieldResetKey,
                     leadingIcon = Icons.Outlined.Folder,
-                    validation = { input ->
-                        val clean = input.trim().replace(Regex("[\\\\/:*?\"<>|]"), "")
-                        if (clean.isBlank() || clean.equals("system", ignoreCase = true)) "Books" else clean
-                    }
+                    validation = { input -> sanitizeFolderName(input, "Books") },
+                    isSaving = activeFolderRename == FolderType.Books,
+                    actionEnabled = activeFolderRename == null,
                 )
                 ValidatedSettingsField(
                     value = state.settings.documentsFolderName,
@@ -358,10 +405,9 @@ fun SettingsScreen(
                     label = strings.settingsDocsFolder,
                     resetKey = folderFieldResetKey,
                     leadingIcon = Icons.Outlined.Folder,
-                    validation = { input ->
-                        val clean = input.trim().replace(Regex("[\\\\/:*?\"<>|]"), "")
-                        if (clean.isBlank() || clean.equals("system", ignoreCase = true)) "Documents" else clean
-                    }
+                    validation = { input -> sanitizeFolderName(input, "Documents") },
+                    isSaving = activeFolderRename == FolderType.Documents,
+                    actionEnabled = activeFolderRename == null,
                 )
                 ValidatedSettingsField(
                     value = state.settings.mangaFolderName,
@@ -370,10 +416,9 @@ fun SettingsScreen(
                     resetKey = folderFieldResetKey,
                     leadingIcon = Icons.Outlined.Folder,
                     imeAction = ImeAction.Next,
-                    validation = { input ->
-                        val clean = input.trim().replace(Regex("[\\\\/:*?\"<>|]"), "")
-                        if (clean.isBlank() || clean.equals("system", ignoreCase = true)) "Manga" else clean
-                    }
+                    validation = { input -> sanitizeFolderName(input, "Manga") },
+                    isSaving = activeFolderRename == FolderType.Manga,
+                    actionEnabled = activeFolderRename == null,
                 )
             }
 

@@ -184,6 +184,9 @@
   "catalog_status_completed": "Completed",
 
   "transfer_error_invalid_ftp": "Invalid FTP link",
+  "transfer_error_invalid_ftp_empty": "FTP link is empty",
+  "transfer_error_invalid_ftp_scheme": "Only ftp:// links are supported",
+  "transfer_error_invalid_ftp_host": "FTP host is missing",
   "transfer_error_connect_before_upload": "Connect PocketBook before upload",
   "transfer_error_queue_empty": "Queue is empty",
   "transfer_error_no_pending_files": "No pending files to upload",

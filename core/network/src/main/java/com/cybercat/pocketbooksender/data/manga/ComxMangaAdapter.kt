@@ -1010,9 +1010,6 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         return runCatching { URI(baseUrl).resolve(raw).toString() }.getOrDefault(raw)
     }
 
-    private fun String.formEncode(): String =
-        URLEncoder.encode(this, Charsets.UTF_8.name())
-
     private fun JSONObject.firstString(vararg keys: String): String {
         keys.forEach { key ->
             when (val value = opt(key)) {

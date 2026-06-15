@@ -3,6 +3,7 @@ package com.cybercat.pocketbooksender.feature.transfer
 import android.content.Context
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
@@ -13,6 +14,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -135,31 +138,15 @@ fun MangaBatchEditorDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
-                    value = series,
-                    onValueChange = { series = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text(strings.sendRenameMangaSeries) },
+                MangaSeriesRenamePanel(
+                    selectedSeries = series,
+                    suggestions = suggestions,
+                    onSeriesChanged = { series = it },
+                    onSuggestionSelected = { suggestion ->
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        series = suggestion
+                    },
                 )
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    suggestions
-                        .filter { it.isNotBlank() }
-                        .distinctBy { it.lowercase() }
-                        .forEach { suggestion ->
-                            FilterChip(
-                                selected = series.equals(suggestion, ignoreCase = true),
-                                onClick = {
-                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                    series = suggestion
-                                },
-                                label = { Text(suggestion) },
-                            )
-                        }
-                }
             }
         },
         confirmButton = {
@@ -188,6 +175,45 @@ fun MangaBatchEditorDialog(
 }
 
 @Composable
+internal fun MangaSeriesRenamePanel(
+    selectedSeries: String,
+    suggestions: List<String>,
+    onSeriesChanged: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onSuggestionSelected: (String) -> Unit = onSeriesChanged,
+) {
+    val strings = LocalStrings.current
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = selectedSeries,
+            onValueChange = onSeriesChanged,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text(strings.sendRenameMangaSeries) },
+        )
+
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            suggestions
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase() }
+                .forEach { suggestion ->
+                    FilterChip(
+                        selected = selectedSeries.equals(suggestion, ignoreCase = true),
+                        onClick = { onSuggestionSelected(suggestion) },
+                        label = { Text(suggestion) },
+                    )
+                }
+        }
+    }
+}
+
+@Composable
 fun ConnectionPanel(
     state: TransferUiState,
     onFtpInputChanged: (String) -> Unit,
@@ -198,106 +224,142 @@ fun ConnectionPanel(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
+    val iconTint by animateColorAsState(
+        targetValue = if (state.isConnected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        },
+        animationSpec = tween(durationMillis = 220),
+        label = "ConnectionIconTint",
+    )
+    val disconnectButtonAlpha by animateFloatAsState(
+        targetValue = if (state.isConnected) 1f else 0f,
+        animationSpec = tween(durationMillis = 160),
+        label = "DisconnectButtonAlpha",
+    )
+    val headerTitle = when {
+        state.isConnected -> strings.sendMsgConnected
+        state.isConnecting -> strings.sendStatusCheckingFtp
+        else -> strings.sendHeaderConnectPocketbook
+    }
+    val headerSubtitle = state.connectedDevice?.ftpUrl ?: strings.sendScanQrDesc
 
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Outlined.WifiTethering,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
-                    tint = if (state.isConnected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    tint = iconTint,
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = when {
-                            state.isConnected -> strings.sendMsgConnected
-                            state.isConnecting -> strings.sendStatusCheckingFtp
-                            else -> strings.sendHeaderConnectPocketbook
-                        },
+                        text = headerTitle,
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
-                        text = state.connectedDevice?.ftpUrl ?: strings.sendScanQrDesc,
+                        text = headerSubtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (state.isConnected) {
-                    IconButton(onClick = {
-                        view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.REJECT)
-                        onDisconnect()
-                    }) {
-                        Icon(Icons.Outlined.Close, contentDescription = strings.sendBtnDisconnect)
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    IconButton(
+                        onClick = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.REJECT)
+                            onDisconnect()
+                        },
+                        enabled = state.isConnected,
+                        modifier = Modifier.alpha(disconnectButtonAlpha),
+                    ) {
+                        Icon(
+                            Icons.Outlined.Close,
+                            contentDescription = if (state.isConnected) strings.sendBtnDisconnect else null,
+                        )
                     }
                 }
             }
 
-            if (!state.isConnected) {
-                OutlinedTextField(
-                    value = state.ftpInput,
-                    onValueChange = onFtpInputChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text(strings.sendLabelFtp) },
-                    leadingIcon = {
-                        Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
-                    },
-                    trailingIcon = {
-                        if (state.ftpInput.isNotEmpty()) {
-                            IconButton(onClick = {
-                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                onFtpInputChanged("")
-                            }) {
-                                Icon(Icons.Outlined.Close, contentDescription = "Clear")
-                            }
-                        }
-                    },
-                    placeholder = { Text(strings.sendPlaceholderFtp) },
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+            AnimatedVisibility(
+                visible = !state.isConnected,
+                enter = expandVertically(
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    expandFrom = Alignment.Top,
+                ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+                exit = shrinkVertically(
+                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    shrinkTowards = Alignment.Top,
+                ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                            startQrScan(context, onQrScanned)
+                    OutlinedTextField(
+                        value = state.ftpInput,
+                        onValueChange = onFtpInputChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text(strings.sendLabelFtp) },
+                        leadingIcon = {
+                            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
                         },
-                        enabled = !state.isConnecting,
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
-                    ) {
-                        Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(strings.sendBtnScanQr)
-                    }
-                    Button(
-                        onClick = {
-                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.CONFIRM)
-                            if (state.ftpInput.isBlank()) {
-                                startQrScan(context, onQrScanned)
-                            } else {
-                                onConnect()
+                        trailingIcon = {
+                            if (state.ftpInput.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    onFtpInputChanged("")
+                                }) {
+                                    Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                                }
                             }
                         },
-                        enabled = !state.isConnecting,
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        placeholder = { Text(strings.sendPlaceholderFtp) },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.Outlined.WifiTethering, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (state.isConnecting) strings.sendStatusChecking else strings.sendBtnConnect)
+                        OutlinedButton(
+                            onClick = {
+                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                startQrScan(context, onQrScanned)
+                            },
+                            enabled = !state.isConnecting,
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) {
+                            Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(strings.sendBtnScanQr)
+                        }
+                        Button(
+                            onClick = {
+                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.CONFIRM)
+                                if (state.ftpInput.isBlank()) {
+                                    startQrScan(context, onQrScanned)
+                                } else {
+                                    onConnect()
+                                }
+                            },
+                            enabled = !state.isConnecting,
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
+                        ) {
+                            Icon(Icons.Outlined.WifiTethering, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (state.isConnecting) strings.sendStatusChecking else strings.sendBtnConnect)
+                        }
                     }
                 }
             }
