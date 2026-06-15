@@ -58,7 +58,7 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
-import com.cybercat.pocketbooksender.util.calculateAutoScrollDelta
+import com.cybercat.pocketbooksender.util.rememberDragSelectionState
 import com.cybercat.pocketbooksender.util.detectDragGesturesAfterQuickLongPress
 
 import kotlinx.coroutines.Job
@@ -115,6 +115,35 @@ fun CatalogScreen(
 
     fun selectionClickSuppressed(): Boolean =
         SystemClock.uptimeMillis() < suppressSelectionClickUntilMillis
+
+    val dragSelectionState = rememberDragSelectionState(
+        lazyListState = listState,
+        hapticView = view,
+        context = context,
+        enableHaptics = enableHaptics,
+        getTargetAt = { y ->
+            val rootY = (listBounds?.top ?: return@rememberDragSelectionState null) + y
+            val path = fileRowBounds.entries
+                .firstOrNull { (_, bounds) ->
+                    rootY >= bounds.top && rootY <= bounds.bottom
+                }
+                ?.key
+                ?: return@rememberDragSelectionState null
+            targetByPath[path]
+        },
+        getTargetIndex = { it.index },
+        getTargetId = { it.path },
+        getInitialSelection = { selectedFilePathsState.value },
+        getAllTargets = { fileTargets },
+        onSetSelected = { path, selected -> onSetFileSelectionState.value(path, selected) },
+        edgeSizePx = with(density) { 84.dp.toPx() },
+        onDragStarted = {
+            suppressSelectionClicksUntilGestureEnds()
+            if (!isEditModeState.value) {
+                onSetEditModeState.value(true)
+            }
+        }
+    )
 
     fun scrollToGroup(key: String, itemCount: Int) {
         scope.launch {
@@ -330,128 +359,21 @@ fun CatalogScreen(
                         if (catalog.isLoading || state.isDeleting || fileTargets.isEmpty()) {
                             return@pointerInput
                         }
-
-                        coroutineScope {
-                            var selectionActive = false
-                            var targetSelected = true
-                            var currentY = 0f
-                            var anchorIndex: Int? = null
-                            var baselineSelectedPaths = emptySet<String>()
-                            var autoScrollJob: Job? = null
-                            val appliedSelectedByPath = mutableMapOf<String, Boolean>()
-
-                            fun fileTargetAt(y: Float): CatalogPointerTarget? {
-                                val rootY = (listBounds?.top ?: return null) + y
-                                val path = fileRowBounds.entries
-                                    .firstOrNull { (_, bounds) ->
-                                        rootY >= bounds.top && rootY <= bounds.bottom
-                                    }
-                                    ?.key
-                                    ?: return null
-                                return targetByPath[path]
-                            }
-
-                            fun applySelectionAt(y: Float) {
-                                val target = fileTargetAt(y) ?: return
-                                val anchor = anchorIndex ?: target.index
-                                val startIndex = anchor.coerceAtMost(target.index)
-                                val endIndex = anchor.coerceAtLeast(target.index)
-
-                                fileTargets.forEach { fileTarget ->
-                                    val desiredSelected = if (fileTarget.index in startIndex..endIndex) {
-                                        targetSelected
-                                    } else {
-                                        fileTarget.path in baselineSelectedPaths
-                                    }
-                                    val currentSelected = appliedSelectedByPath[fileTarget.path]
-                                        ?: (fileTarget.path in baselineSelectedPaths)
-                                    if (currentSelected != desiredSelected) {
-                                        appliedSelectedByPath[fileTarget.path] = desiredSelected
-                                        onSetFileSelectionState.value(fileTarget.path, desiredSelected)
-                                        view.performHapticIfAllowed(
-                                            context,
-                                            enableHaptics,
-                                            HapticFeedbackConstants.CLOCK_TICK,
-                                            ignoreDnd = true,
-                                        )
-                                    }
-                                }
-                            }
-
-                            fun autoScrollDelta(): Float {
-                                return calculateAutoScrollDelta(
-                                    currentY = currentY,
-                                    viewportHeight = size.height.toFloat(),
-                                    edgeSizePx = 84.dp.toPx()
-                                )
-                            }
-
-                            fun startAutoScroll() {
-                                autoScrollJob?.cancel()
-                                autoScrollJob = launch {
-                                    while (isActive) {
-                                        val delta = autoScrollDelta()
-                                        if (delta != 0f) {
-                                            listState.scrollBy(delta)
-                                            applySelectionAt(currentY)
-                                        }
-                                        delay(16L)
-                                    }
-                                }
-                            }
-
-                            fun stopSelection() {
-                                selectionActive = false
-                                autoScrollJob?.cancel()
-                                autoScrollJob = null
-                                anchorIndex = null
-                                baselineSelectedPaths = emptySet()
-                                appliedSelectedByPath.clear()
-                            }
-
-                            detectDragGesturesAfterQuickLongPress(
-                                onDragStart = { offset ->
-                                    currentY = offset.y
-                                    val target = fileTargetAt(currentY)
-                                    if (target == null) {
-                                        stopSelection()
-                                    } else {
-                                        selectionActive = true
-                                        baselineSelectedPaths = selectedFilePathsState.value
-                                        targetSelected = target.path !in baselineSelectedPaths
-                                        anchorIndex = target.index
-                                        appliedSelectedByPath.clear()
-                                        suppressSelectionClicksUntilGestureEnds()
-                                        if (!isEditModeState.value) {
-                                            onSetEditModeState.value(true)
-                                        }
-                                        view.performHapticIfAllowed(
-                                            context,
-                                            enableHaptics,
-                                            HapticFeedbackConstants.LONG_PRESS,
-                                            ignoreDnd = true,
-                                        )
-                                        applySelectionAt(currentY)
-                                        startAutoScroll()
-                                    }
-                                },
-                                onDrag = { change, _ ->
-                                    currentY = change.position.y
-                                    if (selectionActive) {
-                                        change.consume()
-                                        applySelectionAt(currentY)
-                                    }
-                                },
-                                onDragEnd = {
-                                    suppressSelectionClicks()
-                                    stopSelection()
-                                },
-                                onDragCancel = {
-                                    suppressSelectionClicks()
-                                    stopSelection()
-                                },
-                            )
-                        }
+                        detectDragGesturesAfterQuickLongPress(
+                            onDragStart = { offset -> dragSelectionState.startDrag(offset.y) },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                dragSelectionState.drag(change.position.y)
+                            },
+                            onDragEnd = {
+                                suppressSelectionClicks()
+                                dragSelectionState.stopDrag()
+                            },
+                            onDragCancel = {
+                                suppressSelectionClicks()
+                                dragSelectionState.stopDrag()
+                            },
+                        )
                     }
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),

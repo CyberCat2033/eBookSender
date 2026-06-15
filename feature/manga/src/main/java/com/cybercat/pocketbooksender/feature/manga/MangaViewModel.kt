@@ -76,6 +76,9 @@ class MangaViewModel @Inject constructor(
     )
 
     init {
+        viewModelScope.launch {
+            mangaRepository.normalizeFavoriteSubscribedState()
+        }
         if (_mangaState.value.selectedSourceId.isBlank() && mangaRepository.sources.isNotEmpty()) {
             selectMangaSource(mangaRepository.sources.first().id)
         }

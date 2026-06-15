@@ -1,12 +1,30 @@
 package com.cybercat.pocketbooksender.util
 
+import android.content.Context
+import android.view.HapticFeedbackConstants
+import android.view.View
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.positionChange
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -91,5 +109,149 @@ fun calculateAutoScrollDelta(
             speed
         }
         else -> 0f
+    }
+}
+
+@Stable
+class DragSelectionState<T>(
+    private val scope: CoroutineScope,
+    private val lazyListState: LazyListState,
+    private val hapticView: View,
+    private val context: Context,
+    private val enableHaptics: Boolean,
+    private val getTargetAt: (Float) -> T?,
+    private val getTargetIndex: (T) -> Int,
+    private val getTargetId: (T) -> String,
+    private val getInitialSelection: () -> Set<String>,
+    private val getAllTargets: () -> List<T>,
+    private val onSetSelected: (String, Boolean) -> Unit,
+    private val edgeSizePx: Float,
+    private val onDragStarted: () -> Unit = {}
+) {
+    var selectionActive by mutableStateOf(false)
+        private set
+
+    private var currentY by mutableFloatStateOf(0f)
+    private var anchorIndex: Int? = null
+    private var targetSelected by mutableStateOf(true)
+    private var autoScrollJob: Job? = null
+    private val appliedSelection = mutableMapOf<String, Boolean>()
+    private var baselineSelection = emptySet<String>()
+
+    fun startDrag(offsetY: Float) {
+        currentY = offsetY
+        val target = getTargetAt(currentY)
+        if (target == null) {
+            stopDrag()
+        } else {
+            selectionActive = true
+            baselineSelection = getInitialSelection()
+            val targetId = getTargetId(target)
+            targetSelected = targetId !in baselineSelection
+            anchorIndex = getTargetIndex(target)
+            appliedSelection.clear()
+            onDragStarted()
+            hapticView.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.LONG_PRESS, ignoreDnd = true)
+            applySelectionAt(currentY)
+            startAutoScroll()
+        }
+    }
+
+    fun drag(offsetY: Float) {
+        currentY = offsetY
+        if (selectionActive) {
+            applySelectionAt(currentY)
+        }
+    }
+
+    fun stopDrag() {
+        selectionActive = false
+        autoScrollJob?.cancel()
+        autoScrollJob = null
+        anchorIndex = null
+        baselineSelection = emptySet()
+        appliedSelection.clear()
+    }
+
+    private fun applySelectionAt(y: Float) {
+        val target = getTargetAt(y) ?: return
+        val anchor = anchorIndex ?: getTargetIndex(target)
+        val targetIdx = getTargetIndex(target)
+        val startIndex = anchor.coerceAtMost(targetIdx)
+        val endIndex = anchor.coerceAtLeast(targetIdx)
+
+        getAllTargets().forEach { item ->
+            val idx = getTargetIndex(item)
+            val id = getTargetId(item)
+            val desiredSelected = if (idx in startIndex..endIndex) {
+                targetSelected
+            } else {
+                id in baselineSelection
+            }
+            val currentSelected = appliedSelection[id] ?: (id in baselineSelection)
+            if (currentSelected != desiredSelected) {
+                appliedSelection[id] = desiredSelected
+                onSetSelected(id, desiredSelected)
+                hapticView.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CLOCK_TICK, ignoreDnd = true)
+            }
+        }
+    }
+
+    private fun autoScrollDelta(): Float {
+        val layoutHeight = lazyListState.layoutInfo.viewportSize.height.toFloat()
+        return calculateAutoScrollDelta(
+            currentY = currentY,
+            viewportHeight = layoutHeight,
+            edgeSizePx = edgeSizePx
+        )
+    }
+
+    private fun startAutoScroll() {
+        autoScrollJob?.cancel()
+        autoScrollJob = scope.launch {
+            while (isActive) {
+                val delta = autoScrollDelta()
+                if (delta != 0f) {
+                    lazyListState.scrollBy(delta)
+                    applySelectionAt(currentY)
+                }
+                delay(16L)
+            }
+        }
+    }
+}
+
+@Composable
+fun <T> rememberDragSelectionState(
+    lazyListState: LazyListState,
+    hapticView: View,
+    context: Context,
+    enableHaptics: Boolean,
+    getTargetAt: (Float) -> T?,
+    getTargetIndex: (T) -> Int,
+    getTargetId: (T) -> String,
+    getInitialSelection: () -> Set<String>,
+    getAllTargets: () -> List<T>,
+    onSetSelected: (String, Boolean) -> Unit,
+    edgeSizePx: Float,
+    onDragStarted: () -> Unit = {}
+): DragSelectionState<T> {
+    val scope = rememberCoroutineScope()
+    return remember(lazyListState, hapticView, context, enableHaptics, getTargetAt, getTargetIndex, getTargetId, getInitialSelection, getAllTargets, onSetSelected, edgeSizePx) {
+        DragSelectionState(
+            scope = scope,
+            lazyListState = lazyListState,
+            hapticView = hapticView,
+            context = context,
+            enableHaptics = enableHaptics,
+            getTargetAt = getTargetAt,
+            getTargetIndex = getTargetIndex,
+            getTargetId = getTargetId,
+            getInitialSelection = getInitialSelection,
+            getAllTargets = getAllTargets,
+            onSetSelected = onSetSelected,
+            edgeSizePx = edgeSizePx,
+            onDragStarted = onDragStarted
+        )
     }
 }
