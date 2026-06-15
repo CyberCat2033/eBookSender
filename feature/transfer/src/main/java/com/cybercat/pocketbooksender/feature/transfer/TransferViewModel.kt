@@ -23,6 +23,7 @@ import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import com.cybercat.pocketbooksender.transfer.TransferCoordinator
 import com.cybercat.pocketbooksender.transfer.TransferEvent
 import com.cybercat.pocketbooksender.transfer.TransferUploadItem
+import com.cybercat.pocketbooksender.ui.FtpErrorMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.InterruptedIOException
@@ -52,6 +53,7 @@ class TransferViewModel @Inject constructor(
     private val ftpGateway: FtpGateway,
     private val localizationManager: LocalizationManager,
     private val transferLauncher: TransferLauncher,
+    private val ftpErrorMapper: FtpErrorMapper,
 ) : ViewModel() {
 
     private val _ftpInput = MutableStateFlow("")
@@ -145,7 +147,7 @@ class TransferViewModel @Inject constructor(
         val parsedDevice = FtpUrlParser.parse(rawLink)
             .getOrElse { error ->
                 _isConnecting.value = false
-                _errorMessage.value = error.toInvalidFtpMessage()
+                _errorMessage.value = ftpErrorMapper.mapInvalidFtpError(error)
                 return
             }
 
@@ -169,7 +171,7 @@ class TransferViewModel @Inject constructor(
                 .onFailure { error ->
                     _isConnecting.value = false
                     connectionManager.disconnect()
-                    _errorMessage.value = error.toFtpConnectionMessage(device)
+                    _errorMessage.value = ftpErrorMapper.mapConnectionError(error, device)
                 }
         }
     }
@@ -333,47 +335,5 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private fun Throwable.toFtpConnectionMessage(device: PocketBookDevice): String {
-        val strings = localizationManager.currentStrings.value
-        val causes = causalChain()
-        val reason = when {
-            causes.any { it is UnknownHostException } ->
-                strings.get("transfer_error_reason_host_unresolved", device.host)
-            causes.any { it is SocketTimeoutException || it is InterruptedIOException || it.message.isTimeoutMessage() } ->
-                strings.get("transfer_error_reason_connection_timeout", device.host, device.port)
-            causes.any { it is ConnectException || it is NoRouteToHostException || it.message.isConnectionRefusedMessage() } ->
-                strings.get("transfer_error_reason_connection_refused", device.host, device.port)
-            else -> message ?: this::class.java.simpleName
-        }
-        return strings.get("transfer_error_cannot_connect", device.host, device.port, reason)
-    }
 
-    private fun Throwable.toInvalidFtpMessage(): String {
-        val strings = localizationManager.currentStrings.value
-        return when (message) {
-            "FTP URL is empty" -> strings.get("transfer_error_invalid_ftp_empty")
-            "Only ftp:// links are supported" -> strings.get("transfer_error_invalid_ftp_scheme")
-            "FTP host is missing" -> strings.get("transfer_error_invalid_ftp_host")
-            else -> strings.transferErrorInvalidFtp
-        }
-    }
-
-    private fun Throwable.causalChain(): List<Throwable> = buildList {
-        val seen = mutableSetOf<Throwable>()
-        var current: Throwable? = this@causalChain
-        while (current != null && seen.add(current)) {
-            add(current)
-            current = current.cause
-        }
-    }
-
-    private fun String?.isTimeoutMessage(): Boolean {
-        val text = this?.lowercase() ?: return false
-        return "timeout" in text || "timed out" in text
-    }
-
-    private fun String?.isConnectionRefusedMessage(): Boolean {
-        val text = this?.lowercase() ?: return false
-        return "connection refused" in text || "failed to connect" in text || "no route to host" in text
-    }
 }
