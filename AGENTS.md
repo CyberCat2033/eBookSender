@@ -20,6 +20,9 @@ These instructions define the required working rules for Codex in this repositor
 - Reuse existing theme, typography, colors, shared dialogs, status components, gesture helpers, and other `core:ui` primitives.
 - Keep UI adaptive, accessible, localized, and resilient to long text.
 - Do not create one-off copies of existing animations, dialogs, rows, overlays, or controls. Extract shared animation or interaction logic when reuse is evident.
+- Before adding haptic feedback or custom animation, check `CODEX_PROJECT_MAP.md` for the existing haptic and motion patterns.
+- Use `View.performHapticIfAllowed(...)` for haptics, respect `AppSettings.enableHaptics`, and choose feedback constants consistently with existing usage.
+- Reuse `AnimatedAlertDialog`, `StatusMessageHost`, gesture helpers, lazy-list animation specs, and existing overlay/expand/progress motion patterns before creating new motion code.
 - Keep user-facing strings in the localization system and update bundled locales when adding or changing visible text.
 
 ## Quality, security, and performance
