@@ -24,14 +24,13 @@ class ConnectionManager @Inject constructor(
 
     private val monitorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var monitorJob: Job? = null
+    private var appInForeground = true
 
     @Synchronized
     fun connect(device: PocketBookDevice) {
         monitorJob?.cancel()
         _connectedDevice.value = device
-        monitorJob = monitorScope.launch {
-            monitorConnection(device)
-        }
+        startMonitorIfAllowed(device)
     }
 
     @Synchronized
@@ -41,11 +40,35 @@ class ConnectionManager @Inject constructor(
         _connectedDevice.value = null
     }
 
+    @Synchronized
+    fun onAppForegrounded() {
+        appInForeground = true
+        val device = _connectedDevice.value ?: return
+        startMonitorIfAllowed(device)
+    }
+
+    @Synchronized
+    fun onAppBackgrounded() {
+        appInForeground = false
+        monitorJob?.cancel()
+        monitorJob = null
+    }
+
+    private fun startMonitorIfAllowed(device: PocketBookDevice) {
+        if (!appInForeground || _connectedDevice.value != device || monitorJob?.isActive == true) return
+        monitorJob = monitorScope.launch {
+            monitorConnection(device)
+        }
+    }
+
     private suspend fun monitorConnection(device: PocketBookDevice) {
         while (kotlin.coroutines.coroutineContext.isActive) {
             delay(AliveIntervalMillis)
+            if (!shouldMonitor(device)) return
             if (!isAliveWithRetries(device)) {
-                disconnectIfCurrent(device)
+                if (shouldMonitor(device)) {
+                    disconnectIfCurrent(device)
+                }
                 return
             }
         }
@@ -64,6 +87,10 @@ class ConnectionManager @Inject constructor(
     }
 
     @Synchronized
+    private fun shouldMonitor(device: PocketBookDevice): Boolean =
+        appInForeground && _connectedDevice.value == device
+
+    @Synchronized
     private fun disconnectIfCurrent(device: PocketBookDevice) {
         if (_connectedDevice.value == device) {
             monitorJob = null
@@ -72,7 +99,7 @@ class ConnectionManager @Inject constructor(
     }
 
     private companion object {
-        const val AliveIntervalMillis = 15_000L
+        const val AliveIntervalMillis = 30_000L
         const val AliveRetryDelayMillis = 1_000L
         const val AliveAttempts = 3
     }

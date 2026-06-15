@@ -71,6 +71,14 @@ These instructions define the required working rules for Codex in this repositor
   GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:assembleDebug
   ```
 
+- When installing a release build on a connected device, prefer Gradle's install task:
+
+  ```sh
+  GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:installRelease
+  ```
+
+  Use a separate `:app:assembleRelease` plus `adb install` only when you need to inspect or archive the APK before installation.
+
 - Run module-specific tests or lint tasks when they exist and are relevant.
 - If verification cannot be run, state the exact reason and the residual risk.
 - Do not call code changes complete until available verification has passed or the user explicitly accepts the risk.

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
+import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.cybercat.pocketbooksender.ui.BitmapCache
 import java.io.File
@@ -35,9 +37,39 @@ class SettingsViewModel @Inject constructor(
     private val _statusMessage = MutableStateFlow<String?>(null)
     private val _pendingRename = MutableStateFlow<PendingRename?>(null)
     private val _activeFolderRename = MutableStateFlow<FolderType?>(null)
+    private val _appearanceOverride = MutableStateFlow(AppearanceOverride())
+
+    private val persistedSettings: StateFlow<AppSettings> = settingsRepository.settings.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = AppSettings(),
+    )
+
+    private val effectiveSettings = combine(
+        persistedSettings,
+        _appearanceOverride,
+    ) { settings, override ->
+        settings.copy(
+            useDynamicColor = override.useDynamicColor ?: settings.useDynamicColor,
+            theme = override.theme ?: settings.theme,
+        )
+    }
+
+    init {
+        viewModelScope.launch {
+            persistedSettings.collect { settings ->
+                _appearanceOverride.update { override ->
+                    override.copy(
+                        useDynamicColor = override.useDynamicColor?.takeUnless { it == settings.useDynamicColor },
+                        theme = override.theme?.takeUnless { it == settings.theme },
+                    )
+                }
+            }
+        }
+    }
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        settingsRepository.settings,
+        effectiveSettings,
         _statusMessage,
         _pendingRename,
         localizationManager.availableLocales,
@@ -194,7 +226,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setUseDynamicColor(value: Boolean) {
-        viewModelScope.launch { settingsRepository.setUseDynamicColor(value) }
+        val override = _appearanceOverride.value
+        val currentValue = override.useDynamicColor ?: persistedSettings.value.useDynamicColor
+        if (currentValue == value && override.useDynamicColor == null) return
+
+        _appearanceOverride.update { it.copy(useDynamicColor = value) }
+        viewModelScope.launch {
+            runCatching { settingsRepository.setUseDynamicColor(value) }
+                .onFailure { clearUseDynamicColorOverrideIf(value) }
+        }
     }
 
     fun setEnableHaptics(value: Boolean) {
@@ -202,7 +242,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setTheme(value: AppTheme) {
-        viewModelScope.launch { settingsRepository.setTheme(value) }
+        val override = _appearanceOverride.value
+        val currentValue = override.theme ?: persistedSettings.value.theme
+        if (currentValue == value && override.theme == null) return
+
+        _appearanceOverride.update { it.copy(theme = value) }
+        viewModelScope.launch {
+            runCatching { settingsRepository.setTheme(value) }
+                .onFailure { clearThemeOverrideIf(value) }
+        }
     }
 
     fun setLanguageCode(value: String) {
@@ -269,4 +317,29 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+
+    private fun clearUseDynamicColorOverrideIf(value: Boolean) {
+        _appearanceOverride.update { override ->
+            if (override.useDynamicColor == value) {
+                override.copy(useDynamicColor = null)
+            } else {
+                override
+            }
+        }
+    }
+
+    private fun clearThemeOverrideIf(value: AppTheme) {
+        _appearanceOverride.update { override ->
+            if (override.theme == value) {
+                override.copy(theme = null)
+            } else {
+                override
+            }
+        }
+    }
 }
+
+private data class AppearanceOverride(
+    val useDynamicColor: Boolean? = null,
+    val theme: AppTheme? = null,
+)

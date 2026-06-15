@@ -39,6 +39,8 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/localization/AppStrings.kt` - string access model.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/localization/LocalizationManager.kt` - runtime localization loading.
 - `app/src/main/java/com/cybercat/pocketbooksender/ui/PocketBookSenderApp.kt` - Compose app shell and navigation integration.
+- `app/src/main/java/com/cybercat/pocketbooksender/PocketBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/transfer/ConnectionManager.kt` - shared PocketBook connection state and foreground-only keep-alive monitoring.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service.
 - `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded and adds completed chapters to the upload queue.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; persists queue snapshots in app storage and checks restored file/URI access.
@@ -143,6 +145,12 @@ GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:compileDebugKotlin
 
 ```sh
 GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:assembleDebug
+```
+
+For installing release builds on a connected device, prefer Gradle's install task:
+
+```sh
+GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:installRelease
 ```
 
 Run narrower module tasks when available and relevant. If Gradle needs network access for dependency resolution, request approval instead of bypassing the sandbox.

@@ -70,6 +70,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,6 +94,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cybercat.pocketbooksender.data.manga.MangaChapter
 import com.cybercat.pocketbooksender.data.manga.MangaChapterDownload
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
@@ -461,8 +465,26 @@ internal fun MangaBrowserCard(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var showLoginDialog by remember { mutableStateOf(false) }
+
+    DisposableEffect(lifecycleOwner, webViewRef) {
+        val webView = webViewRef ?: return@DisposableEffect onDispose { }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> webView.resumeBrowser()
+                Lifecycle.Event.ON_PAUSE,
+                Lifecycle.Event.ON_STOP -> webView.pauseBrowser()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            webView.pauseBrowser()
+        }
+    }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onClose,
@@ -526,8 +548,10 @@ internal fun MangaBrowserCard(
 
                                     view.postDelayed(
                                         {
-                                            view.extractHtml { html ->
-                                                onWebPageLoaded(loadedUrl, html)
+                                            if (webViewRef === view) {
+                                                view.extractHtml { html ->
+                                                    onWebPageLoaded(loadedUrl, html)
+                                                }
                                             }
                                         },
                                         HtmlExtractDelayMillis,
@@ -541,6 +565,12 @@ internal fun MangaBrowserCard(
                         if (url.isNotBlank() && webView.url != url) {
                             webView.loadUrl(url)
                         }
+                    },
+                    onRelease = { webView ->
+                        if (webViewRef === webView) {
+                            webViewRef = null
+                        }
+                        webView.releaseBrowser()
                     },
                 )
             }
@@ -912,6 +942,25 @@ internal fun WebView.extractHtml(onHtml: (String) -> Unit) {
             onHtml(html)
         }
     }
+}
+
+private fun WebView.pauseBrowser() {
+    onPause()
+    pauseTimers()
+}
+
+private fun WebView.resumeBrowser() {
+    resumeTimers()
+    onResume()
+}
+
+private fun WebView.releaseBrowser() {
+    runCatching { stopLoading() }
+    runCatching { loadUrl("about:blank") }
+    webViewClient = WebViewClient()
+    pauseBrowser()
+    removeAllViews()
+    destroy()
 }
 
 internal data class ChapterPointerTarget(
