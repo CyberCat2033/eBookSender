@@ -6,11 +6,11 @@ This file helps Codex navigate the project quickly and edit files safely. Keep i
 
 ## Project overview
 
-PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Material 3, Hilt, Room, DataStore, FTP integration, OPDS browsing, manga download support, and runtime localization.
+PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Material 3, Hilt, Room, DataStore, FTP integration, OPDS browsing, foreground manga/download transfer support, persisted upload queue state, and runtime localization.
 
 ## Gradle modules
 
-- `:app` - Android application entry point, DI setup, navigation shell, metadata extraction, transfer service, queue implementation, app resources, manifest, and launcher assets.
+- `:app` - Android application entry point, DI setup, navigation shell, metadata extraction, transfer and manga foreground services, persisted queue implementation, app resources, manifest, and launcher assets.
 - `:core:model` - shared app models such as upload items, settings, device catalog, categories, and PocketBook device data.
 - `:core:common` - common utilities, constants, formatting helpers, coroutine helpers, result helpers, and small shared primitives.
 - `:core:domain` - pure domain logic: FTP URL parsing, file classification, path planning, filename sanitizing, book formats, and natural sorting.
@@ -40,6 +40,10 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/localization/LocalizationManager.kt` - runtime localization loading.
 - `app/src/main/java/com/cybercat/pocketbooksender/ui/PocketBookSenderApp.kt` - Compose app shell and navigation integration.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service.
+- `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded and adds completed chapters to the upload queue.
+- `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; persists queue snapshots in app storage and checks restored file/URI access.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadCoordinator.kt` - app/feature boundary for foreground manga download requests and progress/completion events.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSelectionKeys.kt` - shared stable manga selection keys used by subscription update UI and background download completion.
 
 ## Search and edit workflow
 

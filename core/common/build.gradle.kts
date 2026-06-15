@@ -22,3 +22,7 @@ android {
 kotlin {
     jvmToolchain(17)
 }
+
+dependencies {
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+}

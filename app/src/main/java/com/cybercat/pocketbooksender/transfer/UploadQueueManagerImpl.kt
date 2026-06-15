@@ -16,6 +16,8 @@ import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,11 +27,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 @Singleton
 class UploadQueueManagerImpl @Inject constructor(
@@ -45,8 +50,33 @@ class UploadQueueManagerImpl @Inject constructor(
     override val queue: StateFlow<List<UploadItem>> = _queue.asStateFlow()
 
     private var activeSettings = AppSettings()
+    private var queueRestored = false
 
     init {
+        scope.launch {
+            val restoredQueue = withContext(Dispatchers.IO) {
+                restorePersistedQueue()
+            }
+            _queue.update { current ->
+                (restoredQueue + current).deduplicateQueue()
+            }
+            queueRestored = true
+            withContext(Dispatchers.IO) {
+                persistQueue(_queue.value)
+            }
+        }
+
+        _queue
+            .drop(1)
+            .onEach { items ->
+                if (queueRestored) {
+                    withContext(Dispatchers.IO) {
+                        persistQueue(items)
+                    }
+                }
+            }
+            .launchIn(scope)
+
         // Reactively replan queue items when settings change
         settingsRepository.settings
             .onEach { settings ->
@@ -241,6 +271,54 @@ class UploadQueueManagerImpl @Inject constructor(
         }
     }
 
+    private fun restorePersistedQueue(): List<UploadItem> {
+        val file = queueStoreFile()
+        if (!file.isFile) return emptyList()
+
+        return try {
+            val payload = JSONArray(file.readText())
+            buildList {
+                for (index in 0 until payload.length()) {
+                    val item = payload.optJSONObject(index)?.toUploadItemOrNull() ?: continue
+                    val canReadSource = canReadSource(Uri.parse(item.sourceUri))
+                    val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
+                    add(
+                        replan(
+                            item.copy(
+                                preview = null,
+                                status = restoredStatus,
+                                progress = if (restoredStatus == UploadStatus.Uploaded) 1f else 0f,
+                            ),
+                            activeSettings,
+                        ),
+                    )
+                }
+            }.deduplicateQueue()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun persistQueue(items: List<UploadItem>) {
+        val file = queueStoreFile()
+        val payload = JSONArray()
+        items.forEach { item ->
+            payload.put(item.toJson())
+        }
+
+        try {
+            file.parentFile?.mkdirs()
+            val tempFile = File(file.parentFile, "${file.name}.tmp")
+            tempFile.writeText(payload.toString())
+            if (!tempFile.renameTo(file)) {
+                tempFile.copyTo(file, overwrite = true)
+                tempFile.delete()
+            }
+        } catch (_: IOException) {
+            // Queue persistence is best effort; in-memory queue remains authoritative.
+        }
+    }
+
     private fun createUploadItem(uri: Uri, displayName: String, settings: AppSettings): UploadItem {
         val extension = displayName.bookExtension().ifBlank { "bin" }
         val title = displayName.bookTitleWithoutExtension()
@@ -381,5 +459,98 @@ class UploadQueueManagerImpl @Inject constructor(
         } catch (_: SecurityException) {
         } catch (_: IllegalArgumentException) {
         }
+    }
+
+    private fun canReadSource(uri: Uri): Boolean {
+        return when (uri.scheme?.lowercase()) {
+            null, "file" -> {
+                val path = uri.path.orEmpty()
+                path.isNotBlank() && File(path).let { file -> file.isFile && file.canRead() }
+            }
+            "content" -> runCatching {
+                context.contentResolver.openInputStream(uri)?.use { } ?: error("Cannot open source")
+            }.isSuccess
+            else -> runCatching {
+                context.contentResolver.openInputStream(uri)?.use { } ?: error("Cannot open source")
+            }.isSuccess
+        }
+    }
+
+    private fun queueStoreFile(): File =
+        File(context.filesDir, QueueStoreFileName)
+
+    private fun UploadStatus.restoredAfterProcessStart(canReadSource: Boolean): UploadStatus =
+        when {
+            !canReadSource -> UploadStatus.Failed
+            this == UploadStatus.Uploaded -> UploadStatus.Uploaded
+            this == UploadStatus.Failed -> UploadStatus.Failed
+            this == UploadStatus.Skipped -> UploadStatus.Skipped
+            else -> UploadStatus.Pending
+        }
+
+    private fun UploadItem.toJson(): JSONObject =
+        JSONObject()
+            .put("id", id)
+            .put("sourceUri", sourceUri)
+            .put("originalName", originalName)
+            .put("extension", extension)
+            .put("category", category.name)
+            .put("title", title)
+            .putNullable("author", author)
+            .putNullable("documentsTag", documentsTag)
+            .putNullable("mangaSeries", mangaSeries)
+            .putNullable("mangaVolume", mangaVolume)
+            .putNullable("year", year)
+            .putNullable("language", language)
+            .putNullable("series", series)
+            .putNullable("seriesIndex", seriesIndex)
+            .putNullable("publisher", publisher)
+            .putNullable("coverUri", coverUri)
+            .put("plannedPath", plannedPath)
+            .put("status", status.name)
+
+    private fun JSONObject.toUploadItemOrNull(): UploadItem? {
+        val sourceUri = nullableString("sourceUri") ?: return null
+        val originalName = nullableString("originalName") ?: return null
+        val extension = nullableString("extension") ?: originalName.bookExtension().ifBlank { "bin" }
+        val category = enumValueOrNull<BookCategory>(nullableString("category"))
+            ?: classifier.classify(originalName)
+        val title = nullableString("title") ?: originalName.bookTitleWithoutExtension()
+        val status = enumValueOrNull<UploadStatus>(nullableString("status")) ?: UploadStatus.Pending
+
+        return UploadItem(
+            id = nullableString("id") ?: UUID.randomUUID().toString(),
+            sourceUri = sourceUri,
+            originalName = originalName,
+            extension = extension,
+            category = category,
+            title = title,
+            author = nullableString("author"),
+            documentsTag = nullableString("documentsTag"),
+            mangaSeries = nullableString("mangaSeries"),
+            mangaVolume = nullableString("mangaVolume"),
+            year = nullableString("year"),
+            language = nullableString("language"),
+            series = nullableString("series"),
+            seriesIndex = nullableString("seriesIndex"),
+            publisher = nullableString("publisher"),
+            coverUri = nullableString("coverUri"),
+            plannedPath = nullableString("plannedPath").orEmpty(),
+            status = status,
+            progress = optDouble("progress", 0.0).toFloat(),
+        )
+    }
+
+    private fun JSONObject.putNullable(name: String, value: String?): JSONObject =
+        put(name, value ?: JSONObject.NULL)
+
+    private fun JSONObject.nullableString(name: String): String? =
+        if (has(name) && !isNull(name)) getString(name) else null
+
+    private inline fun <reified T : Enum<T>> enumValueOrNull(value: String?): T? =
+        value?.let { runCatching { enumValueOf<T>(it) }.getOrNull() }
+
+    private companion object {
+        const val QueueStoreFileName = "upload_queue.json"
     }
 }

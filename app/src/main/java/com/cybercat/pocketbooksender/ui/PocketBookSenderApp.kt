@@ -382,6 +382,10 @@ private fun AppNavHost(
                 },
                 isMangaSelectionActive = mangaState.selectedChapterIds.isNotEmpty(),
                 mangaSelectedChapterCount = mangaState.selectedChapterIds.size,
+                onClearMangaSelection = {
+                    view.performHapticIfAllowed(context, enableHaptics, android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                    mangaViewModel.clearMangaChapterSelection()
+                },
             )
         }
         composable(MainDestination.Settings.route) {

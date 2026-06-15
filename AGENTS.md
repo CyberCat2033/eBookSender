@@ -25,6 +25,7 @@ These instructions define the required working rules for Codex in this repositor
 - Reuse `AnimatedAlertDialog`, `StatusMessageHost`, gesture helpers, lazy-list animation specs, and existing overlay/expand/progress motion patterns before creating new motion code.
 - Keep press, ripple, and selection indications clipped to the same shape as the visible component. For rounded Material surfaces such as `Card`/`ElevatedCard`, prefer the component `onClick` overload or explicitly clip the indication to the surface shape; do not apply an outer rectangular `Modifier.clickable` to a rounded surface.
 - Keep user-facing strings in the localization system and update bundled locales when adding or changing visible text.
+- Bundled runtime locales live in `app/src/main/assets/locales/en.json` and `app/src/main/assets/locales/ru.json`; update both for every new or changed user-facing string and keep external locale loading compatible.
 
 ## Quality, security, and performance
 

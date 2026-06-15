@@ -284,6 +284,12 @@ class AppStrings(
     val mangaProgressDetailGeneric: String get() = get("manga_progress_detail_generic")
     val mangaErrorFailuresSummary: String get() = get("manga_error_failures_summary")
     val mangaDownloadProgressTitle: String get() = get("manga_download_progress_title")
+    val mangaNotificationTitle: String get() = get("manga_notification_title")
+    val mangaNotificationNothingToDownload: String get() = get("manga_notification_nothing_to_download")
+    val mangaNotificationDownloadingProgress: String get() = get("manga_notification_downloading_progress")
+    val mangaNotificationCompleteTitle: String get() = get("manga_notification_complete_title")
+    val mangaNotificationCompleteSuccess: String get() = get("manga_notification_complete_success")
+    val mangaNotificationCompleteWithFailures: String get() = get("manga_notification_complete_with_failures")
 
     val opdsStatusCredentialsUpdated: String get() = get("opds_status_credentials_updated")
     val opdsErrorCannotSaveCredentials: String get() = get("opds_error_cannot_save_credentials")
@@ -310,4 +316,3 @@ class AppStrings(
 val LocalStrings = androidx.compose.runtime.staticCompositionLocalOf<AppStrings> {
     error("No AppStrings provided")
 }
-

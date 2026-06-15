@@ -84,6 +84,7 @@ fun OpdsScreen(
     mangaFloatingActionButton: @Composable () -> Unit,
     isMangaSelectionActive: Boolean,
     mangaSelectedChapterCount: Int,
+    onClearMangaSelection: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -97,6 +98,10 @@ fun OpdsScreen(
 
     BackHandler(enabled = webMode == WebContentMode.Opds && state.canGoBack) {
         onBack()
+    }
+
+    BackHandler(enabled = webMode == WebContentMode.Manga && isMangaSelectionActive) {
+        onClearMangaSelection()
     }
 
     if (showAddSourceDialog) {

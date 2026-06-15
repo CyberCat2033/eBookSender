@@ -1,44 +1,48 @@
 package com.cybercat.pocketbooksender.feature.manga
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
 import com.cybercat.pocketbooksender.data.manga.MangaAuthState
 import com.cybercat.pocketbooksender.data.manga.MangaChapter
 import com.cybercat.pocketbooksender.data.manga.MangaChapterDownload
-import com.cybercat.pocketbooksender.data.manga.MangaDownloadedChapter
+import com.cybercat.pocketbooksender.data.manga.MangaChapterDownloadTarget
+import com.cybercat.pocketbooksender.data.manga.MangaDownloadCoordinator
+import com.cybercat.pocketbooksender.data.manga.MangaDownloadEvent
+import com.cybercat.pocketbooksender.data.manga.MangaDownloadLauncher
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadProgress
+import com.cybercat.pocketbooksender.data.manga.MangaDownloadRequestKind
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesDetails
-import com.cybercat.pocketbooksender.data.manga.MangaChapterDownloadTarget
-import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.DeviceCatalog
-import com.cybercat.pocketbooksender.model.UploadItem
-import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
+import com.cybercat.pocketbooksender.util.formatBytes
+import com.cybercat.pocketbooksender.util.launchTemporaryStatus
+import com.cybercat.pocketbooksender.util.onFailureRethrowing
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.io.IOException
-import java.util.UUID
 import javax.inject.Inject
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
 
 @HiltViewModel
 class MangaViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
     private val catalogRepository: DeviceCatalogRepository,
-    private val queueManager: UploadQueueManager,
+    private val downloadCoordinator: MangaDownloadCoordinator,
+    private val downloadLauncher: MangaDownloadLauncher,
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
 ) : ViewModel() {
 
     private val _mangaState = MutableStateFlow(MangaUiState())
+    private var activeDownload: ActiveMangaDownload? = null
 
     val uiState: StateFlow<MangaUiState> = combine(
         mangaRepository.downloadedStableKeys,
@@ -75,6 +79,9 @@ class MangaViewModel @Inject constructor(
         if (_mangaState.value.selectedSourceId.isBlank() && mangaRepository.sources.isNotEmpty()) {
             selectMangaSource(mangaRepository.sources.first().id)
         }
+        downloadCoordinator.events
+            .onEach(::handleMangaDownloadEvent)
+            .launchIn(viewModelScope)
     }
 
     fun onMangaSearchChanged(value: String) {
@@ -187,8 +194,7 @@ class MangaViewModel @Inject constructor(
                 if (results.isEmpty()) {
                     showMangaStatus(localizationManager.currentStrings.value.mangaStatusNoMangaFound)
                 }
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+            }.onFailureRethrowing { error ->
                 _mangaState.update { state ->
                     state.copy(
                         isLoading = false,
@@ -285,8 +291,7 @@ class MangaViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 mangaRepository.setFavorite(series, favorite)
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+            }.onFailureRethrowing { error ->
                 _mangaState.update { state ->
                     state.copy(
                         errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotUpdateFavorite,
@@ -302,8 +307,7 @@ class MangaViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 mangaRepository.setSubscribed(series, subscribed)
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+            }.onFailureRethrowing { error ->
                 _mangaState.update { state ->
                     state.copy(
                         errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotUpdateSubscription,
@@ -356,8 +360,7 @@ class MangaViewModel @Inject constructor(
                         errorMessage = null,
                     )
                 }
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+            }.onFailureRethrowing { error ->
                 _mangaState.update { state ->
                     state.copy(
                         isCheckingSubscriptions = false,
@@ -420,6 +423,16 @@ class MangaViewModel @Inject constructor(
         }
 
         val strings = localizationManager.currentStrings.value
+        val requestId = downloadCoordinator.submit(
+            targets = targets,
+            kind = MangaDownloadRequestKind.SubscriptionUpdates,
+        )
+        activeDownload = ActiveMangaDownload(
+            requestId = requestId,
+            kind = MangaDownloadRequestKind.SubscriptionUpdates,
+            selectedSubscriptionKeys = selectedKeys,
+            subscriptionUpdates = snapshot.subscriptionUpdates,
+        )
         _mangaState.update { state ->
             state.copy(
                 subscriptionUpdatesVisible = false,
@@ -437,74 +450,7 @@ class MangaViewModel @Inject constructor(
                 statusMessage = null,
             )
         }
-
-        viewModelScope.launch {
-            runCatching {
-                mangaRepository.downloadMultipleSeriesChapters(
-                    targets = targets,
-                    onProgress = { progress ->
-                        _mangaState.update { state ->
-                            state.copy(
-                                downloadProgress = progress.toUiProgress(
-                                    previousProgress = state.downloadProgress?.progress,
-                                ),
-                            )
-                        }
-                    },
-                )
-            }.onSuccess { result ->
-                if (result.downloaded.isNotEmpty()) {
-                    addDownloadedMangaFiles(result.downloaded)
-                }
-
-                val downloadedKeys = result.downloaded.mapTo(mutableSetOf()) { downloaded ->
-                    downloaded.chapter.subscriptionUpdateSelectionKey()
-                }
-                val remainingUpdates = if (result.failedMessages.isEmpty()) {
-                    emptyList()
-                } else {
-                    snapshot.subscriptionUpdates.mapNotNull { update ->
-                        val remainingChapters = update.newChapters.filter { chapter ->
-                            val key = chapter.subscriptionUpdateSelectionKey()
-                            key in selectedKeys && key !in downloadedKeys
-                        }
-                        if (remainingChapters.isEmpty()) {
-                            null
-                        } else {
-                            update.copy(newChapters = remainingChapters)
-                        }
-                    }
-                }
-                val remainingKeys = remainingUpdates.flatMap { update ->
-                    update.newChapters.map { chapter -> chapter.subscriptionUpdateSelectionKey() }
-                }.toSet()
-
-                _mangaState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        downloadProgress = null,
-                        subscriptionUpdates = remainingUpdates,
-                        subscriptionUpdatesVisible = remainingUpdates.isNotEmpty(),
-                        selectedSubscriptionUpdateChapterKeys = remainingKeys,
-                        errorMessage = formatMangaFailures(result.failedMessages),
-                    )
-                }
-
-                if (result.downloaded.isNotEmpty()) {
-                    showMangaStatus(localizationManager.currentStrings.value.get("manga_status_added_to_queue", result.downloaded.size))
-                }
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
-                _mangaState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        downloadProgress = null,
-                        subscriptionUpdatesVisible = snapshot.subscriptionUpdates.isNotEmpty(),
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotDownload,
-                    )
-                }
-            }
-        }
+        downloadLauncher.startMangaDownload(requestId)
     }
 
     fun downloadSelectedMangaChapters() {
@@ -522,6 +468,19 @@ class MangaViewModel @Inject constructor(
         }
 
         val strings = localizationManager.currentStrings.value
+        val targets = selectedChapters.map { chapter ->
+            MangaChapterDownloadTarget(series, chapter)
+        }
+        val requestId = downloadCoordinator.submit(
+            targets = targets,
+            kind = MangaDownloadRequestKind.SelectedChapters,
+        )
+        activeDownload = ActiveMangaDownload(
+            requestId = requestId,
+            kind = MangaDownloadRequestKind.SelectedChapters,
+            selectedSubscriptionKeys = emptySet(),
+            subscriptionUpdates = emptyList(),
+        )
         _mangaState.update { state ->
             state.copy(
                 isDownloading = true,
@@ -538,76 +497,100 @@ class MangaViewModel @Inject constructor(
                 statusMessage = null,
             )
         }
+        downloadLauncher.startMangaDownload(requestId)
+    }
 
-        viewModelScope.launch {
-            runCatching {
-                mangaRepository.downloadChapters(
-                    sourceId = snapshot.selectedSourceId,
-                    series = series,
-                    chapters = selectedChapters,
-                    onProgress = { progress ->
-                        _mangaState.update { state ->
-                            state.copy(
-                                downloadProgress = progress.toUiProgress(
-                                    previousProgress = state.downloadProgress?.progress,
-                                ),
-                            )
-                        }
-                    },
-                )
-            }.onSuccess { result ->
-                if (result.downloaded.isNotEmpty()) {
-                    addDownloadedMangaFiles(result.downloaded)
-                }
-
+    private fun handleMangaDownloadEvent(event: MangaDownloadEvent) {
+        when (event) {
+            is MangaDownloadEvent.Started -> Unit
+            is MangaDownloadEvent.Progress -> {
+                if (activeDownload?.requestId != event.requestId) return
                 _mangaState.update { state ->
-                    val downloadedIds = result.downloaded.mapTo(mutableSetOf()) { downloaded ->
-                        downloaded.chapter.chapterId
-                    }
                     state.copy(
-                        isDownloading = false,
-                        downloadProgress = null,
-                        selectedChapterIds = state.selectedChapterIds - downloadedIds,
-                        errorMessage = formatMangaFailures(result.failedMessages),
+                        downloadProgress = event.progress.toUiProgress(
+                            previousProgress = state.downloadProgress?.progress,
+                        ),
                     )
                 }
-
-                if (result.downloaded.isNotEmpty()) {
-                    showMangaStatus(localizationManager.currentStrings.value.get("manga_status_added_to_queue", result.downloaded.size))
+            }
+            is MangaDownloadEvent.Completed -> {
+                val active = activeDownload?.takeIf { it.requestId == event.requestId } ?: return
+                activeDownload = null
+                when (active.kind) {
+                    MangaDownloadRequestKind.SelectedChapters -> completeSelectedChapterDownload(event)
+                    MangaDownloadRequestKind.SubscriptionUpdates -> completeSubscriptionUpdateDownload(active, event)
                 }
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+                if (event.addedToQueueCount > 0) {
+                    showMangaStatus(
+                        localizationManager.currentStrings.value.get(
+                            "manga_status_added_to_queue",
+                            event.addedToQueueCount,
+                        ),
+                    )
+                }
+            }
+            is MangaDownloadEvent.Failed -> {
+                if (activeDownload?.requestId != event.requestId) return
+                val active = activeDownload
+                activeDownload = null
                 _mangaState.update { state ->
                     state.copy(
                         isDownloading = false,
                         downloadProgress = null,
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotDownload,
+                        subscriptionUpdatesVisible =
+                            active?.kind == MangaDownloadRequestKind.SubscriptionUpdates &&
+                                active.subscriptionUpdates.isNotEmpty(),
+                        errorMessage = event.message,
                     )
                 }
             }
         }
     }
 
-    private fun addDownloadedMangaFiles(
-        downloaded: List<MangaDownloadedChapter>,
-    ) {
-        val items = downloaded.map { item ->
-            val uri = Uri.fromFile(item.file)
-            val ext = item.file.extension.lowercase().ifBlank { "cbz" }
-            UploadItem(
-                id = UUID.randomUUID().toString(),
-                sourceUri = uri.toString(),
-                originalName = item.file.name,
-                extension = ext,
-                category = BookCategory.Manga,
-                title = item.chapter.title,
-                mangaSeries = item.series.title,
-                mangaVolume = item.chapter.title,
-                plannedPath = "",
+    private fun completeSelectedChapterDownload(event: MangaDownloadEvent.Completed) {
+        _mangaState.update { state ->
+            state.copy(
+                isDownloading = false,
+                downloadProgress = null,
+                selectedChapterIds = state.selectedChapterIds - event.downloadedChapterIds,
+                errorMessage = formatMangaFailures(event.failedMessages),
             )
         }
+    }
 
-        queueManager.addPreparedItems(items)
+    private fun completeSubscriptionUpdateDownload(
+        active: ActiveMangaDownload,
+        event: MangaDownloadEvent.Completed,
+    ) {
+        val remainingUpdates = if (event.failedMessages.isEmpty()) {
+            emptyList()
+        } else {
+            active.subscriptionUpdates.mapNotNull { update ->
+                val remainingChapters = update.newChapters.filter { chapter ->
+                    val key = chapter.subscriptionUpdateSelectionKey()
+                    key in active.selectedSubscriptionKeys && key !in event.downloadedSubscriptionKeys
+                }
+                if (remainingChapters.isEmpty()) {
+                    null
+                } else {
+                    update.copy(newChapters = remainingChapters)
+                }
+            }
+        }
+        val remainingKeys = remainingUpdates.flatMap { update ->
+            update.newChapters.map { chapter -> chapter.subscriptionUpdateSelectionKey() }
+        }.toSet()
+
+        _mangaState.update { state ->
+            state.copy(
+                isDownloading = false,
+                downloadProgress = null,
+                subscriptionUpdates = remainingUpdates,
+                subscriptionUpdatesVisible = remainingUpdates.isNotEmpty(),
+                selectedSubscriptionUpdateChapterKeys = remainingKeys,
+                errorMessage = formatMangaFailures(event.failedMessages),
+            )
+        }
     }
 
     private fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) {
@@ -661,7 +644,8 @@ class MangaViewModel @Inject constructor(
     }
 
     private fun showMangaStatus(message: String) {
-        showTemporaryStatus(
+        viewModelScope.launchTemporaryStatus(
+            message = message,
             delayMillis = StatusMessageMillis,
             setMessage = { msg ->
                 _mangaState.update { state ->
@@ -676,22 +660,8 @@ class MangaViewModel @Inject constructor(
                         state
                     }
                 }
-            },
-            message = message,
+            }
         )
-    }
-
-    private fun showTemporaryStatus(
-        delayMillis: Long,
-        setMessage: (String) -> Unit,
-        clearIfStillCurrent: (String) -> Unit,
-        message: String,
-    ) {
-        setMessage(message)
-        viewModelScope.launch {
-            delay(delayMillis)
-            clearIfStillCurrent(message)
-        }
     }
 
     private fun MangaDownloadProgress.toUiProgress(
@@ -765,21 +735,6 @@ class MangaViewModel @Inject constructor(
         }
     }
 
-    private fun Long.formatBytes(): String {
-        val units = listOf("B", "KB", "MB", "GB")
-        var value = toDouble()
-        var unitIndex = 0
-        while (value >= 1024.0 && unitIndex < units.lastIndex) {
-            value /= 1024.0
-            unitIndex += 1
-        }
-        return if (unitIndex == 0) {
-            "${value.toLong()} ${units[unitIndex]}"
-        } else {
-            "%.1f %s".format(value, units[unitIndex])
-        }
-    }
-
     private fun String.catalogMatchKey(): String =
         lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), "")
 
@@ -787,3 +742,10 @@ class MangaViewModel @Inject constructor(
         const val StatusMessageMillis = 5000L
     }
 }
+
+private data class ActiveMangaDownload(
+    val requestId: String,
+    val kind: MangaDownloadRequestKind,
+    val selectedSubscriptionKeys: Set<String>,
+    val subscriptionUpdates: List<com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult>,
+)
