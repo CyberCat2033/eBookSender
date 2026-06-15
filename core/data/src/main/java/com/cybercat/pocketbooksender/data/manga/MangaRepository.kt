@@ -13,8 +13,7 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
+
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.delay
@@ -36,9 +35,9 @@ class MangaRepository @Inject constructor(
     private val historyDao: MangaChapterHistoryDao,
     private val bookmarkDao: MangaSeriesBookmarkDao,
     private val comxAdapter: ComxMangaAdapter,
+    private val archiveHelper: MangaArchiveHelper,
 ) {
     private val adapters: List<HtmlMangaSourceAdapter> = listOf(comxAdapter)
-    private val fileLock = Any()
     private val searchCache = ConcurrentHashMap<String, TimedCacheEntry<List<MangaSeriesSearchResult>>>()
     private val seriesCache = ConcurrentHashMap<String, TimedCacheEntry<MangaSeriesPage>>()
 
@@ -466,10 +465,8 @@ class MangaRepository @Inject constructor(
             onPageProgress(pages.size, completedPages, detail)
         }
 
-        val file = synchronized(fileLock) {
-            uniqueFile(outputDir, "$baseFileName.cbz")
-        }
-        writeCbz(downloadedPages, file)
+        val file = archiveHelper.uniqueFile(outputDir, "$baseFileName.cbz")
+        archiveHelper.writeCbz(downloadedPages, file)
         return file
     }
 
@@ -482,9 +479,7 @@ class MangaRepository @Inject constructor(
     ): File? {
         if (chapter.downloadUrl.isNullOrBlank()) return null
 
-        val tempFile = synchronized(fileLock) {
-            uniqueFile(outputDir, "$baseFileName.download")
-        }
+        val tempFile = archiveHelper.uniqueFile(outputDir, "$baseFileName.download")
 
         try {
             onProgress("Downloading archive", 0L, null)
@@ -498,7 +493,7 @@ class MangaRepository @Inject constructor(
                 tempFile.delete()
                 return null
             }
-            return moveTempToUnique(
+            return archiveHelper.moveTempToUnique(
                 tempFile = tempFile,
                 directory = outputDir,
                 fileName = "$baseFileName.${archive.fileExtension}",
@@ -510,49 +505,7 @@ class MangaRepository @Inject constructor(
         }
     }
 
-    private suspend fun writeCbz(
-        pages: List<DownloadedMangaPage>,
-        outputFile: File,
-    ) {
-        ZipOutputStream(outputFile.outputStream().buffered()).use { zip ->
-            pages.forEachIndexed { index, page ->
-                val extension = page.fileExtension.lowercase().trimStart('.').ifBlank { "jpg" }
-                val entryName = "${(index + 1).toString().padStart(4, '0')}.$extension"
-                zip.putNextEntry(ZipEntry(entryName))
-                zip.write(page.bytes)
-                zip.closeEntry()
-            }
-        }
-    }
 
-    private fun uniqueFile(directory: File, fileName: String): File {
-        val base = fileName.substringBeforeLast('.', fileName)
-        val extension = fileName.substringAfterLast('.', "")
-        var candidate = File(directory, fileName)
-        var index = 2
-        while (candidate.exists() || !candidate.createNewFile()) {
-            val suffix = if (extension.isBlank()) "" else ".$extension"
-            candidate = File(directory, "$base-$index$suffix")
-            index += 1
-        }
-        return candidate
-    }
-
-    private fun moveTempToUnique(
-        tempFile: File,
-        directory: File,
-        fileName: String,
-    ): File = synchronized(fileLock) {
-        val outputFile = uniqueFile(directory, fileName)
-        if (!outputFile.delete()) {
-            throw IOException("Cannot prepare output file: ${outputFile.name}")
-        }
-        if (!tempFile.renameTo(outputFile)) {
-            tempFile.copyTo(outputFile, overwrite = true)
-            tempFile.delete()
-        }
-        outputFile
-    }
 
     private fun adapter(sourceId: String): HtmlMangaSourceAdapter =
         adapters.firstOrNull { adapter -> adapter.id == sourceId }
@@ -624,12 +577,6 @@ private fun MangaChapterDownloadTarget.resolvedSourceId(): String {
     }
     return seriesSourceId.ifBlank { chapterSourceId }
 }
-
-private data class DownloadedMangaPage(
-    val index: Int,
-    val bytes: ByteArray,
-    val fileExtension: String,
-)
 
 
 private fun MangaChapterHistoryEntity.toDownload(): MangaChapterDownload =
