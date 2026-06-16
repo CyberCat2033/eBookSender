@@ -13,13 +13,9 @@ import com.cybercat.pocketbooksender.metadata.MetadataExtractor
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
-import com.cybercat.pocketbooksender.model.UploadItemEntity
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.model.toDomain
-import com.cybercat.pocketbooksender.model.toEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
-import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,9 +31,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 @Singleton
 class UploadQueueManagerImpl @Inject constructor(
@@ -49,6 +42,7 @@ class UploadQueueManagerImpl @Inject constructor(
     private val coverCacheManager: CoverCacheManager,
     private val localFileResolver: LocalFileResolver,
     private val mangaTitleParser: MangaTitleParser,
+    private val queueStorageRepository: QueueStorageRepository,
 ) : UploadQueueManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -68,7 +62,7 @@ class UploadQueueManagerImpl @Inject constructor(
             }
             queueRestored = true
             withContext(Dispatchers.IO) {
-                persistQueue(_queue.value)
+                queueStorageRepository.persist(_queue.value)
             }
             _queue.value.forEach { item ->
                 if (item.preview == null && item.status != UploadStatus.Uploaded) {
@@ -84,7 +78,7 @@ class UploadQueueManagerImpl @Inject constructor(
             .onEach { items ->
                 if (queueRestored) {
                     withContext(Dispatchers.IO) {
-                        persistQueue(items)
+                        queueStorageRepository.persist(items)
                         cleanupCoverCacheFiles(items)
                     }
                 }
@@ -286,63 +280,34 @@ class UploadQueueManagerImpl @Inject constructor(
     }
 
     private fun restorePersistedQueue(): List<UploadItem> {
-        val file = queueStoreFile()
-        if (!file.isFile) return emptyList()
+        return queueStorageRepository.restore()
+            .mapNotNull { entity ->
+                val item = entity.toDomain(
+                    fallbackId = { UUID.randomUUID().toString() },
+                    fallbackCategory = classifier::classify,
+                    fallbackExtension = { name -> name.bookExtension().ifBlank { "bin" } },
+                    fallbackTitle = { name -> name.bookTitleWithoutExtension() },
+                ) ?: return@mapNotNull null
+                val canReadSource = localFileResolver.canRead(Uri.parse(item.sourceUri))
+                val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
+                if (restoredStatus == UploadStatus.Uploaded) return@mapNotNull null
 
-        return try {
-            val entities = QueueJson.decodeFromString<List<UploadItemEntity>>(file.readText())
-            buildList {
-                entities.forEach { entity ->
-                    val item = entity.toDomain(
-                        fallbackId = { UUID.randomUUID().toString() },
-                        fallbackCategory = classifier::classify,
-                        fallbackExtension = { name -> name.bookExtension().ifBlank { "bin" } },
-                        fallbackTitle = { name -> name.bookTitleWithoutExtension() },
-                    ) ?: return@forEach
-                    val canReadSource = localFileResolver.canRead(Uri.parse(item.sourceUri))
-                    val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
-                    if (restoredStatus == UploadStatus.Uploaded) return@forEach
-
-                    val previewBitmap = if (restoredStatus != UploadStatus.Uploaded) {
-                        coverCacheManager.load(item.id)
-                    } else null
-
-                    add(
-                        replan(
-                            item.copy(
-                                preview = previewBitmap,
-                                status = restoredStatus,
-                                progress = if (restoredStatus == UploadStatus.Uploaded) 1f else 0f,
-                            ),
-                            activeSettings,
-                        ),
-                    )
+                val previewBitmap = if (restoredStatus != UploadStatus.Uploaded) {
+                    coverCacheManager.load(item.id)
+                } else {
+                    null
                 }
-            }.deduplicateQueue()
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
 
-    private fun persistQueue(items: List<UploadItem>) {
-        val file = queueStoreFile()
-        val payload = QueueJson.encodeToString(
-            items
-                .filter { it.status != UploadStatus.Uploaded }
-                .map { item -> item.toEntity() },
-        )
-
-        try {
-            file.parentFile?.mkdirs()
-            val tempFile = File(file.parentFile, "${file.name}.tmp")
-            tempFile.writeText(payload)
-            if (!tempFile.renameTo(file)) {
-                tempFile.copyTo(file, overwrite = true)
-                tempFile.delete()
+                replan(
+                    item.copy(
+                        preview = previewBitmap,
+                        status = restoredStatus,
+                        progress = if (restoredStatus == UploadStatus.Uploaded) 1f else 0f,
+                    ),
+                    activeSettings,
+                )
             }
-        } catch (_: IOException) {
-            // Queue persistence is best effort; in-memory queue remains authoritative.
-        }
+            .deduplicateQueue()
     }
 
     private fun createUploadItem(uri: Uri, displayName: String, settings: AppSettings): UploadItem {
@@ -450,9 +415,6 @@ class UploadQueueManagerImpl @Inject constructor(
             )
         }.toSet()
 
-    private fun queueStoreFile(): File =
-        File(context.filesDir, QueueStoreFileName)
-
     private fun UploadStatus.restoredAfterProcessStart(canReadSource: Boolean): UploadStatus =
         when {
             !canReadSource -> UploadStatus.Failed
@@ -464,13 +426,5 @@ class UploadQueueManagerImpl @Inject constructor(
 
     private fun cleanupCoverCacheFiles(items: List<UploadItem>) {
         coverCacheManager.cleanup(items.map { it.id }.toSet())
-    }
-
-    private companion object {
-        val QueueJson = Json {
-            ignoreUnknownKeys = true
-        }
-
-        const val QueueStoreFileName = "upload_queue.json"
     }
 }

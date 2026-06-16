@@ -49,6 +49,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; coordinates queue state, persistence, metadata loading, upload path replanning, and delegates app-local file/cache access.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/CoverCacheManager.kt` - app-local JPEG preview cache for queued upload cover bitmaps; handles cover load/save/cleanup for `UploadQueueManagerImpl`.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/LocalFileResolver.kt` - Android `ContentResolver` boundary for queued upload source display names, file sizes, persistable read permissions, and source readability checks.
+- `app/src/main/java/com/cybercat/pocketbooksender/transfer/QueueStorageRepository.kt` - app-local upload queue JSON/file persistence boundary using `UploadItemEntity` and kotlinx.serialization.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadCoordinator.kt` - app/feature boundary for foreground manga download requests and progress/completion events.
 - `app/src/main/java/com/cybercat/pocketbooksender/di/MangaSourceModule.kt` - collects every installed manga source adapter into a Hilt set of `HtmlMangaSourceAdapter` using multibindings.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/NetworkStateChecker.kt` - Android connectivity helper used to avoid manga retry loops while no active internet-capable network is available.
