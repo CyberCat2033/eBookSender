@@ -37,7 +37,7 @@ class MangalibMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
         withContext(Dispatchers.IO) {
             val encoded = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
                 .replace("+", "%20")
-            val apiUrl = "https://api.cdnlibs.org/api/manga?site_id[]=1&q=$encoded"
+            val apiUrl = "https://api2.mangalib.me/api/manga?site_id[]=1&q=$encoded"
             val response = fetchText(apiUrl, HomeUrl)
             parseSearchJson(response)
         }
@@ -80,7 +80,7 @@ class MangalibMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
     override suspend fun listChapters(seriesId: String): List<MangaChapter> =
         withContext(Dispatchers.IO) {
             val slug = extractSlug(seriesId) ?: throw IOException("Invalid series ID: $seriesId")
-            val apiUrl = "https://api.cdnlibs.org/api/manga/$slug/chapters"
+            val apiUrl = "https://api2.mangalib.me/api/manga/$slug/chapters"
             val response = fetchText(apiUrl, seriesId)
             parseChaptersJson(seriesId, response)
         }
