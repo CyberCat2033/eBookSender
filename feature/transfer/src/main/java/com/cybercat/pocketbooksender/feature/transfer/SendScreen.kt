@@ -77,6 +77,11 @@ fun SendScreen(
     var clearAnimatedRowCount by remember { mutableStateOf(0) }
     val queue = state.queue
     val activeTransferItemIds = state.activeTransferItemIds
+    val transferQueue = remember(queue, activeTransferItemIds) {
+        queue.filter { item -> item.id in activeTransferItemIds }
+    }
+    val isTransferProgressVisible = state.isTransferActive &&
+        transferQueue.any { item -> item.status != UploadStatus.Uploaded }
     val activeQueue = remember(queue) {
         queue.filterNot { it.status == UploadStatus.Uploaded }
     }
@@ -285,21 +290,18 @@ fun SendScreen(
                 }
 
                 item {
-                    Spacer(Modifier.height(if (state.isTransferActive) 112.dp else 8.dp))
+                    Spacer(Modifier.height(if (isTransferProgressVisible) 112.dp else 8.dp))
                 }
             }
 
             AnimatedVisibility(
-                visible = state.isTransferActive,
+                visible = isTransferProgressVisible,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(12.dp),
                 enter = fadeIn() + slideInVertically { height -> height / 2 },
                 exit = fadeOut() + slideOutVertically { height -> height / 2 },
             ) {
-                val transferQueue = remember(state.queue, state.activeTransferItemIds) {
-                    state.queue.filter { item -> item.id in state.activeTransferItemIds }
-                }
                 UploadProgressOverlay(
                     queue = transferQueue,
                     progressById = state.uploadProgressById,
