@@ -83,9 +83,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import com.cybercat.pocketbooksender.util.detectDragGesturesAfterQuickLongPress
 import com.cybercat.pocketbooksender.util.rememberDragSelectionState
-import android.os.SystemClock
+import com.cybercat.pocketbooksender.util.rememberClickSuppressionState
+import com.cybercat.pocketbooksender.util.pointerInputDragSelection
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -1130,19 +1130,7 @@ internal fun MangaSubscriptionUpdatesDialog(
         targets
     }
 
-    var suppressSelectionClickUntilMillis by remember { mutableStateOf(0L) }
-    val SuppressSelectionClickMillis = 250L
-
-    fun suppressSelectionClicks() {
-        suppressSelectionClickUntilMillis = SystemClock.uptimeMillis() + SuppressSelectionClickMillis
-    }
-
-    fun suppressSelectionClicksUntilGestureEnds() {
-        suppressSelectionClickUntilMillis = Long.MAX_VALUE
-    }
-
-    fun selectionClickSuppressed(): Boolean =
-        SystemClock.uptimeMillis() < suppressSelectionClickUntilMillis
+    val clickSuppression = rememberClickSuppressionState()
 
     val dragSelectionState = rememberDragSelectionState(
         lazyListState = listState,
@@ -1165,7 +1153,7 @@ internal fun MangaSubscriptionUpdatesDialog(
         onSetSelected = { key, selected -> onToggleChapterState.value(key, selected) },
         edgeSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() },
         onDragStarted = {
-            suppressSelectionClicksUntilGestureEnds()
+            clickSuppression.suppressUntilGestureEnds()
         }
     )
 
@@ -1244,23 +1232,12 @@ internal fun MangaSubscriptionUpdatesDialog(
                         .onGloballyPositioned { coordinates ->
                             listBounds = coordinates.boundsInRoot()
                         }
-                        .pointerInput(chapterTargets) {
-                            detectDragGesturesAfterQuickLongPress(
-                                onDragStart = { offset -> dragSelectionState.startDrag(offset.y) },
-                                onDrag = { change, _ ->
-                                    change.consume()
-                                    dragSelectionState.drag(change.position.y)
-                                },
-                                onDragEnd = {
-                                    suppressSelectionClicks()
-                                    dragSelectionState.stopDrag()
-                                },
-                                onDragCancel = {
-                                    suppressSelectionClicks()
-                                    dragSelectionState.stopDrag()
-                                }
-                            )
-                        },
+                        .pointerInputDragSelection(
+                            dragSelectionState,
+                            clickSuppression,
+                            true,
+                            chapterTargets
+                        ),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     updates.forEach { update ->
@@ -1350,7 +1327,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                                                         chapterRowBounds[chapterKey] = coordinates.boundsInRoot()
                                                     }
                                                     .clickable {
-                                                        if (selectionClickSuppressed()) return@clickable
+                                                        if (clickSuppression.isSuppressed()) return@clickable
                                                         view.performHapticIfAllowed(
                                                             context,
                                                             enableHaptics,
@@ -1363,7 +1340,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                                                 Checkbox(
                                                     checked = isSelected,
                                                     onCheckedChange = { checked ->
-                                                        if (selectionClickSuppressed()) return@Checkbox
+                                                        if (clickSuppression.isSuppressed()) return@Checkbox
                                                         view.performHapticIfAllowed(
                                                             context,
                                                             enableHaptics,

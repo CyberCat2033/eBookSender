@@ -20,6 +20,9 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -254,4 +257,48 @@ fun <T> rememberDragSelectionState(
             onDragStarted = onDragStarted
         )
     }
+}
+
+@Stable
+class ClickSuppressionState {
+    private var suppressUntilMillis by mutableStateOf(0L)
+
+    fun suppress(durationMillis: Long = 250L) {
+        suppressUntilMillis = SystemClock.uptimeMillis() + durationMillis
+    }
+
+    fun suppressUntilGestureEnds() {
+        suppressUntilMillis = Long.MAX_VALUE
+    }
+
+    fun isSuppressed(): Boolean = SystemClock.uptimeMillis() < suppressUntilMillis
+}
+
+@Composable
+fun rememberClickSuppressionState(): ClickSuppressionState {
+    return remember { ClickSuppressionState() }
+}
+
+fun Modifier.pointerInputDragSelection(
+    dragSelectionState: DragSelectionState<*>,
+    clickSuppressionState: ClickSuppressionState? = null,
+    enabled: Boolean = true,
+    vararg keys: Any?,
+): Modifier = this.pointerInput(keys = keys) {
+    if (!enabled) return@pointerInput
+    detectDragGesturesAfterQuickLongPress(
+        onDragStart = { offset -> dragSelectionState.startDrag(offset.y) },
+        onDrag = { change, _ ->
+            change.consume()
+            dragSelectionState.drag(change.position.y)
+        },
+        onDragEnd = {
+            clickSuppressionState?.suppress()
+            dragSelectionState.stopDrag()
+        },
+        onDragCancel = {
+            clickSuppressionState?.suppress()
+            dragSelectionState.stopDrag()
+        }
+    )
 }

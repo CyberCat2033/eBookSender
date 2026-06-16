@@ -40,7 +40,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.util.rememberDragSelectionState
-import com.cybercat.pocketbooksender.util.detectDragGesturesAfterQuickLongPress
+import com.cybercat.pocketbooksender.util.pointerInputDragSelection
 import com.cybercat.pocketbooksender.ui.StatusMessageHost
 import com.cybercat.pocketbooksender.ui.LoadingCard
 
@@ -139,18 +139,13 @@ fun MangaPane(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(state.chapters, state.isDownloading) {
-                    if (state.isDownloading || state.chapters.isEmpty()) return@pointerInput
-                    detectDragGesturesAfterQuickLongPress(
-                        onDragStart = { offset -> dragSelectionState.startDrag(offset.y) },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            dragSelectionState.drag(change.position.y)
-                        },
-                        onDragEnd = { dragSelectionState.stopDrag() },
-                        onDragCancel = { dragSelectionState.stopDrag() },
-                    )
-                },
+                .pointerInputDragSelection(
+                    dragSelectionState,
+                    null,
+                    !state.isDownloading && state.chapters.isNotEmpty(),
+                    state.chapters,
+                    state.isDownloading
+                ),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item(key = "manga-top") {

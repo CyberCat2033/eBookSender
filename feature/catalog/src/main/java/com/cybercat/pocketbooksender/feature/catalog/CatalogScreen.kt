@@ -59,7 +59,8 @@ import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.util.rememberDragSelectionState
-import com.cybercat.pocketbooksender.util.detectDragGesturesAfterQuickLongPress
+import com.cybercat.pocketbooksender.util.rememberClickSuppressionState
+import com.cybercat.pocketbooksender.util.pointerInputDragSelection
 
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -104,18 +105,7 @@ fun CatalogScreen(
     var listBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    var suppressSelectionClickUntilMillis by remember { mutableStateOf(0L) }
-
-    fun suppressSelectionClicks() {
-        suppressSelectionClickUntilMillis = SystemClock.uptimeMillis() + SuppressSelectionClickMillis
-    }
-
-    fun suppressSelectionClicksUntilGestureEnds() {
-        suppressSelectionClickUntilMillis = Long.MAX_VALUE
-    }
-
-    fun selectionClickSuppressed(): Boolean =
-        SystemClock.uptimeMillis() < suppressSelectionClickUntilMillis
+    val clickSuppression = rememberClickSuppressionState()
 
     val dragSelectionState = rememberDragSelectionState(
         lazyListState = listState,
@@ -139,7 +129,7 @@ fun CatalogScreen(
         onSetSelected = { path, selected -> onSetFileSelectionState.value(path, selected) },
         edgeSizePx = with(density) { 84.dp.toPx() },
         onDragStarted = {
-            suppressSelectionClicksUntilGestureEnds()
+            clickSuppression.suppressUntilGestureEnds()
             if (!isEditModeState.value) {
                 onSetEditModeState.value(true)
             }
@@ -355,26 +345,14 @@ fun CatalogScreen(
                     .onGloballyPositioned { coordinates ->
                         listBounds = coordinates.boundsInRoot()
                     }
-                    .pointerInput(fileTargets, catalog.isLoading, state.isDeleting) {
-                        if (catalog.isLoading || state.isDeleting || fileTargets.isEmpty()) {
-                            return@pointerInput
-                        }
-                        detectDragGesturesAfterQuickLongPress(
-                            onDragStart = { offset -> dragSelectionState.startDrag(offset.y) },
-                            onDrag = { change, _ ->
-                                change.consume()
-                                dragSelectionState.drag(change.position.y)
-                            },
-                            onDragEnd = {
-                                suppressSelectionClicks()
-                                dragSelectionState.stopDrag()
-                            },
-                            onDragCancel = {
-                                suppressSelectionClicks()
-                                dragSelectionState.stopDrag()
-                            },
-                        )
-                    }
+                    .pointerInputDragSelection(
+                        dragSelectionState,
+                        clickSuppression,
+                        !catalog.isLoading && !state.isDeleting && fileTargets.isNotEmpty(),
+                        fileTargets,
+                        catalog.isLoading,
+                        state.isDeleting
+                    )
                     .padding(horizontal = adaptiveLayout.screenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
@@ -441,7 +419,7 @@ fun CatalogScreen(
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
                             onEnterEditMode = { onSetEditMode(true) },
-                            selectionClickSuppressed = ::selectionClickSuppressed,
+                            selectionClickSuppressed = { clickSuppression.isSuppressed() },
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
@@ -485,7 +463,7 @@ fun CatalogScreen(
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
                             onEnterEditMode = { onSetEditMode(true) },
-                            selectionClickSuppressed = ::selectionClickSuppressed,
+                            selectionClickSuppressed = { clickSuppression.isSuppressed() },
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
@@ -529,7 +507,7 @@ fun CatalogScreen(
                             onToggleFileSelection = onToggleFileSelection,
                             onToggleGroupSelection = onToggleGroupSelection,
                             onEnterEditMode = { onSetEditMode(true) },
-                            selectionClickSuppressed = ::selectionClickSuppressed,
+                            selectionClickSuppressed = { clickSuppression.isSuppressed() },
                             onExpandedChange = { expanded ->
                                 if (expanded) {
                                     expandedGroupPaths[group.path] = true
