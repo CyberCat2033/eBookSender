@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.cybercat.pocketbooksender.data.settings.SettingsRepository
+import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import com.cybercat.pocketbooksender.domain.FileClassifier
 import com.cybercat.pocketbooksender.domain.PathPlanner
 import com.cybercat.pocketbooksender.domain.bookExtension
@@ -16,13 +18,8 @@ import com.cybercat.pocketbooksender.model.UploadItemEntity
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.model.toDomain
 import com.cybercat.pocketbooksender.model.toEntity
-import com.cybercat.pocketbooksender.data.settings.SettingsRepository
-import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
@@ -50,6 +47,7 @@ class UploadQueueManagerImpl @Inject constructor(
     private val classifier: FileClassifier,
     private val pathPlanner: PathPlanner,
     private val settingsRepository: SettingsRepository,
+    private val coverCacheManager: CoverCacheManager,
 ) : UploadQueueManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -305,12 +303,7 @@ class UploadQueueManagerImpl @Inject constructor(
                     if (restoredStatus == UploadStatus.Uploaded) return@forEach
 
                     val previewBitmap = if (restoredStatus != UploadStatus.Uploaded) {
-                        val cachedCoverFile = getCoverCacheFile(item.id)
-                        if (cachedCoverFile.isFile) {
-                            runCatching {
-                                BitmapFactory.decodeFile(cachedCoverFile.absolutePath)
-                            }.getOrNull()
-                        } else null
+                        coverCacheManager.load(item.id)
                     } else null
 
                     add(
@@ -409,13 +402,7 @@ class UploadQueueManagerImpl @Inject constructor(
 
         if (preview != null) {
             withContext(Dispatchers.IO) {
-                runCatching {
-                    val file = getCoverCacheFile(item.id)
-                    file.parentFile?.mkdirs()
-                    FileOutputStream(file).use { out ->
-                        preview.compress(Bitmap.CompressFormat.JPEG, 80, out)
-                    }
-                }
+                coverCacheManager.save(item.id, preview)
             }
         }
 
@@ -538,30 +525,8 @@ class UploadQueueManagerImpl @Inject constructor(
             else -> UploadStatus.Pending
         }
 
-    private fun getCoverCacheDir(): File {
-        return File(context.filesDir, "covers").apply { mkdirs() }
-    }
-
-    private fun getCoverCacheFile(itemId: String): File {
-        return File(getCoverCacheDir(), "$itemId.jpg")
-    }
-
     private fun cleanupCoverCacheFiles(items: List<UploadItem>) {
-        val dir = getCoverCacheDir()
-        if (!dir.isDirectory) return
-
-        val activeIds = items.map { it.id }.toSet()
-
-        runCatching {
-            dir.listFiles()?.forEach { file ->
-                if (file.isFile) {
-                    val id = file.nameWithoutExtension
-                    if (id !in activeIds) {
-                        file.delete()
-                    }
-                }
-            }
-        }
+        coverCacheManager.cleanup(items.map { it.id }.toSet())
     }
 
     private companion object {
