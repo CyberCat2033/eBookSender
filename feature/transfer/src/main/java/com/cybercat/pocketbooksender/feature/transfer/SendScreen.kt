@@ -85,9 +85,18 @@ fun SendScreen(
             queue.filterNot { it.status == UploadStatus.Uploaded }
         }
     }
+    var visuallyRemovedActiveItemIds by remember { mutableStateOf(emptySet<String>()) }
+    val activeItemIds = remember(activeQueue) { activeQueue.mapTo(mutableSetOf()) { item -> item.id } }
+    val displayedActiveQueue = remember(activeQueue, visuallyRemovedActiveItemIds, clearInProgress) {
+        if (clearInProgress) {
+            emptyList()
+        } else {
+            activeQueue.filterNot { item -> item.id in visuallyRemovedActiveItemIds }
+        }
+    }
     val activeRows = remember(activeQueue) { activeQueue.withStableLazyKeys() }
-    val activeMangaQueue = remember(activeQueue) {
-        activeQueue.filter { it.category == BookCategory.Manga }
+    val activeMangaQueue = remember(displayedActiveQueue) {
+        displayedActiveQueue.filter { it.category == BookCategory.Manga }
     }
     val canBatchRenameManga = activeMangaQueue.size > 1 && !state.isTransferActive && !clearInProgress
     var showMangaBatchEditor by remember { mutableStateOf(false) }
@@ -99,8 +108,8 @@ fun SendScreen(
         }
     }
     val animatedUploadedSectionCount = if (uploadedQueue.isNotEmpty()) 1 else 0
-    val hasUploadableFiles = remember(queue) {
-        queue.any {
+    val hasUploadableFiles = remember(displayedActiveQueue) {
+        displayedActiveQueue.any {
             it.status == UploadStatus.Pending ||
                 it.status == UploadStatus.Failed ||
                 it.status == UploadStatus.Skipped
@@ -133,8 +142,11 @@ fun SendScreen(
         if (clearTrigger > 0) {
             delay(queueClearDelayMillis(clearAnimatedRowCount))
             onClearQueue()
-            clearInProgress = false
         }
+    }
+
+    LaunchedEffect(activeItemIds) {
+        visuallyRemovedActiveItemIds = visuallyRemovedActiveItemIds intersect activeItemIds
     }
 
     LaunchedEffect(state.queue.isEmpty()) {
@@ -235,7 +247,7 @@ fun SendScreen(
 
                 item {
                     QueueHeader(
-                        count = activeQueue.size,
+                        count = displayedActiveQueue.size,
                         canBatchRenameManga = canBatchRenameManga,
                         onBatchRenameManga = { showMangaBatchEditor = true },
                     )
@@ -269,7 +281,10 @@ fun SendScreen(
                                 mangaSeriesSuggestions = state.mangaSeriesSuggestions,
                                 enableHaptics = state.settings.enableHaptics,
                                 settings = state.settings,
-                                onRemove = triggerRemove,
+                                onRemove = {
+                                    visuallyRemovedActiveItemIds = visuallyRemovedActiveItemIds + item.id
+                                    triggerRemove()
+                                },
                                 onCategoryChanged = { category -> onCategoryChanged(item.id, category) },
                                 onDocumentsTagChanged = { tag -> onDocumentsTagChanged(item.id, tag) },
                                 onMangaSeriesChanged = { series -> onMangaSeriesChanged(item.id, series) },

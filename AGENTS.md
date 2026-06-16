@@ -71,6 +71,7 @@ These instructions define the required working rules for Codex in this repositor
   GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:assembleDebug
   ```
 
+- When the user asks to build and install, upload, or put the app on a connected phone without specifying a build variant, install the release variant.
 - When installing a release build on a connected device, prefer Gradle's install task:
 
   ```sh

@@ -418,7 +418,8 @@ internal fun OpdsEntryCard(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
-    val isNavigation = remember(entry) { entry.acquisitions.isEmpty() && entry.navigation.isNotEmpty() }
+    val navigationLinks = remember(entry) { entry.navigation.distinctBy { link -> link.href } }
+    val isNavigation = remember(entry, navigationLinks) { entry.acquisitions.isEmpty() && navigationLinks.isNotEmpty() }
 
     ElevatedCard(modifier.fillMaxWidth()) {
         Column(
@@ -464,12 +465,12 @@ internal fun OpdsEntryCard(
                 )
             }
 
-            if (entry.navigation.isNotEmpty()) {
+            if (navigationLinks.isNotEmpty()) {
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    entry.navigation.forEach { link ->
+                    navigationLinks.forEach { link ->
                         OutlinedButton(
                             onClick = {
                                 view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
