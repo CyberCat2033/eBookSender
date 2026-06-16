@@ -3,24 +3,19 @@ package com.cybercat.pocketbooksender.feature.opds
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cybercat.pocketbooksender.data.opds.DownloadOpdsEntriesUseCase
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
+import com.cybercat.pocketbooksender.data.opds.OpdsAuthenticationRequiredException
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsRepository
-import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
-import com.cybercat.pocketbooksender.data.opds.OpdsAuthenticationRequiredException
-import java.net.URL
-import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
+import com.cybercat.pocketbooksender.util.launchTemporaryStatus
+import com.cybercat.pocketbooksender.util.onFailureRethrowing
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.io.File
-import java.io.IOException
-import java.net.URI
+import java.net.URL
 import javax.inject.Inject
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,14 +27,11 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.cybercat.pocketbooksender.util.onFailureRethrowing
-import com.cybercat.pocketbooksender.util.launchTemporaryStatus
-
 
 @HiltViewModel
 class OpdsViewModel @Inject constructor(
     private val opdsRepository: OpdsRepository,
-    private val settingsRepository: SettingsRepository,
+    private val downloadOpdsEntriesUseCase: DownloadOpdsEntriesUseCase,
     private val queueManager: UploadQueueManager,
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
 ) : ViewModel() {
@@ -405,10 +397,7 @@ class OpdsViewModel @Inject constructor(
             return
         }
 
-        val downloadable = entries.mapNotNull { entry ->
-            entry.bestAcquisition()?.let { acquisition -> entry to acquisition }
-        }
-        if (downloadable.isEmpty()) {
+        if (!downloadOpdsEntriesUseCase.hasDownloadableEntries(entries)) {
             _opdsState.update {
                 it.copy(
                     errorMessage = localizationManager.currentStrings.value.opdsErrorNoDownloadableEntries,
@@ -427,41 +416,35 @@ class OpdsViewModel @Inject constructor(
                 )
             }
 
-            data class DownloadOutcome(val file: File?, val failed: Boolean)
-            val outcomes = coroutineScope {
-                downloadable.map { (entry, acquisition) ->
-                    async {
-                        runCatching {
-                            opdsRepository.downloadPublication(baseUrl, entry, acquisition)
-                        }.fold(
-                            onSuccess = { file -> DownloadOutcome(file = file, failed = false) },
-                            onFailure = { DownloadOutcome(file = null, failed = true) },
+            downloadOpdsEntriesUseCase(baseUrl, entries)
+                .onSuccess { result ->
+                    if (result.downloadedFiles.isNotEmpty()) {
+                        queueManager.addUris(result.downloadedFiles.map { file -> Uri.fromFile(file) })
+                    }
+
+                    _opdsState.update { state ->
+                        state.copy(
+                            isDownloading = false,
+                            errorMessage = if (result.failedCount > 0) {
+                                localizationManager.currentStrings.value.get("opds_error_failed_to_download_entries", result.failedCount)
+                            } else {
+                                null
+                            },
                         )
                     }
-                }.awaitAll()
-            }
 
-            val downloadedFiles = outcomes.mapNotNull { it.file }
-            val failedCount = outcomes.count { it.failed }
-
-            if (downloadedFiles.isNotEmpty()) {
-                queueManager.addUris(downloadedFiles.map { file -> Uri.fromFile(file) })
-            }
-
-            _opdsState.update { state ->
-                state.copy(
-                    isDownloading = false,
-                    errorMessage = if (failedCount > 0) {
-                        localizationManager.currentStrings.value.get("opds_error_failed_to_download_entries", failedCount)
-                    } else {
-                        null
-                    },
-                )
-            }
-
-            if (downloadedFiles.isNotEmpty()) {
-                showOpdsStatus(localizationManager.currentStrings.value.get("opds_status_added_to_queue_multiple", downloadedFiles.size))
-            }
+                    if (result.downloadedFiles.isNotEmpty()) {
+                        showOpdsStatus(
+                            localizationManager.currentStrings.value.get(
+                                "opds_status_added_to_queue_multiple",
+                                result.downloadedFiles.size,
+                            )
+                        )
+                    }
+                }.onFailureRethrowing { error ->
+                    _opdsState.update { state -> state.copy(isDownloading = false) }
+                    showOpdsError(error.message ?: localizationManager.currentStrings.value.opdsErrorCannotDownload)
+                }
         }
     }
 
@@ -618,13 +601,6 @@ class OpdsViewModel @Inject constructor(
 
     private fun String.searchComparableText(): String =
         searchTokens().joinToString(" ")
-
-    private fun OpdsEntry.bestAcquisition(): OpdsAcquisition? =
-        acquisitions.mapNotNull { acquisition ->
-            acquisition.supportedDownloadFormat()?.let { format -> acquisition to format.priority }
-        }.minByOrNull { (_, priority) ->
-            priority
-        }?.first
 
     private companion object {
         const val OpdsStatusMessageMillis = 2300L
