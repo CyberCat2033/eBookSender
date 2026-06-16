@@ -336,6 +336,7 @@ private fun AppNavHost(
                         onClearSubscriptionUpdateChapters = mangaViewModel::clearSubscriptionUpdateChapters,
                         onDownloadSubscriptionUpdates = mangaViewModel::downloadSubscriptionUpdates,
                         onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
+                        onRefreshAuthState = mangaViewModel::refreshMangaAuthState,
                     )
                 },
                 mangaTopBarNavigationIcon = {
@@ -415,6 +416,7 @@ private fun AppNavHost(
                 onWarnOnDisconnectedRenameChanged = settingsViewModel::setWarnOnDisconnectedRename,
                 onConfirmPendingRename = settingsViewModel::confirmPendingRename,
                 onCancelPendingRename = settingsViewModel::cancelPendingRename,
+                onLogoutAll = settingsViewModel::logoutAll,
             )
         }
     }

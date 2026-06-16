@@ -35,6 +35,21 @@ class OpdsRepository @Inject constructor(
         catalogCache.clear()
     }
 
+    suspend fun logoutAll(): Boolean = withContext(Dispatchers.IO) {
+        val allSources = sourceDao.getAllSources()
+        var clearedAny = false
+        allSources.forEach { entity ->
+            if (entity.username != null || entity.password != null) {
+                sourceDao.upsert(entity.copy(username = null, password = null))
+                clearedAny = true
+            }
+        }
+        if (clearedAny) {
+            clearCache()
+        }
+        clearedAny
+    }
+
     val sources: Flow<List<OpdsSource>> =
         sourceDao.observeSources().map { entities ->
             entities

@@ -58,6 +58,9 @@ class AppStrings(
     
     val settingsMaintenanceSection: String get() = get("settings_maintenance_section")
     val settingsClearCache: String get() = get("settings_clear_cache")
+    val settingsLogoutAll: String get() = get("settings_logout_all")
+    val settingsLoggedOutAll: String get() = get("settings_logged_out_all")
+    val settingsNoActiveAccounts: String get() = get("settings_no_active_accounts")
     
     val settingsDialogTitle: String get() = get("settings_dialog_title")
     val settingsDialogBody: String get() = get("settings_dialog_body")
@@ -278,6 +281,7 @@ class AppStrings(
     val mangaProgressStepDownloadingChapter: String get() = get("manga_progress_step_downloading_chapter")
     val mangaProgressAllChaptersSaved: String get() = get("manga_progress_all_chapters_saved")
     val mangaProgressChaptersDone: String get() = get("manga_progress_chapters_done")
+    val mangaProgressChapterLabel: String get() = get("manga_progress_chapter_label")
     val mangaProgressDetailArchive: String get() = get("manga_progress_detail_archive")
     val mangaProgressDetailFinalizing: String get() = get("manga_progress_detail_finalizing")
     val mangaProgressDetailPage: String get() = get("manga_progress_detail_page")

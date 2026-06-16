@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialogAfter
@@ -289,6 +290,7 @@ fun SettingsScreen(
     onWarnOnDisconnectedRenameChanged: (Boolean) -> Unit,
     onConfirmPendingRename: () -> Unit,
     onCancelPendingRename: () -> Unit,
+    onLogoutAll: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -723,6 +725,22 @@ fun SettingsScreen(
                         Icon(Icons.Outlined.Delete, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(strings.settingsClearCache)
+                    }
+
+                    Button(
+                        onClick = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.LONG_PRESS)
+                            onLogoutAll()
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(strings.settingsLogoutAll)
                     }
 
                     val statusMessage = state.settingsStatusMessage

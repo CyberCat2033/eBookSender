@@ -10,6 +10,8 @@ import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
+import com.cybercat.pocketbooksender.data.opds.OpdsRepository
+import android.webkit.CookieManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -33,6 +35,7 @@ class SettingsViewModel @Inject constructor(
     private val ftpGateway: FtpGateway,
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
     private val rescanCoordinator: PocketBookRescanCoordinator,
+    private val opdsRepository: OpdsRepository,
 ) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
     private val _pendingRename = MutableStateFlow<PendingRename?>(null)
@@ -291,6 +294,33 @@ class SettingsViewModel @Inject constructor(
 
             val sizeInMb = totalBytes.toDouble() / (1024.0 * 1024.0)
             val message = localizationManager.currentStrings.value.get("settings_cleared_cache", sizeInMb)
+            showTemporaryStatus(message)
+        }
+    }
+
+    fun logoutAll() {
+        viewModelScope.launch {
+            val deviceConnected = connectionManager.connectedDevice.value != null
+            val clearedOpds = runCatching { opdsRepository.logoutAll() }.getOrDefault(false)
+            val hasCookies = runCatching { CookieManager.getInstance().hasCookies() }.getOrDefault(false)
+
+            if (hasCookies) {
+                runCatching {
+                    CookieManager.getInstance().removeAllCookies(null)
+                    CookieManager.getInstance().flush()
+                }
+            }
+
+            if (deviceConnected) {
+                connectionManager.disconnect()
+            }
+
+            val clearedAny = deviceConnected || clearedOpds || hasCookies
+            val message = if (clearedAny) {
+                localizationManager.currentStrings.value.settingsLoggedOutAll
+            } else {
+                localizationManager.currentStrings.value.settingsNoActiveAccounts
+            }
             showTemporaryStatus(message)
         }
     }

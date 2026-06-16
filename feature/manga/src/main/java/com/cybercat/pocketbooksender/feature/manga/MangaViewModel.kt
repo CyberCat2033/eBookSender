@@ -596,7 +596,7 @@ class MangaViewModel @Inject constructor(
         }
     }
 
-    private fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) {
+    fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) {
         viewModelScope.launch {
             val sourceId = _mangaState.value.selectedSourceId
             val authState = mangaRepository.authState(sourceId)

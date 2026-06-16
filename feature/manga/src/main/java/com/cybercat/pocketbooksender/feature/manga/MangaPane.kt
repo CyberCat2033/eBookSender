@@ -72,6 +72,7 @@ fun MangaPane(
     onClearSubscriptionUpdateChapters: () -> Unit,
     onDownloadSubscriptionUpdates: () -> Unit,
     onCloseSubscriptionUpdates: () -> Unit,
+    onRefreshAuthState: () -> Unit,
     enableHaptics: Boolean,
 ) {
     val view = LocalView.current
@@ -98,6 +99,10 @@ fun MangaPane(
             handledSeriesScrollRequest = state.selectedSeriesScrollRequest
             listState.animateScrollToItem(state.selectedSeriesItemIndex())
         }
+    }
+
+    LaunchedEffect(Unit) {
+        onRefreshAuthState()
     }
 
     val dragSelectionState = rememberDragSelectionState(

@@ -44,6 +44,9 @@
   
   "settings_maintenance_section": "ОБСЛУЖИВАНИЕ",
   "settings_clear_cache": "Очистить кэш загрузок",
+  "settings_logout_all": "Выйти из всех сервисов",
+  "settings_logged_out_all": "Выход из всех сервисов выполнен",
+  "settings_no_active_accounts": "Ни в одном аккаунте нет авторизации",
   
   "settings_dialog_title": "Устройство отключено",
   "settings_dialog_body": "Устройство не подключено. Изменить локальную настройку папки «%1$s» на «%2$s» всё равно?\n\n(Это не переименует директорию на самом устройстве.)",
@@ -260,6 +263,7 @@
   "manga_progress_step_downloading_chapter": "Загрузка главы",
   "manga_progress_all_chapters_saved": "Все главы сохранены",
   "manga_progress_chapters_done": "Завершено %1$d из %2$d",
+  "manga_progress_chapter_label": "Глава: %1$s",
   "manga_progress_detail_archive": "%1$s - архив %2$s из %3$s",
   "manga_progress_detail_finalizing": "%1$s - сохранение главы",
   "manga_progress_detail_page": "%1$s - страница %2$d из %3$d",

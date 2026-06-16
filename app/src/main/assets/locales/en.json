@@ -44,6 +44,9 @@
   
   "settings_maintenance_section": "MAINTENANCE",
   "settings_clear_cache": "Clear download cache",
+  "settings_logout_all": "Log out from all services",
+  "settings_logged_out_all": "Logged out from all services",
+  "settings_no_active_accounts": "No active accounts to log out from",
   
   "settings_dialog_title": "Device Disconnected",
   "settings_dialog_body": "You are not connected to the device. Change the local setting for '%1$s' folder to '%2$s' anyway?\n\n(This will not rename the directory on the device.)",
@@ -260,6 +263,7 @@
   "manga_progress_step_downloading_chapter": "Downloading chapter",
   "manga_progress_all_chapters_saved": "All chapters saved",
   "manga_progress_chapters_done": "%1$d of %2$d done",
+  "manga_progress_chapter_label": "Chapter: %1$s",
   "manga_progress_detail_archive": "%1$s - archive %2$s of %3$s",
   "manga_progress_detail_finalizing": "%1$s - finalizing chapter",
   "manga_progress_detail_page": "%1$s - page %2$d of %3$d",
