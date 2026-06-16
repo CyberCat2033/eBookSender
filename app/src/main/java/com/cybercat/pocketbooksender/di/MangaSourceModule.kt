@@ -2,7 +2,6 @@ package com.cybercat.pocketbooksender.di
 
 import com.cybercat.pocketbooksender.data.manga.ComxMangaAdapter
 import com.cybercat.pocketbooksender.data.manga.HtmlMangaSourceAdapter
-import com.cybercat.pocketbooksender.data.manga.MangalibMangaAdapter
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -22,8 +21,4 @@ abstract class MangaSourceModule {
     @Binds
     @IntoSet
     abstract fun bindComxAdapter(impl: ComxMangaAdapter): HtmlMangaSourceAdapter
-
-    @Binds
-    @IntoSet
-    abstract fun bindMangalibAdapter(impl: MangalibMangaAdapter): HtmlMangaSourceAdapter
 }
