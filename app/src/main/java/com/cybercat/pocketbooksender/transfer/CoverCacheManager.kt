@@ -33,6 +33,8 @@ class CoverCacheManager @Inject constructor(
     }
 
     fun cleanup(activeItemIds: Set<String>) {
+        cleanupLegacyCaches()
+
         val dir = coverCacheDir()
         if (!dir.isDirectory) return
 
@@ -51,8 +53,17 @@ class CoverCacheManager @Inject constructor(
     private fun coverCacheDir(): File =
         File(context.filesDir, CoverCacheDirName).apply { mkdirs() }
 
+    private fun cleanupLegacyCaches() {
+        LegacyCoverCacheDirNames.forEach { dirName ->
+            runCatching {
+                File(context.filesDir, dirName).deleteRecursively()
+            }
+        }
+    }
+
     private companion object {
-        const val CoverCacheDirName = "covers"
+        const val CoverCacheDirName = "covers-v2"
         const val JpegQuality = 80
+        val LegacyCoverCacheDirNames = listOf("covers")
     }
 }

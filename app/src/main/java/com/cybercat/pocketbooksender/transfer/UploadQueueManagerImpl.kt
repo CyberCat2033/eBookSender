@@ -288,9 +288,9 @@ class UploadQueueManagerImpl @Inject constructor(
                     fallbackExtension = { name -> name.bookExtension().ifBlank { "bin" } },
                     fallbackTitle = { name -> name.bookTitleWithoutExtension() },
                 ) ?: return@mapNotNull null
+                if (item.status == UploadStatus.Uploaded) return@mapNotNull null
                 val canReadSource = localFileResolver.canRead(Uri.parse(item.sourceUri))
                 val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
-                if (restoredStatus == UploadStatus.Uploaded) return@mapNotNull null
 
                 val previewBitmap = if (restoredStatus != UploadStatus.Uploaded) {
                     coverCacheManager.load(item.id)

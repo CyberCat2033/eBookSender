@@ -40,10 +40,11 @@ Important packages:
   - `pdf` -> `Documents`
   - `cbr`, `cbz` -> `Manga`
 - Treat wrapped book names like `Book_Name.fb2.zip` by the inner book extension instead of plain `zip`.
-- Extract metadata from supported files, including wrapped `fb2.zip` books. For EPUB and FB2, extracts details such as title, authors, series, series index (book number), publisher, and publication year.
+- Extract metadata from supported files, including wrapped `fb2.zip` books. EPUB and FB2 extraction includes details such as title, authors, series, series index (book number), publisher, and publication year. MOBI/AZW3 extraction reads PalmDB/MOBI/EXTH metadata such as title, authors, publisher, publication year, language, and description when present.
 - Show previews in the queue when extraction is available:
   - FB2 embedded cover.
   - EPUB cover image from OPF/manifest, or a fallback large image if the book has no explicit cover metadata.
+  - MOBI/AZW3 embedded cover from the MOBI image records, using EXTH cover metadata when present.
   - PDF first page.
   - CBZ first image.
 - Plan target paths:
@@ -129,6 +130,7 @@ CBR handling:
 - Upload over FTP using temp file + rename:
   - `.Title.epub.uploading`
   - `Title.epub`
+- OPDS books and manga chapters downloaded through the `Web` tab are stored in app cache while queued, then their cached source files are deleted after successful upload to the PocketBook.
 - Folder renaming on the device is validated before execution:
   - Checks if the source folder exists on the device (using CWD and PWD). If it does not exist (e.g. for a new user), the rename operation is skipped on the device and treated as successful, allowing new folders to be created dynamically on the fly during upload.
   - Detects name conflict errors (like FTP `550`) and presents a user-friendly error message rather than a generic failure alert.

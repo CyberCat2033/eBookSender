@@ -66,7 +66,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -116,6 +115,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult
 import com.cybercat.pocketbooksender.data.manga.MangaNativeLoginConfig
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.BitmapCache
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
@@ -290,7 +290,7 @@ internal fun MangaSearchField(
     val view = LocalView.current
     val strings = LocalStrings.current
     val enabled = !state.isLoading && !state.isDownloading
-    OutlinedTextField(
+    AppOutlinedTextField(
         value = state.searchInput,
         onValueChange = onSearchChanged,
         modifier = modifier,
@@ -714,14 +714,14 @@ internal fun MangaNativeLoginDialog(
                     text = strings.mangaLoginTitle,
                     style = MaterialTheme.typography.titleMedium,
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = loginName,
                     onValueChange = { loginName = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text(strings.mangaUsername) },
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = loginPassword,
                     onValueChange = { loginPassword = it },
                     modifier = Modifier.fillMaxWidth(),

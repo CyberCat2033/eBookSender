@@ -41,7 +41,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,6 +68,7 @@ import com.cybercat.pocketbooksender.data.opds.downloadFormatLabel
 import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.BitmapCache
 import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
@@ -126,30 +126,30 @@ internal fun AddSourceDialog(
         title = { Text(strings.opdsAddTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = url,
                     onValueChange = onUrlChanged,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text(strings.opdsUrlField) },
                     leadingIcon = { Icon(Icons.Outlined.Link, contentDescription = null) },
-                    placeholder = { Text(strings.opdsUrlPlaceholder) },
+                    placeholderText = strings.opdsUrlPlaceholder,
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = title,
                     onValueChange = onTitleChanged,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text(strings.opdsTitleField) },
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = username,
                     onValueChange = onUsernameChanged,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text(strings.opdsUsernameField) },
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = password,
                     onValueChange = onPasswordChanged,
                     modifier = Modifier.fillMaxWidth(),
@@ -283,7 +283,7 @@ internal fun OpdsCredentialsDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = username,
                     onValueChange = onUsernameChanged,
                     modifier = Modifier.fillMaxWidth(),
@@ -291,7 +291,7 @@ internal fun OpdsCredentialsDialog(
                     label = { Text(strings.opdsUsernameLabel) },
                     leadingIcon = { Icon(Icons.Outlined.VpnKey, contentDescription = null) },
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = password,
                     onValueChange = onPasswordChanged,
                     modifier = Modifier.fillMaxWidth(),
@@ -333,7 +333,7 @@ internal fun SearchPanel(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            OutlinedTextField(
+            AppOutlinedTextField(
                 value = query,
                 onValueChange = onSearchChanged,
                 modifier = Modifier.fillMaxWidth(),

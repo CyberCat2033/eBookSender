@@ -45,7 +45,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -70,6 +69,7 @@ import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
@@ -187,7 +187,7 @@ internal fun MangaSeriesRenamePanel(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        OutlinedTextField(
+        AppOutlinedTextField(
             value = selectedSeries,
             onValueChange = onSeriesChanged,
             modifier = Modifier.fillMaxWidth(),
@@ -305,7 +305,7 @@ fun ConnectionPanel(
                     modifier = Modifier.padding(top = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         value = state.ftpInput,
                         onValueChange = onFtpInputChanged,
                         modifier = Modifier.fillMaxWidth(),
@@ -324,7 +324,7 @@ fun ConnectionPanel(
                                 }
                             }
                         },
-                        placeholder = { Text(strings.sendPlaceholderFtp) },
+                        placeholderText = strings.sendPlaceholderFtp,
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),

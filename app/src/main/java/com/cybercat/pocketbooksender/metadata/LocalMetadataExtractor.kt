@@ -41,6 +41,7 @@ class LocalMetadataExtractor @Inject constructor(
                 when (displayName.contentExtension()) {
                     "fb2" -> extractFb2(uri, displayName, fallbackTitle)
                     "epub" -> extractEpub(uri, fallbackTitle)
+                    "mobi", "azw3" -> extractMobi(uri, fallbackTitle)
                     "pdf" -> extractPdf(uri, fallbackTitle)
                     "cbz", "cbr" -> extractMangaArchive(uri, fallbackTitle)
                     else -> BookMetadata(title = fallbackTitle)
@@ -72,12 +73,16 @@ class LocalMetadataExtractor @Inject constructor(
         var inTitleInfo = false
         var inPublishInfo = false
         var inAuthor = false
+        var inCoverpage = false
         var title: String? = null
         var coverId: String? = null
         val authors = mutableListOf<String>()
         val authorParts = mutableListOf<String>()
-        var preview: Bitmap? = null
-        
+        val previewsById = mutableMapOf<String, Bitmap>()
+        var coverPreview: Bitmap? = null
+        var namedCoverPreview: Bitmap? = null
+        var fallbackPreview: Bitmap? = null
+
         var series: String? = null
         var seriesIndex: String? = null
         var publisher: String? = null
@@ -88,6 +93,7 @@ class LocalMetadataExtractor @Inject constructor(
                 XmlPullParser.START_TAG -> when (parser.name) {
                     "title-info" -> inTitleInfo = true
                     "publish-info" -> inPublishInfo = true
+                    "coverpage" -> if (inTitleInfo) inCoverpage = true
                     "author" -> if (inTitleInfo) {
                         inAuthor = true
                         authorParts.clear()
@@ -124,20 +130,34 @@ class LocalMetadataExtractor @Inject constructor(
                             }
                         }
                     }
-                    "image" -> if (inTitleInfo && coverId == null) {
-                        coverId = parser.getAttributeValue("http://www.w3.org/1999/xlink", "href")
-                            ?: parser.getAttributeValue(null, "href")
-                        coverId = coverId?.removePrefix("#")
+                    "image" -> if (inTitleInfo && inCoverpage && coverId == null) {
+                        coverId = parser.attributeValueByLocalName("href", XLINK_NAMESPACE)
+                            ?.toFb2BinaryId()
+                        coverId?.let { id ->
+                            previewsById[id]?.let { coverPreview = it }
+                        }
                     }
                     "binary" -> {
                         val id = parser.getAttributeValue(null, "id")
+                        val normalizedId = id?.toFb2BinaryId()
                         val contentType = parser.getAttributeValue(null, "content-type").orEmpty()
                         val looksLikeImage = contentType.startsWith("image/") ||
                             id?.lowercase().orEmpty().isImageName()
                         if (id != null && looksLikeImage) {
                             val bitmap = decodeBase64Bitmap(parser.nextTextSafe())
-                            if (id == coverId || preview == null) {
-                                preview = bitmap
+                            if (bitmap != null && normalizedId != null) {
+                                if (previewsById.size < MAX_FB2_CACHED_IMAGE_PREVIEWS) {
+                                    previewsById.putIfAbsent(normalizedId, bitmap)
+                                }
+                                when {
+                                    normalizedId == coverId -> coverPreview = bitmap
+                                    namedCoverPreview == null && normalizedId.looksLikeCoverId() -> {
+                                        namedCoverPreview = bitmap
+                                    }
+                                }
+                            }
+                            if (fallbackPreview == null) {
+                                fallbackPreview = bitmap
                             }
                         }
                     }
@@ -152,6 +172,7 @@ class LocalMetadataExtractor @Inject constructor(
                         inAuthor = false
                     }
                     "title-info" -> inTitleInfo = false
+                    "coverpage" -> inCoverpage = false
                     "publish-info" -> inPublishInfo = false
                 }
             }
@@ -160,7 +181,7 @@ class LocalMetadataExtractor @Inject constructor(
         return BookMetadata(
             title = title?.ifBlank { fallbackTitle } ?: fallbackTitle,
             authors = authors.distinct(),
-            preview = preview,
+            preview = coverPreview ?: namedCoverPreview ?: fallbackPreview,
             series = series,
             seriesIndex = seriesIndex,
             publisher = publisher,
@@ -328,6 +349,28 @@ class LocalMetadataExtractor @Inject constructor(
         )
     }
 
+    private fun extractMobi(uri: Uri, fallbackTitle: String): BookMetadata {
+        val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+            ?: return BookMetadata(title = fallbackTitle)
+        val metadata = ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
+            MobiMetadataParser.parse(
+                channel = input.channel,
+                declaredSize = descriptor.statSize,
+                fallbackTitle = fallbackTitle,
+            )
+        } ?: return BookMetadata(title = fallbackTitle)
+
+        return BookMetadata(
+            title = metadata.title,
+            authors = metadata.authors,
+            description = metadata.description,
+            preview = metadata.coverBytes?.let(::decodeBitmap),
+            language = metadata.language,
+            year = metadata.year,
+            publisher = metadata.publisher,
+        )
+    }
+
     private fun extractPdf(uri: Uri, fallbackTitle: String): BookMetadata {
         val preview = context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
             renderFirstPdfPage(descriptor)
@@ -432,11 +475,57 @@ class LocalMetadataExtractor @Inject constructor(
     private fun XmlPullParser.nextTextSafe(): String =
         runCatching { nextText().trim() }.getOrDefault("")
 
+    private fun XmlPullParser.attributeValueByLocalName(
+        localName: String,
+        namespace: String? = null,
+    ): String? {
+        if (namespace != null) {
+            getAttributeValue(namespace, localName)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return it }
+        }
+
+        getAttributeValue(null, localName)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        for (index in 0 until attributeCount) {
+            val attributeName = getAttributeName(index) ?: continue
+            if (attributeName.substringAfter(':') == localName) {
+                return getAttributeValue(index)?.takeIf { it.isNotBlank() }
+            }
+        }
+
+        return null
+    }
+
     private fun decodeBase64Bitmap(value: String): Bitmap? =
         runCatching {
             val bytes = Base64.decode(value.replace(Regex("""\s+"""), ""), Base64.DEFAULT)
             decodeBitmap(bytes)
         }.getOrNull()
+
+    private fun String.toFb2BinaryId(): String {
+        val reference = trim()
+        val rawId = if (reference.startsWith("#")) {
+            reference.drop(1)
+        } else {
+            reference.substringAfterLast('#')
+        }
+        return runCatching {
+            URLDecoder.decode(rawId, Charsets.UTF_8.name())
+        }.getOrDefault(rawId).trim()
+    }
+
+    private fun String.looksLikeCoverId(): Boolean {
+        val name = lowercase().substringAfterLast('/').substringBeforeLast('.')
+        return name == "cover" ||
+            name == "front" ||
+            name == "folder" ||
+            name == "title" ||
+            name.contains("cover") ||
+            name.contains("front")
+    }
 
     private fun InputStream.readBytesLimited(limit: Int): ByteArray {
         val output = ByteArrayOutputStream()
@@ -538,7 +627,9 @@ class LocalMetadataExtractor @Inject constructor(
     private companion object {
         const val MAX_TEXT_BYTES = 32 * 1024 * 1024
         const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
+        const val MAX_FB2_CACHED_IMAGE_PREVIEWS = 8
         const val PREVIEW_MAX_WIDTH = 360
         const val PREVIEW_MAX_HEIGHT = 540
+        const val XLINK_NAMESPACE = "http://www.w3.org/1999/xlink"
     }
 }

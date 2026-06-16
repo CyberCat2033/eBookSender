@@ -97,26 +97,26 @@ class TransferForegroundService : Service() {
                 notifyProgress(localizationManager.currentStrings.value.get("transfer_notification_uploading_progress", index + 1, total), index, total)
 
                 val result = uploadItem(request, item)
-                result
-                    .onSuccess {
-                        uploaded += 1
-                        transferCoordinator.emit(
-                            TransferEvent.ItemUploaded(
-                                itemId = item.id,
-                                completed = uploaded + failed,
-                                total = total,
-                            ),
-                        )
-                    }
-                    .onFailure { error ->
-                        failed += 1
-                        transferCoordinator.emit(
-                            TransferEvent.ItemFailed(
-                                itemId = item.id,
-                                message = error.message ?: localizationManager.currentStrings.value.transferErrorFtpUploadFailed,
-                            ),
-                        )
-                    }
+                if (result.isSuccess) {
+                    uploaded += 1
+                    transferCoordinator.emit(
+                        TransferEvent.ItemUploaded(
+                            itemId = item.id,
+                            completed = uploaded + failed,
+                            total = total,
+                        ),
+                    )
+                    deleteWebDownloadedCacheSource(item.sourceUri)
+                } else {
+                    val error = result.exceptionOrNull()
+                    failed += 1
+                    transferCoordinator.emit(
+                        TransferEvent.ItemFailed(
+                            itemId = item.id,
+                            message = error?.message ?: localizationManager.currentStrings.value.transferErrorFtpUploadFailed,
+                        ),
+                    )
+                }
 
                 notifyProgress(localizationManager.currentStrings.value.get("transfer_notification_progress_summary", uploaded, failed), uploaded + failed, total)
             }
@@ -242,6 +242,26 @@ class TransferForegroundService : Service() {
         return size
     }
 
+    private suspend fun deleteWebDownloadedCacheSource(sourceUri: String) {
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val uri = Uri.parse(sourceUri)
+                if (uri.scheme != "file") return@runCatching
+
+                val sourceFile = File(uri.path.orEmpty()).canonicalFile
+                if (!sourceFile.isFile) return@runCatching
+
+                val downloadCacheDirs = listOf(
+                    File(cacheDir, OpdsDownloadCacheDirectory).canonicalFile,
+                    File(cacheDir, MangaDownloadCacheDirectory).canonicalFile,
+                )
+                if (downloadCacheDirs.any { directory -> sourceFile.isInsideOrSameAs(directory) }) {
+                    sourceFile.delete()
+                }
+            }
+        }
+    }
+
     private fun notifyProgress(
         text: String,
         completed: Int,
@@ -319,6 +339,8 @@ class TransferForegroundService : Service() {
         private const val COMPLETION_NOTIFICATION_ID_START = 2100
         private const val EXTRA_REQUEST_ID = "request_id"
         private const val TransferWakeLockTimeoutMillis = 60 * 60 * 1000L
+        private const val OpdsDownloadCacheDirectory = "opds"
+        private const val MangaDownloadCacheDirectory = "manga"
         private val completionNotificationIds = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
 
         private fun nextCompletionNotificationId(): Int =
@@ -345,6 +367,15 @@ private data class PreparedUploadInput(
 
 private fun TransferUploadItem.needsCbzMetadataRewrite(): Boolean =
     category == BookCategory.Manga && extension.equals("cbz", ignoreCase = true)
+
+private fun File.isInsideOrSameAs(directory: File): Boolean {
+    var current: File? = this
+    while (current != null) {
+        if (current == directory) return true
+        current = current.parentFile
+    }
+    return false
+}
 
 private fun TransferUploadItem.toCbzMetadata(): CbzMetadata =
     CbzMetadata(

@@ -54,7 +54,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -76,7 +75,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -89,6 +87,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.model.AppTheme
+import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.localization.LocalStrings
@@ -125,7 +124,7 @@ private fun ValidatedSettingsField(
         if (clearFocus) focusManager.clearFocus()
     }
 
-    OutlinedTextField(
+    AppOutlinedTextField(
         value = textFieldValue,
         onValueChange = { newValue ->
             if (!isSaving) {
@@ -133,17 +132,9 @@ private fun ValidatedSettingsField(
                 onPreviewChange?.invoke(newValue.text)
             }
         },
-        modifier = Modifier
-            .fillMaxWidth()
-            .onFocusChanged { focusState ->
-                if (focusState.isFocused) {
-                    textFieldValue = textFieldValue.copy(
-                        selection = TextRange(textFieldValue.text.length)
-                    )
-                }
-            },
+        modifier = Modifier.fillMaxWidth(),
         label = { Text(label) },
-        placeholder = { Text(placeholder) },
+        placeholderText = placeholder,
         leadingIcon = leadingIcon?.let { icon ->
             { Icon(icon, contentDescription = null) }
         },
