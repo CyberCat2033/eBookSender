@@ -1,22 +1,20 @@
 package com.cybercat.pocketbooksender.data.catalog
 
-import android.content.Context
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.cybercat.pocketbooksender.data.ftp.FtpEntry
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.domain.AllSupportedExtensions
 import com.cybercat.pocketbooksender.domain.MangaArchiveExtensions
 import com.cybercat.pocketbooksender.domain.NaturalSort
 import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
 import com.cybercat.pocketbooksender.domain.contentExtension
+import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
 import com.cybercat.pocketbooksender.model.PocketBookDevice
-import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
+import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -25,25 +23,21 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import com.cybercat.pocketbooksender.transfer.ConnectionManager
-import com.cybercat.pocketbooksender.data.settings.SettingsRepository
-import kotlinx.coroutines.flow.first
-
-private const val PocketBookStoragePrefix = "/mnt/ext1/"
+import kotlinx.coroutines.withContext
 
 @Singleton
 class DeviceCatalogRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val ftpGateway: FtpGateway,
+    private val databaseReader: PocketBookDatabaseReader,
     private val connectionManager: ConnectionManager,
     private val settingsRepository: SettingsRepository,
 ) {
@@ -156,7 +150,7 @@ class DeviceCatalogRepository @Inject constructor(
         firstError?.let { throw it }
     }
 
-    private fun validateCatalogDeletePath(path: String, settings: com.cybercat.pocketbooksender.model.AppSettings): String {
+    private fun validateCatalogDeletePath(path: String, settings: AppSettings): String {
         val trimmed = path.replace('\\', '/').trim()
         require(trimmed.isNotBlank()) { "Cannot delete an empty catalog path" }
         require(!trimmed.startsWith("/")) { "Unsafe catalog file path" }
@@ -180,7 +174,7 @@ class DeviceCatalogRepository @Inject constructor(
         return normalized
     }
 
-    private fun validateCatalogDeleteFolderPath(path: String, settings: com.cybercat.pocketbooksender.model.AppSettings): String {
+    private fun validateCatalogDeleteFolderPath(path: String, settings: AppSettings): String {
         val trimmed = path.replace('\\', '/').trim()
         require(trimmed.isNotBlank()) { "Cannot delete an empty catalog folder path" }
         require(!trimmed.startsWith("/")) { "Unsafe catalog folder path" }
@@ -224,7 +218,7 @@ class DeviceCatalogRepository @Inject constructor(
         manga.forEach { group -> addCandidate(group.path, group.files) }
     }
 
-    suspend fun load(device: PocketBookDevice, settings: com.cybercat.pocketbooksender.model.AppSettings): DeviceCatalog = withContext(Dispatchers.IO) {
+    suspend fun load(device: PocketBookDevice, settings: AppSettings): DeviceCatalog = withContext(Dispatchers.IO) {
         val databaseCatalog = runCatching { loadFromPocketBookDatabase(device, settings) }
             .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
             .getOrNull()
@@ -235,9 +229,8 @@ class DeviceCatalogRepository @Inject constructor(
         }
     }
 
-    private suspend fun loadFromPocketBookDatabase(device: PocketBookDevice, settings: com.cybercat.pocketbooksender.model.AppSettings): DeviceCatalog {
-        val dbFile = downloadDatabaseSnapshot(device)
-        val files = readDatabaseFiles(dbFile, settings)
+    private suspend fun loadFromPocketBookDatabase(device: PocketBookDevice, settings: AppSettings): DeviceCatalog {
+        val files = databaseReader.readCatalogFiles(device, settings)
             .filter { it.path.contentExtension() in AllSupportedExtensions }
 
         return DeviceCatalog(
@@ -250,93 +243,7 @@ class DeviceCatalogRepository @Inject constructor(
         )
     }
 
-    private suspend fun downloadDatabaseSnapshot(device: PocketBookDevice): File {
-        val directory = File(context.cacheDir, CacheDirectory).apply { mkdirs() }
-
-        DatabaseFiles.forEach { name ->
-            File(directory, name).delete()
-        }
-
-        val dbFile = File(directory, DatabaseName)
-        dbFile.outputStream().use { outputStream ->
-            ftpGateway.downloadFile(
-                device = device,
-                remoteRelativePath = "$RemoteDatabaseDirectory/$DatabaseName",
-                output = outputStream,
-            ).getOrThrow()
-        }
-
-        OptionalDatabaseFiles.forEach { name ->
-            val file = File(directory, name)
-            file.outputStream().use { outputStream ->
-                ftpGateway.downloadFile(
-                    device = device,
-                    remoteRelativePath = "$RemoteDatabaseDirectory/$name",
-                    output = outputStream,
-                ).onFailure {
-                    file.delete()
-                }
-            }
-        }
-
-        return dbFile
-    }
-
-    private fun readDatabaseFiles(dbFile: File, settings: com.cybercat.pocketbooksender.model.AppSettings): List<DbCatalogFile> {
-        val database = SQLiteDatabase.openDatabase(
-            dbFile.absolutePath,
-            null,
-            SQLiteDatabase.OPEN_READONLY,
-        )
-
-        return database.use { db ->
-            db.execSQL("PRAGMA query_only = ON")
-            val args = arrayOf(
-                "$PocketBookStoragePrefix${settings.booksFolderName}%",
-                "$PocketBookStoragePrefix${settings.documentsFolderName}%",
-                "$PocketBookStoragePrefix${settings.mangaFolderName}%",
-            )
-            db.rawQuery(CatalogQuery, args).use { cursor ->
-                buildList {
-                    while (cursor.moveToNext()) {
-                        cursor.toDbCatalogFile()?.let(::add)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun Cursor.toDbCatalogFile(): DbCatalogFile? {
-        val folder = string("folder")?.trimEnd('/') ?: return null
-        val fileName = string("filename")?.takeIf { it.isNotBlank() } ?: return null
-        val relativePath = normalizePath("$folder/$fileName") ?: return null
-        val completed = int("completed") == 1
-        val cpage = int("cpage")
-        val npage = int("npage")
-
-        return DbCatalogFile(
-            fileId = long("file_id"),
-            bookId = long("book_id"),
-            name = fileName,
-            path = relativePath,
-            size = long("file_size") ?: long("book_size") ?: 0L,
-            modifiedAtMillis = long("modification_time")?.secondsToMillis(),
-            title = string("title")?.cleanText(),
-            authors = string("author").splitAuthors(),
-            readProgressPercent = readProgressPercent(
-                completed = completed,
-                cpage = cpage,
-                npage = npage,
-            ),
-            completed = completed,
-            lastOpenedAtMillis = long("opentime")?.takeIf { it > 0 }?.secondsToMillis(),
-            cpage = cpage,
-            npage = npage,
-            series = string("series")?.cleanText(),
-        )
-    }
-
-    private fun List<DbCatalogFile>.toBookGroups(settings: com.cybercat.pocketbooksender.model.AppSettings): List<CatalogGroup> =
+    private fun List<DbCatalogFile>.toBookGroups(settings: AppSettings): List<CatalogGroup> =
         filter { it.path.isUnder(settings.booksFolderName) }
             .deduplicateIn(settings.booksFolderName)
             .groupBy { file ->
@@ -354,7 +261,7 @@ class DeviceCatalogRepository @Inject constructor(
             .filter { it.files.isNotEmpty() }
             .sortedWith(NaturalSort.by { it.name })
 
-    private fun List<DbCatalogFile>.toDocumentsGroups(settings: com.cybercat.pocketbooksender.model.AppSettings): List<CatalogGroup> =
+    private fun List<DbCatalogFile>.toDocumentsGroups(settings: AppSettings): List<CatalogGroup> =
         filter { it.path.isUnder(settings.documentsFolderName) }
             .deduplicateIn(settings.documentsFolderName)
             .groupBy { file ->
@@ -370,7 +277,7 @@ class DeviceCatalogRepository @Inject constructor(
             .filter { it.files.isNotEmpty() }
             .sortedWith(NaturalSort.by { it.name })
 
-    private fun List<DbCatalogFile>.toMangaGroups(settings: com.cybercat.pocketbooksender.model.AppSettings): List<MangaSeriesGroup> =
+    private fun List<DbCatalogFile>.toMangaGroups(settings: AppSettings): List<MangaSeriesGroup> =
         filter { it.path.isUnder(settings.mangaFolderName) }
             .deduplicateIn(settings.mangaFolderName)
             .groupBy { file ->
@@ -410,7 +317,7 @@ class DeviceCatalogRepository @Inject constructor(
         filter { it.lastOpenedAtMillis != null }
             .maxByOrNull { it.lastOpenedAtMillis ?: 0L }
 
-    private suspend fun loadFromFolders(device: PocketBookDevice, settings: com.cybercat.pocketbooksender.model.AppSettings): DeviceCatalog =
+    private suspend fun loadFromFolders(device: PocketBookDevice, settings: AppSettings): DeviceCatalog =
         DeviceCatalog(
             books = loadGroupedFiles(device, settings.booksFolderName, settings),
             documents = loadGroupedFiles(device, settings.documentsFolderName, settings),
@@ -423,7 +330,7 @@ class DeviceCatalogRepository @Inject constructor(
     private suspend fun loadGroupedFiles(
         device: PocketBookDevice,
         root: String,
-        settings: com.cybercat.pocketbooksender.model.AppSettings,
+        settings: AppSettings,
     ): List<CatalogGroup> {
         val rootEntries = ftpGateway.listEntries(device, root).getOrThrow()
         val rootFiles = rootEntries
@@ -469,7 +376,7 @@ class DeviceCatalogRepository @Inject constructor(
     private suspend fun loadMangaSeries(
         device: PocketBookDevice,
         root: String,
-        settings: com.cybercat.pocketbooksender.model.AppSettings,
+        settings: AppSettings,
     ): List<MangaSeriesGroup> {
         return ftpGateway.listEntries(device, root)
             .getOrThrow()
@@ -524,73 +431,11 @@ class DeviceCatalogRepository @Inject constructor(
             series = series,
         )
 
-    private data class DbCatalogFile(
-        val fileId: Long?,
-        val bookId: Long?,
-        val name: String,
-        val path: String,
-        val size: Long,
-        val modifiedAtMillis: Long?,
-        val title: String?,
-        val authors: List<String>,
-        val readProgressPercent: Int?,
-        val completed: Boolean,
-        val lastOpenedAtMillis: Long?,
-        val cpage: Int?,
-        val npage: Int?,
-        val series: String?,
-    )
-
     private data class CatalogDeleteFolderCandidate(
         val path: String,
         val filePaths: Set<String>,
     )
-
-    private companion object {
-        const val CacheDirectory = "pocketbook-catalog"
-        const val RemoteDatabaseDirectory = "system/explorer-3"
-        const val DatabaseName = "explorer-3.db"
-
-        val OptionalDatabaseFiles = listOf("$DatabaseName-wal", "$DatabaseName-shm")
-        val DatabaseFiles = listOf(DatabaseName) + OptionalDatabaseFiles
-
-        val CatalogQuery = """
-            SELECT
-                f.id AS file_id,
-                b.id AS book_id,
-                d.name AS folder,
-                f.filename AS filename,
-                f.size AS file_size,
-                f.modification_time AS modification_time,
-                b.title AS title,
-                b.author AS author,
-                b.series AS series,
-                b.size AS book_size,
-                bs.cpage AS cpage,
-                bs.npage AS npage,
-                bs.opentime AS opentime,
-                bs.completed AS completed
-            FROM files f
-            LEFT JOIN folders d ON d.id = f.folder_id
-            LEFT JOIN books_impl b ON b.id = f.book_id
-            LEFT JOIN books_settings bs ON bs.bookid = b.id
-                AND bs.profileid = COALESCE(
-                    (SELECT id FROM profiles WHERE name = 'default' LIMIT 1),
-                    (SELECT MIN(id) FROM profiles)
-                )
-            WHERE d.name LIKE ?
-                OR d.name LIKE ?
-                OR d.name LIKE ?
-            ORDER BY d.name, f.filename
-        """.trimIndent()
-    }
 }
-
-private fun normalizePath(absolutePath: String): String? =
-    absolutePath
-        .removePrefix(PocketBookStoragePrefix)
-        .trim('/')
-        .takeIf { it.isNotBlank() }
 
 private fun String.isUnder(root: String): Boolean =
     this == root || startsWith("$root/")
@@ -605,47 +450,4 @@ private fun String.directoryAfter(root: String): String? {
     val relativePath = removePrefix("$root/")
     if ('/' !in relativePath) return null
     return relativePath.substringBefore('/').takeIf { it.isNotBlank() }
-}
-
-private fun String?.splitAuthors(): List<String> =
-    orEmpty()
-        .split(',')
-        .mapNotNull { it.cleanText() }
-
-private fun String.cleanText(): String? =
-    trim()
-        .replace(Regex("\\s+"), " ")
-        .takeIf { it.isNotBlank() }
-
-private fun readProgressPercent(
-    completed: Boolean,
-    cpage: Int?,
-    npage: Int?,
-): Int? {
-    if (completed) return 100
-    val current = cpage ?: return null
-    val total = npage?.takeIf { it > 0 } ?: return null
-    return ((current.coerceAtLeast(0) * 100.0) / total)
-        .toInt()
-        .coerceIn(0, 100)
-}
-
-private fun Long.secondsToMillis(): Long = this * 1_000L
-
-private fun Cursor.string(column: String): String? {
-    val index = getColumnIndex(column)
-    if (index < 0 || isNull(index)) return null
-    return getString(index)
-}
-
-private fun Cursor.int(column: String): Int? {
-    val index = getColumnIndex(column)
-    if (index < 0 || isNull(index)) return null
-    return getInt(index)
-}
-
-private fun Cursor.long(column: String): Long? {
-    val index = getColumnIndex(column)
-    if (index < 0 || isNull(index)) return null
-    return getLong(index)
 }
