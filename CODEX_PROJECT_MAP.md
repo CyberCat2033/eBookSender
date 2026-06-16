@@ -43,9 +43,10 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/ui/PocketBookSenderApp.kt` - Compose app shell and navigation integration.
 - `app/src/main/java/com/cybercat/pocketbooksender/PocketBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/transfer/ConnectionManager.kt` - shared PocketBook connection state and foreground-only keep-alive monitoring.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogRepository.kt` - PocketBook catalog repository; coordinates catalog state, deletion, FTP folder fallback scans, database reading, and catalog tree building.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogRepository.kt` - PocketBook catalog repository; coordinates catalog state, deletion, database reader, tree builder, and FTP folder fallback scanner.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/PocketBookDatabaseReader.kt` - PocketBook `explorer-3.db` snapshot reader; downloads the SQLite database files, opens the local copy read-only, and maps cursor rows to catalog file records.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogTreeBuilder.kt` - pure catalog tree builder for database records; filters supported file types, deduplicates PocketBook book records, maps metadata to `CatalogFile`, and groups Books/Documents/Manga with natural sorting.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogFolderScanner.kt` - FTP folder fallback scanner for catalog loading when the PocketBook SQLite database is unavailable or empty.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service.
 - `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded and adds completed chapters to the upload queue.
 - `app/src/main/java/com/cybercat/pocketbooksender/power/ScopedWakeLock.kt` - small non-reference-counted wake-lock helper for strictly scoped foreground transfer/download CPU wake windows.
