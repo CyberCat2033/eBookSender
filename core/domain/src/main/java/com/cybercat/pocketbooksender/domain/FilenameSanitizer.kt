@@ -6,25 +6,48 @@ private val RepeatedUnderscores = Regex("""_+""")
 
 object FilenameSanitizer {
     fun directoryName(value: String?, fallback: String): String {
-        val normalized = value
-            .orEmpty()
-            .trim()
-            .replace(UnsafePathChars, "_")
-            .replace(Whitespace, " ")
-            .trim(' ', '.')
+        return directoryNameOrNull(value) ?: fallback
+    }
 
-        return normalized.ifBlank { fallback }
+    fun directoryNameOrNull(value: String?): String? {
+        return sanitize(
+            value = value,
+            whitespaceReplacement = " ",
+            trimChars = charArrayOf(' ', '.'),
+            collapseUnderscores = false
+        )
     }
 
     fun fileTitle(value: String?, fallback: String): String {
-        val normalized = value
+        return fileTitleOrNull(value) ?: fallback
+    }
+
+    fun fileTitleOrNull(value: String?): String? {
+        return sanitize(
+            value = value,
+            whitespaceReplacement = "_",
+            trimChars = charArrayOf('_', '.'),
+            collapseUnderscores = true
+        )
+    }
+
+    private fun sanitize(
+        value: String?,
+        whitespaceReplacement: String,
+        trimChars: CharArray,
+        collapseUnderscores: Boolean
+    ): String? {
+        var normalized = value
             .orEmpty()
             .trim()
             .replace(UnsafePathChars, "_")
-            .replace(Whitespace, "_")
-            .replace(RepeatedUnderscores, "_")
-            .trim('_', '.')
+            .replace(Whitespace, whitespaceReplacement)
 
-        return normalized.ifBlank { fallback }
+        if (collapseUnderscores) {
+            normalized = normalized.replace(RepeatedUnderscores, "_")
+        }
+
+        val trimmed = normalized.trim { it in trimChars }
+        return trimmed.ifBlank { null }
     }
 }
