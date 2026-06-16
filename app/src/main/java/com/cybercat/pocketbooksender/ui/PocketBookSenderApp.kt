@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
+import android.os.SystemClock
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,6 +66,28 @@ import com.cybercat.pocketbooksender.model.AppTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
+private const val NavEnterDurationMillis = 200
+private const val NavExitDurationMillis = 80
+
+private class NavigationClickGate(
+    private val debounceMillis: Long = NavEnterDurationMillis.toLong(),
+) {
+    private var lastRoute: String? = null
+    private var lastClickUptimeMillis: Long = 0L
+
+    fun shouldHandle(route: String): Boolean {
+        val now = SystemClock.uptimeMillis()
+        val isDuplicateClick = route == lastRoute &&
+            now - lastClickUptimeMillis < debounceMillis
+
+        if (isDuplicateClick) return false
+
+        lastRoute = route
+        lastClickUptimeMillis = now
+        return true
+    }
+}
+
 @Composable
 fun PocketBookSenderApp(
     sharedUris: List<Uri>,
@@ -90,6 +113,7 @@ fun PocketBookSenderApp(
     val opdsListState = rememberLazyListState()
     val mangaListState = rememberLazyListState()
     val settingsScrollState = rememberScrollState()
+    val navigationClickGate = remember { NavigationClickGate() }
     var topScrollJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(sharedUris) {
@@ -143,10 +167,12 @@ fun PocketBookSenderApp(
                             item(
                                 selected = selected,
                                 onClick = {
-                                    if (selected) {
-                                        scrollDestinationToTop(destination.route)
-                                    } else {
-                                        navController.navigateSingleTop(destination.route)
+                                    if (navigationClickGate.shouldHandle(destination.route)) {
+                                        if (selected) {
+                                            scrollDestinationToTop(destination.route)
+                                        } else {
+                                            navController.navigateSingleTop(destination.route)
+                                        }
                                     }
                                 },
                                 icon = { Icon(destination.icon, contentDescription = label) },
@@ -244,18 +270,18 @@ private fun AppNavHost(
         startDestination = MainDestination.Send.route,
         modifier = modifier,
         enterTransition = {
-            fadeIn(animationSpec = tween(200, delayMillis = 80)) +
-            scaleIn(initialScale = 0.96f, animationSpec = tween(200, delayMillis = 80))
+            fadeIn(animationSpec = tween(NavEnterDurationMillis)) +
+            scaleIn(initialScale = 0.96f, animationSpec = tween(NavEnterDurationMillis))
         },
         exitTransition = {
-            fadeOut(animationSpec = tween(80))
+            fadeOut(animationSpec = tween(NavExitDurationMillis))
         },
         popEnterTransition = {
-            fadeIn(animationSpec = tween(200, delayMillis = 80)) +
-            scaleIn(initialScale = 0.96f, animationSpec = tween(200, delayMillis = 80))
+            fadeIn(animationSpec = tween(NavEnterDurationMillis)) +
+            scaleIn(initialScale = 0.96f, animationSpec = tween(NavEnterDurationMillis))
         },
         popExitTransition = {
-            fadeOut(animationSpec = tween(80))
+            fadeOut(animationSpec = tween(NavExitDurationMillis))
         },
     ) {
         composable(MainDestination.Send.route) {
