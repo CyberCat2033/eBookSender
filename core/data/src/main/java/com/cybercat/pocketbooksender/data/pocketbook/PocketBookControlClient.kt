@@ -1,5 +1,6 @@
 package com.cybercat.pocketbooksender.data.pocketbook
 
+import com.cybercat.pocketbooksender.data.network.LocalDeviceNetworkProvider
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -11,7 +12,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Singleton
-class PocketBookControlClient @Inject constructor() {
+class PocketBookControlClient @Inject constructor(
+    private val localDeviceNetworkProvider: LocalDeviceNetworkProvider,
+) {
     suspend fun isAlive(device: PocketBookDevice): Boolean =
         request(device = device, method = "GET", path = "alive").isSuccess
 
@@ -24,14 +27,16 @@ class PocketBookControlClient @Inject constructor() {
         path: String,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val connection = (device.controlUrl(path).openConnection() as HttpURLConnection).apply {
-                requestMethod = method
-                connectTimeout = ConnectTimeoutMillis
-                readTimeout = ReadTimeoutMillis
-                useCaches = false
-                setRequestProperty("Cache-Control", "no-cache")
-                setRequestProperty("Accept", "application/json")
-            }
+            val connection =
+                (localDeviceNetworkProvider.openConnection(device.controlUrl(path)) as HttpURLConnection)
+                    .apply {
+                        requestMethod = method
+                        connectTimeout = ConnectTimeoutMillis
+                        readTimeout = ReadTimeoutMillis
+                        useCaches = false
+                        setRequestProperty("Cache-Control", "no-cache")
+                        setRequestProperty("Accept", "application/json")
+                    }
 
             try {
                 val code = connection.responseCode

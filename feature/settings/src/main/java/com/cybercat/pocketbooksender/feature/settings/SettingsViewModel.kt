@@ -252,6 +252,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setEnableHaptics(value) }
     }
 
+    fun setBypassVpnForLocalConnections(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setBypassVpnForLocalConnections(value) }
+    }
+
     fun setTheme(value: AppTheme) {
         val override = _appearanceOverride.value
         val currentValue = override.theme ?: persistedSettings.value.theme

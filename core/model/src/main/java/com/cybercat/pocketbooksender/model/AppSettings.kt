@@ -13,6 +13,7 @@ data class AppSettings(
     val conflictStrategy: ConflictStrategy = ConflictStrategy.Ask,
     val useDynamicColor: Boolean = true,
     val enableHaptics: Boolean = true,
+    val bypassVpnForLocalConnections: Boolean = false,
     val theme: AppTheme = AppTheme.System,
     val warnOnDisconnectedRename: Boolean = true,
     val languageCode: String = "system",

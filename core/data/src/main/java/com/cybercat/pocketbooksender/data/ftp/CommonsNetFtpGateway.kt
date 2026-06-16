@@ -1,5 +1,6 @@
 package com.cybercat.pocketbooksender.data.ftp
 
+import com.cybercat.pocketbooksender.data.network.LocalDeviceNetworkProvider
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import java.io.InputStream
 import java.io.OutputStream
@@ -11,7 +12,9 @@ import org.apache.commons.net.ftp.FTPClient
 import org.apache.commons.net.ftp.FTPFile
 import org.apache.commons.net.ftp.FTPReply
 
-class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
+class CommonsNetFtpGateway @Inject constructor(
+    private val localDeviceNetworkProvider: LocalDeviceNetworkProvider,
+) : FtpGateway {
     override suspend fun checkConnection(device: PocketBookDevice): Result<FtpSessionInfo> =
         withFtpClient(device) { client ->
             runCatching {
@@ -174,6 +177,7 @@ class CommonsNetFtpGateway @Inject constructor() : FtpGateway {
         block: (FTPClient) -> Result<T>,
     ): Result<T> = withContext(Dispatchers.IO) {
         val client = FTPClient()
+        localDeviceNetworkProvider.socketFactory()?.let(client::setSocketFactory)
         client.controlEncoding = Charsets.UTF_8.name()
         client.connectTimeout = CONNECT_TIMEOUT_MS
         client.defaultTimeout = CONNECT_TIMEOUT_MS

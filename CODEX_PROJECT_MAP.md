@@ -31,6 +31,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `gradle/libs.versions.toml` - dependency and plugin versions.
 - `build.gradle.kts` - root Gradle plugin declarations.
 - `app/build.gradle.kts` - app configuration and dependencies.
+- `core/model/src/main/java/com/cybercat/pocketbooksender/model/AppSettings.kt` - persisted user settings model, including folder/template preferences, theme/haptics, localization, and local PocketBook VPN-bypass behavior.
 - `core/model/src/main/java/com/cybercat/pocketbooksender/model/UploadItemEntity.kt` - serializable app-local upload queue persistence entity and mappers; runtime-only fields such as upload progress and `Bitmap` previews are not persisted.
 - `app/src/main/AndroidManifest.xml` - Android components, permissions, intent filters, and services.
 - `app/src/main/assets/locales/en.json` - bundled English localization.
@@ -57,6 +58,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadCoordinator.kt` - app/feature boundary for foreground manga download requests and progress/completion events.
 - `app/src/main/java/com/cybercat/pocketbooksender/di/MangaSourceModule.kt` - collects every installed manga source adapter into a Hilt set of `HtmlMangaSourceAdapter` using multibindings.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/NetworkStateChecker.kt` - Android connectivity helper used to avoid manga retry loops while no active internet-capable network is available.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/LocalDeviceNetworkProvider.kt` - Android network route helper for optional VPN bypass on local PocketBook FTP/control HTTP connections.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSelectionKeys.kt` - shared stable manga selection keys used by subscription update UI and background download completion.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaArchiveHelper.kt` - packaging tool for creating CBZ/ZIP files from downloaded manga page images.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaAdapter.kt` - Com-X source adapter; owns source contract, cookies, HTTP requests, guard handling, page/archive downloads, and delegates HTML parsing.

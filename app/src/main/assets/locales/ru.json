@@ -34,6 +34,8 @@
   "settings_dynamic_color_desc": "Использовать цвета Material You",
   "settings_haptic": "Виброотклик",
   "settings_haptic_desc": "Вибрировать при взаимодействиях",
+  "settings_bypass_vpn": "Обход VPN для PocketBook",
+  "settings_bypass_vpn_desc": "Использовать локальный Wi-Fi/Ethernet маршрут для FTP PocketBook и keep-alive проверок",
   "settings_warn_disconnected": "Предупреждать при отключении",
   "settings_warn_disconnected_desc": "Предупреждать при переименовании папок без подключения",
   

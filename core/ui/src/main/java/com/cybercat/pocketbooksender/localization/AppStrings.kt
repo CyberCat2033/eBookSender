@@ -48,6 +48,8 @@ class AppStrings(
     val settingsDynamicColorDesc: String get() = get("settings_dynamic_color_desc")
     val settingsHaptic: String get() = get("settings_haptic")
     val settingsHapticDesc: String get() = get("settings_haptic_desc")
+    val settingsBypassVpn: String get() = get("settings_bypass_vpn")
+    val settingsBypassVpnDesc: String get() = get("settings_bypass_vpn_desc")
     val settingsWarnDisconnected: String get() = get("settings_warn_disconnected")
     val settingsWarnDisconnectedDesc: String get() = get("settings_warn_disconnected_desc")
     

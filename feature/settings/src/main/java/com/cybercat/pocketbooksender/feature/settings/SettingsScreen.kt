@@ -283,6 +283,7 @@ fun SettingsScreen(
     onMangaFileNameTemplateChanged: (String) -> Unit,
     onDynamicColorChanged: (Boolean) -> Unit,
     onHapticFeedbackEnabledChanged: (Boolean) -> Unit,
+    onBypassVpnForLocalConnectionsChanged: (Boolean) -> Unit,
     onClearDownloadCache: () -> Unit,
     onClearStatusMessage: () -> Unit,
     onThemeChanged: (AppTheme) -> Unit,
@@ -576,6 +577,23 @@ fun SettingsScreen(
                         onCheckedChange = {
                             view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                             onDynamicColorChanged(it)
+                        }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(strings.settingsBypassVpn, style = MaterialTheme.typography.bodyLarge)
+                        Text(strings.settingsBypassVpnDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = state.settings.bypassVpnForLocalConnections,
+                        onCheckedChange = {
+                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            onBypassVpnForLocalConnectionsChanged(it)
                         }
                     )
                 }

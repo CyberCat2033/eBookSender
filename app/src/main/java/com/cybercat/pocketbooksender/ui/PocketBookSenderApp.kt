@@ -438,6 +438,7 @@ private fun AppNavHost(
                 onMangaFileNameTemplateChanged = settingsViewModel::setMangaFileNameTemplate,
                 onDynamicColorChanged = settingsViewModel::setUseDynamicColor,
                 onHapticFeedbackEnabledChanged = settingsViewModel::setEnableHaptics,
+                onBypassVpnForLocalConnectionsChanged = settingsViewModel::setBypassVpnForLocalConnections,
                 onClearDownloadCache = settingsViewModel::clearDownloadCache,
                 onClearStatusMessage = settingsViewModel::clearStatusMessage,
                 onThemeChanged = settingsViewModel::setTheme,
