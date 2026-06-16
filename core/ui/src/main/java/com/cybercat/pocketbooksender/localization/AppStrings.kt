@@ -228,6 +228,7 @@ class AppStrings(
     val transferErrorReasonHostUnresolved: String get() = get("transfer_error_reason_host_unresolved")
     val transferErrorReasonConnectionRefused: String get() = get("transfer_error_reason_connection_refused")
     val transferErrorReasonConnectionTimeout: String get() = get("transfer_error_reason_connection_timeout")
+    val transferErrorReasonVpnBypassBlocked: String get() = get("transfer_error_reason_vpn_bypass_blocked")
     val transferErrorFtpUploadFailed: String get() = get("transfer_error_ftp_upload_failed")
     val transferErrorCannotOpenFile: String get() = get("transfer_error_cannot_open_file")
     

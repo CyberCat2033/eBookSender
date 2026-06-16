@@ -217,6 +217,7 @@
   "transfer_error_reason_host_unresolved": "Не удалось разрешить хост %1$s",
   "transfer_error_reason_connection_refused": "В подключении к %1$s:%2$d отказано",
   "transfer_error_reason_connection_timeout": "Истекло время ожидания подключения к %1$s:%2$d",
+  "transfer_error_reason_vpn_bypass_blocked": "Активный VPN запрещает приложениям обходить его. Разрешите PocketBook Sender или доступ к LAN в VPN-приложении либо отключите VPN на время подключения.",
   "transfer_error_ftp_upload_failed": "Сбой загрузки по FTP",
   "transfer_error_cannot_open_file": "Не удалось открыть %1$s",
   "transfer_notification_nothing_to_upload": "Нечего загружать",

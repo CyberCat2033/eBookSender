@@ -5,7 +5,10 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
+import com.cybercat.pocketbooksender.network.LocalNetworkBypassUnavailableException
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.IOException
+import java.net.Socket
 import java.net.URL
 import java.net.URLConnection
 import javax.inject.Inject
@@ -33,7 +36,12 @@ class LocalDeviceNetworkProvider @Inject constructor(
         if (!settingsRepository.settings.first().bypassVpnForLocalConnections) {
             return null
         }
-        return findDirectLocalNetwork()
+        val network = findDirectLocalNetwork() ?: return null
+        return if (network.canBindSocket()) {
+            network
+        } else {
+            throw LocalNetworkBypassUnavailableException()
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -57,6 +65,16 @@ class LocalDeviceNetworkProvider @Inject constructor(
     private fun isDirectLocalNetwork(network: Network): Boolean =
         connectivityManager.getNetworkCapabilities(network)
             ?.directLocalNetworkScore() != null
+
+    private fun Network.canBindSocket(): Boolean =
+        try {
+            Socket().use(::bindSocket)
+            true
+        } catch (_: IOException) {
+            false
+        } catch (_: RuntimeException) {
+            false
+        }
 
     private fun NetworkCapabilities.directLocalNetworkScore(): Int? {
         if (hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return null

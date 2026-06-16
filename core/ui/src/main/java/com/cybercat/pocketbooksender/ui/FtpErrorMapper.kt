@@ -2,6 +2,7 @@ package com.cybercat.pocketbooksender.ui
 
 import com.cybercat.pocketbooksender.localization.AppStrings
 import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.network.LocalNetworkBypassUnavailableException
 import java.io.InterruptedIOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
@@ -15,6 +16,8 @@ class FtpErrorMapper @Inject constructor() {
     fun mapConnectionError(error: Throwable, device: PocketBookDevice, strings: AppStrings): String {
         val causes = error.causalChain()
         val reason = when {
+            causes.any { it is LocalNetworkBypassUnavailableException || it.message.isVpnBypassBlockedMessage() } ->
+                strings.get("transfer_error_reason_vpn_bypass_blocked")
             causes.any { it is UnknownHostException } ->
                 strings.get("transfer_error_reason_host_unresolved", device.host)
             causes.any { it is SocketTimeoutException || it is InterruptedIOException || it.message.isTimeoutMessage() } ->
@@ -52,5 +55,10 @@ class FtpErrorMapper @Inject constructor() {
     private fun String?.isConnectionRefusedMessage(): Boolean {
         val text = this?.lowercase() ?: return false
         return "connection refused" in text || "failed to connect" in text || "no route to host" in text
+    }
+
+    private fun String?.isVpnBypassBlockedMessage(): Boolean {
+        val text = this?.lowercase() ?: return false
+        return "binding socket to network" in text && "eperm" in text
     }
 }

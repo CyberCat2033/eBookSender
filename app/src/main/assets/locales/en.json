@@ -217,6 +217,7 @@
   "transfer_error_reason_host_unresolved": "Host %1$s cannot be resolved",
   "transfer_error_reason_connection_refused": "Connection to %1$s:%2$d refused",
   "transfer_error_reason_connection_timeout": "Timeout connecting to %1$s:%2$d",
+  "transfer_error_reason_vpn_bypass_blocked": "The active VPN does not allow apps to bypass it. Allow PocketBook Sender or LAN access in the VPN app, or turn off the VPN while connecting.",
   "transfer_error_ftp_upload_failed": "FTP upload failed",
   "transfer_error_cannot_open_file": "Cannot open %1$s",
   "transfer_notification_nothing_to_upload": "Nothing to upload",

@@ -177,13 +177,14 @@ class CommonsNetFtpGateway @Inject constructor(
         block: (FTPClient) -> Result<T>,
     ): Result<T> = withContext(Dispatchers.IO) {
         val client = FTPClient()
-        localDeviceNetworkProvider.socketFactory()?.let(client::setSocketFactory)
-        client.controlEncoding = Charsets.UTF_8.name()
-        client.connectTimeout = CONNECT_TIMEOUT_MS
-        client.defaultTimeout = CONNECT_TIMEOUT_MS
-        client.setDataTimeout(java.time.Duration.ofMillis(DATA_TIMEOUT_MS.toLong()))
 
         try {
+            localDeviceNetworkProvider.socketFactory()?.let(client::setSocketFactory)
+            client.controlEncoding = Charsets.UTF_8.name()
+            client.connectTimeout = CONNECT_TIMEOUT_MS
+            client.defaultTimeout = CONNECT_TIMEOUT_MS
+            client.setDataTimeout(java.time.Duration.ofMillis(DATA_TIMEOUT_MS.toLong()))
+
             client.connect(device.host, device.port)
             client.soTimeout = DATA_TIMEOUT_MS
             check(FTPReply.isPositiveCompletion(client.replyCode)) {
