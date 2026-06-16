@@ -729,10 +729,13 @@ class MangaViewModel @Inject constructor(
 
     private fun formatMangaFailures(failedMessages: List<String>): String? {
         if (failedMessages.isEmpty()) return null
-        val visible = failedMessages.take(3).joinToString("\n")
+        val strings = localizationManager.currentStrings.value
+        val visible = failedMessages.take(3).joinToString("\n") { message ->
+            message.replace(MangaNetworkUnavailableMessage, strings.get("manga_error_network_unavailable"))
+        }
         val hiddenCount = failedMessages.size - 3
         return if (hiddenCount > 0) {
-            localizationManager.currentStrings.value.get("manga_error_failures_summary", visible, hiddenCount)
+            strings.get("manga_error_failures_summary", visible, hiddenCount)
         } else {
             visible
         }
@@ -743,6 +746,7 @@ class MangaViewModel @Inject constructor(
 
     private companion object {
         const val StatusMessageMillis = 5000L
+        const val MangaNetworkUnavailableMessage = "MANGA_NETWORK_UNAVAILABLE"
     }
 }
 

@@ -22,6 +22,7 @@ import com.cybercat.pocketbooksender.data.manga.mangaStableSelectionKey
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
+import com.cybercat.pocketbooksender.power.ScopedWakeLock
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
@@ -41,6 +42,13 @@ class MangaDownloadForegroundService : Service() {
     @Inject lateinit var localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val downloadWakeLock by lazy {
+        ScopedWakeLock(
+            context = this,
+            tag = "MangaDownloadForegroundService",
+            timeoutMillis = DownloadWakeLockTimeoutMillis,
+        )
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -70,15 +78,21 @@ class MangaDownloadForegroundService : Service() {
             ),
         )
 
+        downloadWakeLock.acquire()
         serviceScope.launch {
-            runDownload(request)
-            stopSelf(startId)
+            try {
+                runDownload(request)
+            } finally {
+                downloadWakeLock.release()
+                stopSelf(startId)
+            }
         }
 
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        downloadWakeLock.release()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -247,6 +261,7 @@ class MangaDownloadForegroundService : Service() {
         private const val NOTIFICATION_ID = 2201
         private const val COMPLETION_NOTIFICATION_ID_START = 2300
         private const val EXTRA_REQUEST_ID = "request_id"
+        private const val DownloadWakeLockTimeoutMillis = 90 * 60 * 1000L
         private val completionNotificationIds = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
 
         private fun nextCompletionNotificationId(): Int =

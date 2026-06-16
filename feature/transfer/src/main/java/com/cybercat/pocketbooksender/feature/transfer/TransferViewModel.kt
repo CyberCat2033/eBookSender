@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -60,6 +61,7 @@ class TransferViewModel @Inject constructor(
     private val _isConnecting = MutableStateFlow(false)
     private val _isTransferActive = MutableStateFlow(false)
     private val _activeTransferItemIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _uploadProgressById = MutableStateFlow<Map<String, Float>>(emptyMap())
     private val _errorState = MutableStateFlow<FtpErrorState?>(null)
     private val _ftpSuggestions = MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
 
@@ -70,6 +72,7 @@ class TransferViewModel @Inject constructor(
         connectionManager.connectedDevice,
         _isTransferActive,
         _activeTransferItemIds,
+        _uploadProgressById,
         queueManager.queue,
         settingsRepository.settings,
         _errorState,
@@ -82,12 +85,13 @@ class TransferViewModel @Inject constructor(
         val device = values[2] as PocketBookDevice?
         val isTransfer = values[3] as Boolean
         val activeTransferItemIds = values[4] as Set<String>
-        val queue = values[5] as List<UploadItem>
-        val settings = values[6] as AppSettings
-        val errorState = values[7] as FtpErrorState?
-        val catalog = values[8] as DeviceCatalog
-        val suggestions = values[9] as Pair<List<String>, List<String>>
-        val strings = values[10] as com.cybercat.pocketbooksender.localization.AppStrings
+        val uploadProgressById = values[5] as Map<String, Float>
+        val queue = values[6] as List<UploadItem>
+        val settings = values[7] as AppSettings
+        val errorState = values[8] as FtpErrorState?
+        val catalog = values[9] as DeviceCatalog
+        val suggestions = values[10] as Pair<List<String>, List<String>>
+        val strings = values[11] as com.cybercat.pocketbooksender.localization.AppStrings
 
         val error = when (errorState) {
             is FtpErrorState.Connection -> ftpErrorMapper.mapConnectionError(errorState.error, errorState.device, strings)
@@ -116,6 +120,7 @@ class TransferViewModel @Inject constructor(
             connectedDevice = device,
             isTransferActive = isTransfer,
             activeTransferItemIds = activeTransferItemIds,
+            uploadProgressById = uploadProgressById,
             queue = queue,
             settings = settings,
             errorMessage = error,
@@ -257,12 +262,14 @@ class TransferViewModel @Inject constructor(
         )
 
         _activeTransferItemIds.value = pending.map { it.id }.toSet()
+        _uploadProgressById.value = pending.associate { item -> item.id to 0f }
         _isTransferActive.value = true
         _errorState.value = null
 
+        val pendingIds = pending.mapTo(mutableSetOf()) { item -> item.id }
         queueManager.updateQueue { current ->
             current.map { item ->
-                if (pending.any { it.id == item.id }) {
+                if (item.id in pendingIds) {
                     item.copy(status = UploadStatus.Pending, progress = 0.0f)
                 } else {
                     item
@@ -276,6 +283,9 @@ class TransferViewModel @Inject constructor(
     private fun handleTransferEvent(event: TransferEvent) {
         when (event) {
             is TransferEvent.ItemStarted -> {
+                _uploadProgressById.update { current ->
+                    current + (event.itemId to 0f)
+                }
                 queueManager.updateQueue { current ->
                     current.map { item ->
                         if (item.id == event.itemId) {
@@ -287,17 +297,18 @@ class TransferViewModel @Inject constructor(
                 }
             }
             is TransferEvent.ItemProgress -> {
-                queueManager.updateQueue { current ->
-                    current.map { item ->
-                        if (item.id == event.itemId) {
-                            item.copy(status = UploadStatus.Uploading, progress = event.progress)
-                        } else {
-                            item
-                        }
+                _uploadProgressById.update { current ->
+                    if (current[event.itemId] == event.progress) {
+                        current
+                    } else {
+                        current + (event.itemId to event.progress)
                     }
                 }
             }
             is TransferEvent.ItemUploaded -> {
+                _uploadProgressById.update { current ->
+                    current + (event.itemId to 1f)
+                }
                 queueManager.updateQueue { current ->
                     current.map { item ->
                         if (item.id == event.itemId) {
@@ -309,6 +320,9 @@ class TransferViewModel @Inject constructor(
                 }
             }
             is TransferEvent.ItemFailed -> {
+                _uploadProgressById.update { current ->
+                    current - event.itemId
+                }
                 queueManager.updateQueue { current ->
                     current.map { item ->
                         if (item.id == event.itemId) {
@@ -323,6 +337,7 @@ class TransferViewModel @Inject constructor(
             is TransferEvent.Completed -> {
                 _isTransferActive.value = false
                 _activeTransferItemIds.value = emptySet()
+                _uploadProgressById.value = emptyMap()
                 val device = connectionManager.connectedDevice.value
                 if (device != null) {
                     refreshRemoteFolderSuggestions(device)

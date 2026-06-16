@@ -552,16 +552,19 @@ fun UploadedSection(
                 }
             }
 
+            val animationDuration = remember(items.size) {
+                minOf(750, 250 + (items.size * 35))
+            }
             AnimatedVisibility(
                 visible = expanded,
                 enter = expandVertically(
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    animationSpec = tween(durationMillis = animationDuration),
                     expandFrom = Alignment.Top,
-                ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow)),
+                ) + fadeIn(tween(durationMillis = animationDuration)),
                 exit = shrinkVertically(
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    animationSpec = tween(durationMillis = animationDuration),
                     shrinkTowards = Alignment.Top,
-                ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow)),
+                ) + fadeOut(tween(durationMillis = animationDuration)),
             ) {
                 Column(
                     modifier = Modifier.padding(top = 10.dp),
@@ -593,6 +596,7 @@ fun UploadedSection(
 @Composable
 fun UploadProgressOverlay(
     queue: List<UploadItem>,
+    progressById: Map<String, Float>,
     modifier: Modifier = Modifier,
 ) {
     val uploadingItems = queue.filter { it.status == UploadStatus.Uploading }
@@ -602,7 +606,9 @@ fun UploadProgressOverlay(
 
     if (totalCount == 0) return
 
-    val activeProgressSum = uploadingItems.sumOf { it.progress.toDouble() }.toFloat()
+    val activeProgressSum = uploadingItems.sumOf { item ->
+        (progressById[item.id] ?: item.progress).toDouble()
+    }.toFloat()
     val overallProgress = (uploadedCount + activeProgressSum) / totalCount
 
     val animatedProgress by animateFloatAsState(

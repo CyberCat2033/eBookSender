@@ -72,6 +72,35 @@ object DatabaseModule {
         }
     }
 
+    private val Migration5To6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE INDEX IF NOT EXISTS `index_manga_chapter_history_downloadedAtMillis`
+                ON `manga_chapter_history` (`downloadedAtMillis`)
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE INDEX IF NOT EXISTS `index_manga_series_bookmarks_subscribed_title`
+                ON `manga_series_bookmarks` (`subscribed`, `title`)
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE INDEX IF NOT EXISTS `index_manga_series_bookmarks_favorite_lastOpenedAtMillis_title`
+                ON `manga_series_bookmarks` (`favorite`, `lastOpenedAtMillis` DESC, `title`)
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE INDEX IF NOT EXISTS `index_manga_series_bookmarks_subscribed_lastOpenedAtMillis_title`
+                ON `manga_series_bookmarks` (`subscribed`, `lastOpenedAtMillis` DESC, `title`)
+                """.trimIndent(),
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(
@@ -82,7 +111,7 @@ object DatabaseModule {
             PocketBookSenderDatabase::class.java,
             "pocketbook_sender.db",
         )
-            .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5)
+            .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6)
             .build()
 
     @Provides

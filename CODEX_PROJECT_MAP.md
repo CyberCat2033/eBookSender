@@ -44,8 +44,10 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/transfer/ConnectionManager.kt` - shared PocketBook connection state and foreground-only keep-alive monitoring.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service.
 - `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded and adds completed chapters to the upload queue.
+- `app/src/main/java/com/cybercat/pocketbooksender/power/ScopedWakeLock.kt` - small non-reference-counted wake-lock helper for strictly scoped foreground transfer/download CPU wake windows.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; persists queue snapshots in app storage and checks restored file/URI access.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadCoordinator.kt` - app/feature boundary for foreground manga download requests and progress/completion events.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/NetworkStateChecker.kt` - Android connectivity helper used to avoid manga retry loops while no active internet-capable network is available.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSelectionKeys.kt` - shared stable manga selection keys used by subscription update UI and background download completion.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaArchiveHelper.kt` - packaging tool for creating CBZ/ZIP files from downloaded manga page images.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/FtpErrorMapper.kt` - mapper class translating FTP connection errors and URL parsing failures to localized user-facing strings.
@@ -117,8 +119,9 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Queue rows use `Modifier.animateItem` with `QueueFadeInSpec`, `QueueFadeOutSpec`, and `QueuePlacementSpec`.
   - `AnimatedRemovalItem` handles single-item removal and clear-queue removal with horizontal slide-out, vertical shrink, fade, and staggered clear delays.
   - Active transfer overlay enters/exits with fade plus vertical slide from the bottom.
+  - Active upload progress values are held separately from the persisted upload queue so high-frequency progress ticks do not rewrite the whole queue list or JSON snapshot.
   - Connection panel animates icon tint over 220 ms, disconnect button alpha over 160 ms, and FTP input visibility with spring expand/shrink plus fade.
-  - Upload item details and uploaded section use spring expand/shrink plus fade; chevrons rotate with a medium spring.
+  - Upload item details use spring expand/shrink plus fade; uploaded section uses progressive tween expand/shrink plus fade based on the number of items; chevrons rotate with a medium spring.
   - Upload progress height uses `animateDpAsState`; item and overall progress bars use low-stiffness no-bounce spring `animateFloatAsState`.
 - Manga motion: `feature/manga/.../MangaPane.kt` and `MangaComponents.kt`.
   - Chapter and search-result lists use `Modifier.animateItem()`.

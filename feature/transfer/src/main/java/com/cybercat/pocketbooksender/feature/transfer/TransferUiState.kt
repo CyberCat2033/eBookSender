@@ -10,6 +10,7 @@ data class TransferUiState(
     val connectedDevice: PocketBookDevice? = null,
     val isTransferActive: Boolean = false,
     val activeTransferItemIds: Set<String> = emptySet(),
+    val uploadProgressById: Map<String, Float> = emptyMap(),
     val queue: List<UploadItem> = emptyList(),
     val settings: AppSettings = AppSettings(),
     val errorMessage: String? = null,

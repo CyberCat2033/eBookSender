@@ -277,6 +277,7 @@ fun SendScreen(
                         ) { triggerRemove ->
                             UploadItemRow(
                                 item = item,
+                                progress = state.uploadProgressById[item.id] ?: item.progress,
                                 documentsTags = state.documentsTags,
                                 mangaSeriesSuggestions = state.mangaSeriesSuggestions,
                                 enableHaptics = state.settings.enableHaptics,
@@ -309,7 +310,10 @@ fun SendScreen(
                 val transferQueue = remember(state.queue, state.activeTransferItemIds) {
                     state.queue.filter { item -> item.id in state.activeTransferItemIds }
                 }
-                UploadProgressOverlay(queue = transferQueue)
+                UploadProgressOverlay(
+                    queue = transferQueue,
+                    progressById = state.uploadProgressById,
+                )
             }
         }
     }

@@ -6,6 +6,7 @@ import com.cybercat.pocketbooksender.data.database.dao.MangaChapterHistoryDao
 import com.cybercat.pocketbooksender.data.database.dao.MangaSeriesBookmarkDao
 import com.cybercat.pocketbooksender.data.database.entity.MangaChapterHistoryEntity
 import com.cybercat.pocketbooksender.data.database.entity.MangaSeriesBookmarkEntity
+import com.cybercat.pocketbooksender.data.network.NetworkStateChecker
 import com.cybercat.pocketbooksender.domain.FilenameSanitizer
 import com.cybercat.pocketbooksender.util.TimedCacheEntry
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,6 +30,8 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
+private const val NetworkUnavailableMessage = "MANGA_NETWORK_UNAVAILABLE"
+
 @Singleton
 class MangaRepository @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -36,6 +39,7 @@ class MangaRepository @Inject constructor(
     private val bookmarkDao: MangaSeriesBookmarkDao,
     private val comxAdapter: ComxMangaAdapter,
     private val archiveHelper: MangaArchiveHelper,
+    private val networkStateChecker: NetworkStateChecker,
 ) {
     private val adapters: List<HtmlMangaSourceAdapter> = listOf(comxAdapter)
     private val searchCache = ConcurrentHashMap<String, TimedCacheEntry<List<MangaSeriesSearchResult>>>()
@@ -374,10 +378,15 @@ class MangaRepository @Inject constructor(
             )
         }.getOrElse { error ->
             if (error is kotlinx.coroutines.CancellationException) throw error
+            val message = if (error is MangaNetworkUnavailableException) {
+                "${chapter.title}: $NetworkUnavailableMessage"
+            } else {
+                "${chapter.title}: ${error.message ?: error::class.java.simpleName}"
+            }
             ChapterDownloadOutcome(
                 downloaded = null,
                 historyItem = null,
-                errorMessage = "${chapter.title}: ${error.message ?: error::class.java.simpleName}",
+                errorMessage = message,
             )
         }
     }
@@ -422,6 +431,7 @@ class MangaRepository @Inject constructor(
     ): MangaDownloadedPage {
         var lastError: IOException? = null
         repeat(PageDownloadAttempts) { attempt ->
+            ensureNetworkAvailable()
             try {
                 return withTimeout(PageAttemptTimeoutMillis) {
                     adapter.downloadPage(page)
@@ -437,6 +447,7 @@ class MangaRepository @Inject constructor(
                 if (nextAttempt > PageDownloadAttempts) {
                     throw error
                 }
+                ensureNetworkAvailable()
                 onPageProgress(
                     completedPages.get(),
                     "Retry page ${page.index + 1}/$totalPages ($nextAttempt/$PageDownloadAttempts)",
@@ -455,6 +466,7 @@ class MangaRepository @Inject constructor(
         pageSemaphore: Semaphore,
         onPageProgress: suspend (Int, Int, String?) -> Unit,
     ): File {
+        ensureNetworkAvailable()
         val pages = adapter.getChapterPages(chapter.chapterId)
             .ifEmpty { throw IOException("No pages found: ${chapter.title}") }
         val downloadedPages = downloadPages(
@@ -482,6 +494,7 @@ class MangaRepository @Inject constructor(
         val tempFile = archiveHelper.uniqueFile(outputDir, "$baseFileName.download")
 
         try {
+            ensureNetworkAvailable()
             onProgress("Downloading archive", 0L, null)
             val archive = adapter.downloadChapterArchive(
                 chapter = chapter,
@@ -500,11 +513,20 @@ class MangaRepository @Inject constructor(
             )
         } catch (error: IOException) {
             tempFile.delete()
+            if (error is MangaNetworkUnavailableException || !networkStateChecker.hasActiveInternetConnection()) {
+                throw MangaNetworkUnavailableException()
+            }
             onProgress("Archive unavailable, downloading pages", 0L, null)
             return null
         }
     }
 
+
+    private fun ensureNetworkAvailable() {
+        if (!networkStateChecker.hasActiveInternetConnection()) {
+            throw MangaNetworkUnavailableException()
+        }
+    }
 
 
     private fun adapter(sourceId: String): HtmlMangaSourceAdapter =
@@ -521,6 +543,8 @@ class MangaRepository @Inject constructor(
         const val PageRetryDelayMillis = 450L
     }
 }
+
+private class MangaNetworkUnavailableException : IOException(NetworkUnavailableMessage)
 
 sealed interface MangaParsedPage {
     data class SearchResults(val results: List<MangaSeriesSearchResult>) : MangaParsedPage

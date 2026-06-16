@@ -15,6 +15,7 @@ import com.cybercat.pocketbooksender.R
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
 import com.cybercat.pocketbooksender.model.BookCategory
+import com.cybercat.pocketbooksender.power.ScopedWakeLock
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import java.io.InputStream
@@ -35,6 +36,13 @@ class TransferForegroundService : Service() {
     @Inject lateinit var rescanCoordinator: PocketBookRescanCoordinator
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val transferWakeLock by lazy {
+        ScopedWakeLock(
+            context = this,
+            tag = "TransferForegroundService",
+            timeoutMillis = TransferWakeLockTimeoutMillis,
+        )
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -53,15 +61,21 @@ class TransferForegroundService : Service() {
             buildProgressNotification(localizationManager.currentStrings.value.transferNotificationUploadingBooks, 0, request.items.size),
         )
 
+        transferWakeLock.acquire()
         serviceScope.launch {
-            runTransfer(request)
-            stopSelf(startId)
+            try {
+                runTransfer(request)
+            } finally {
+                transferWakeLock.release()
+                stopSelf(startId)
+            }
         }
 
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
+        transferWakeLock.release()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -304,6 +318,7 @@ class TransferForegroundService : Service() {
         private const val NOTIFICATION_ID = 2001
         private const val COMPLETION_NOTIFICATION_ID_START = 2100
         private const val EXTRA_REQUEST_ID = "request_id"
+        private const val TransferWakeLockTimeoutMillis = 60 * 60 * 1000L
         private val completionNotificationIds = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
 
         private fun nextCompletionNotificationId(): Int =

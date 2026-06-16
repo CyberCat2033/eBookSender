@@ -249,6 +249,7 @@
   "manga_status_download_chapters_selected": "%1$d chapters selected",
   "manga_status_added_to_queue": "Added to queue: %1$d chapters",
   "manga_error_cannot_download": "Cannot download manga chapters",
+  "manga_error_network_unavailable": "No active network connection",
   "manga_status_login_success": "Successfully signed in to com-x.life",
   "manga_progress_completed": "completed",
   "manga_progress_step_preparing": "Preparing chapter",

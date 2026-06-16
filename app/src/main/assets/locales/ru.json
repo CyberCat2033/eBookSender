@@ -249,6 +249,7 @@
   "manga_status_download_chapters_selected": "Выбрано глав: %1$d",
   "manga_status_added_to_queue": "Добавлено в очередь глав: %1$d",
   "manga_error_cannot_download": "Не удалось скачать главы манги",
+  "manga_error_network_unavailable": "Нет активного подключения к сети",
   "manga_status_login_success": "Вход на com-x.life успешно выполнен",
   "manga_progress_completed": "прочитано",
   "manga_progress_step_preparing": "Подготовка главы",

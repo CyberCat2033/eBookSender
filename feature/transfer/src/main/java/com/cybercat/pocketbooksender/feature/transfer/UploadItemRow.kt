@@ -66,6 +66,7 @@ import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 @Composable
 fun UploadItemRow(
     item: UploadItem,
+    progress: Float,
     modifier: Modifier = Modifier,
     documentsTags: List<String>,
     mangaSeriesSuggestions: List<String>,
@@ -197,7 +198,7 @@ fun UploadItemRow(
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     val statusText = when (item.status) {
-                        UploadStatus.Uploading -> strings.get("send_status_uploading", (item.progress * 100).toInt())
+                        UploadStatus.Uploading -> strings.get("send_status_uploading", (progress * 100).toInt())
                         UploadStatus.Pending -> strings.sendStatusPending
                         UploadStatus.Preparing -> strings.sendStatusPreparing
                         UploadStatus.Uploaded -> strings.sendStatusUploaded
@@ -222,7 +223,7 @@ fun UploadItemRow(
 
             if (progressHeight > 0.dp) {
                 SmoothProgressIndicator(
-                    progress = item.progress,
+                    progress = progress,
                     modifier = Modifier.fillMaxWidth().height(progressHeight),
                 )
             }

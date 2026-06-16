@@ -1,10 +1,14 @@
 package com.cybercat.pocketbooksender.data.database.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 
 @Entity(
     tableName = "manga_chapter_history",
     primaryKeys = ["sourceId", "stableKey"],
+    indices = [
+        Index(value = ["downloadedAtMillis"]),
+    ],
 )
 data class MangaChapterHistoryEntity(
     val sourceId: String,
