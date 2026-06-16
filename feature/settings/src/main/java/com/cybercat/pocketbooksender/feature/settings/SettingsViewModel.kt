@@ -4,13 +4,14 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.data.manga.MangaRepository
+import com.cybercat.pocketbooksender.data.opds.OpdsRepository
 import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
-import com.cybercat.pocketbooksender.data.opds.OpdsRepository
 import android.webkit.CookieManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,9 +37,11 @@ class SettingsViewModel @Inject constructor(
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
     private val rescanCoordinator: PocketBookRescanCoordinator,
     private val opdsRepository: OpdsRepository,
+    private val mangaRepository: MangaRepository,
 ) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
     private val _pendingRename = MutableStateFlow<PendingRename?>(null)
+    private val _showLogoutWarning = MutableStateFlow(false)
     private val _activeFolderRename = MutableStateFlow<FolderType?>(null)
     private val _appearanceOverride = MutableStateFlow(AppearanceOverride())
 
@@ -72,19 +75,24 @@ class SettingsViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        effectiveSettings,
-        _statusMessage,
-        _pendingRename,
-        localizationManager.availableLocales,
-        _activeFolderRename
-    ) { settings, status, pending, locales, activeFolderRename ->
-        SettingsUiState(
-            settings = settings,
-            settingsStatusMessage = status,
-            pendingRename = pending,
-            activeFolderRename = activeFolderRename,
-            availableLocales = locales
-        )
+        combine(
+            effectiveSettings,
+            _statusMessage,
+            _pendingRename,
+            localizationManager.availableLocales,
+            _activeFolderRename,
+        ) { settings, status, pending, locales, activeFolderRename ->
+            SettingsUiState(
+                settings = settings,
+                settingsStatusMessage = status,
+                pendingRename = pending,
+                activeFolderRename = activeFolderRename,
+                availableLocales = locales,
+            )
+        },
+        _showLogoutWarning,
+    ) { state, showLogoutWarning ->
+        state.copy(showLogoutWarning = showLogoutWarning)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -300,8 +308,20 @@ class SettingsViewModel @Inject constructor(
 
     fun logoutAll() {
         viewModelScope.launch {
+            if (hasLogoutTargets()) {
+                _showLogoutWarning.value = true
+            } else {
+                showTemporaryStatus(localizationManager.currentStrings.value.settingsNoActiveAccounts)
+            }
+        }
+    }
+
+    fun confirmLogoutAll() {
+        viewModelScope.launch {
+            _showLogoutWarning.value = false
             val deviceConnected = connectionManager.connectedDevice.value != null
             val clearedOpds = runCatching { opdsRepository.logoutAll() }.getOrDefault(false)
+            val clearedManga = runCatching { mangaRepository.clearSavedSeries() }.getOrDefault(false)
             val hasCookies = runCatching { CookieManager.getInstance().hasCookies() }.getOrDefault(false)
 
             if (hasCookies) {
@@ -315,7 +335,7 @@ class SettingsViewModel @Inject constructor(
                 connectionManager.disconnect()
             }
 
-            val clearedAny = deviceConnected || clearedOpds || hasCookies
+            val clearedAny = deviceConnected || clearedOpds || clearedManga || hasCookies
             val message = if (clearedAny) {
                 localizationManager.currentStrings.value.settingsLoggedOutAll
             } else {
@@ -323,6 +343,18 @@ class SettingsViewModel @Inject constructor(
             }
             showTemporaryStatus(message)
         }
+    }
+
+    fun dismissLogoutWarning() {
+        _showLogoutWarning.value = false
+    }
+
+    private suspend fun hasLogoutTargets(): Boolean {
+        val deviceConnected = connectionManager.connectedDevice.value != null
+        val hasOpdsCredentials = runCatching { opdsRepository.hasSavedCredentials() }.getOrDefault(false)
+        val hasMangaSavedSeries = runCatching { mangaRepository.hasSavedSeries() }.getOrDefault(false)
+        val hasCookies = runCatching { CookieManager.getInstance().hasCookies() }.getOrDefault(false)
+        return deviceConnected || hasOpdsCredentials || hasMangaSavedSeries || hasCookies
     }
 
     private fun getFolderSize(file: File): Long {

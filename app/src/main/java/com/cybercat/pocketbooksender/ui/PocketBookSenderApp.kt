@@ -420,6 +420,8 @@ private fun AppNavHost(
                 onConfirmPendingRename = settingsViewModel::confirmPendingRename,
                 onCancelPendingRename = settingsViewModel::cancelPendingRename,
                 onLogoutAll = settingsViewModel::logoutAll,
+                onConfirmLogoutAll = settingsViewModel::confirmLogoutAll,
+                onDismissLogoutWarning = settingsViewModel::dismissLogoutWarning,
             )
         }
     }

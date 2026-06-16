@@ -31,6 +31,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `gradle/libs.versions.toml` - dependency and plugin versions.
 - `build.gradle.kts` - root Gradle plugin declarations.
 - `app/build.gradle.kts` - app configuration and dependencies.
+- `core/model/src/main/java/com/cybercat/pocketbooksender/model/UploadItemEntity.kt` - serializable app-local upload queue persistence entity and mappers; runtime-only fields such as upload progress and `Bitmap` previews are not persisted.
 - `app/src/main/AndroidManifest.xml` - Android components, permissions, intent filters, and services.
 - `app/src/main/assets/locales/en.json` - bundled English localization.
 - `app/src/main/assets/locales/ru.json` - bundled Russian localization.
@@ -61,6 +62,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - Keep Android platform services and app wiring in `:app` unless a reusable interface belongs in `core:data`.
 - Update localization JSON files whenever visible text changes.
 - Check all call sites when changing shared models, repositories, domain helpers, or UI primitives.
+- At task completion, decide whether `AGENTS.md` or this project map need updates. Update them yourself when guidance, navigation, architecture, shared patterns, important paths, or verification commands changed; if not, mention that no project-guidance update was needed.
 
 ## Reuse rules
 

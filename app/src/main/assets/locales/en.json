@@ -47,6 +47,9 @@
   "settings_logout_all": "Log out from all services",
   "settings_logged_out_all": "Logged out from all services",
   "settings_no_active_accounts": "No active accounts to log out from",
+  "settings_logout_warning_title": "Log out from services?",
+  "settings_logout_warning_body": "This will log you out from active services and clear saved, favorite, and subscribed manga.",
+  "settings_logout_warning_confirm": "Log out",
   
   "settings_dialog_title": "Device Disconnected",
   "settings_dialog_body": "You are not connected to the device. Change the local setting for '%1$s' folder to '%2$s' anyway?\n\n(This will not rename the directory on the device.)",

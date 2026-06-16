@@ -291,6 +291,8 @@ fun SettingsScreen(
     onConfirmPendingRename: () -> Unit,
     onCancelPendingRename: () -> Unit,
     onLogoutAll: () -> Unit,
+    onConfirmLogoutAll: () -> Unit,
+    onDismissLogoutWarning: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -357,6 +359,38 @@ fun SettingsScreen(
                 },
             )
         }
+    }
+
+    if (state.showLogoutWarning) {
+        AnimatedAlertDialog(
+            onDismissRequest = onDismissLogoutWarning,
+            title = { Text(strings.settingsLogoutWarningTitle) },
+            text = { Text(strings.settingsLogoutWarningBody) },
+            confirmButton = {
+                val dismiss = LocalDismissDialog.current
+                TextButton(
+                    onClick = {
+                        view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.LONG_PRESS)
+                        onConfirmLogoutAll()
+                        dismiss()
+                    },
+                ) {
+                    Text(strings.settingsLogoutWarningConfirm)
+                }
+            },
+            dismissButton = {
+                val dismiss = LocalDismissDialog.current
+                TextButton(
+                    onClick = {
+                        view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        onDismissLogoutWarning()
+                        dismiss()
+                    },
+                ) {
+                    Text(strings.settingsDialogCancel)
+                }
+            },
+        )
     }
 
     Scaffold(

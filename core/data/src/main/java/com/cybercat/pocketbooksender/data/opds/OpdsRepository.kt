@@ -35,6 +35,12 @@ class OpdsRepository @Inject constructor(
         catalogCache.clear()
     }
 
+    suspend fun hasSavedCredentials(): Boolean = withContext(Dispatchers.IO) {
+        sourceDao.getAllSources().any { entity ->
+            entity.username != null || entity.password != null
+        }
+    }
+
     suspend fun logoutAll(): Boolean = withContext(Dispatchers.IO) {
         val allSources = sourceDao.getAllSources()
         var clearedAny = false

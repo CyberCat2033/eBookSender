@@ -34,6 +34,24 @@ interface MangaSeriesBookmarkDao {
 
     @Query(
         """
+        UPDATE manga_series_bookmarks
+        SET favorite = 0,
+            subscribed = 0
+        WHERE favorite = 1 OR subscribed = 1
+        """,
+    )
+    suspend fun clearSavedSeries(): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM manga_series_bookmarks
+        WHERE favorite = 1 OR subscribed = 1
+        """,
+    )
+    suspend fun savedSeriesCount(): Int
+
+    @Query(
+        """
         INSERT INTO manga_series_bookmarks (
             sourceId,
             seriesId,

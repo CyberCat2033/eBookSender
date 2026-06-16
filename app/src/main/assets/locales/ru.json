@@ -47,6 +47,9 @@
   "settings_logout_all": "Выйти из всех сервисов",
   "settings_logged_out_all": "Выход из всех сервисов выполнен",
   "settings_no_active_accounts": "Ни в одном аккаунте нет авторизации",
+  "settings_logout_warning_title": "Выйти из сервисов?",
+  "settings_logout_warning_body": "Будет выполнен выход из активных сервисов, а сохранённая, избранная манга и подписки будут очищены.",
+  "settings_logout_warning_confirm": "Выйти",
   
   "settings_dialog_title": "Устройство отключено",
   "settings_dialog_body": "Устройство не подключено. Изменить локальную настройку папки «%1$s» на «%2$s» всё равно?\n\n(Это не переименует директорию на самом устройстве.)",

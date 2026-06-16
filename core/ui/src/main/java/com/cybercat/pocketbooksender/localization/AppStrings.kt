@@ -61,6 +61,9 @@ class AppStrings(
     val settingsLogoutAll: String get() = get("settings_logout_all")
     val settingsLoggedOutAll: String get() = get("settings_logged_out_all")
     val settingsNoActiveAccounts: String get() = get("settings_no_active_accounts")
+    val settingsLogoutWarningTitle: String get() = get("settings_logout_warning_title")
+    val settingsLogoutWarningBody: String get() = get("settings_logout_warning_body")
+    val settingsLogoutWarningConfirm: String get() = get("settings_logout_warning_confirm")
     
     val settingsDialogTitle: String get() = get("settings_dialog_title")
     val settingsDialogBody: String get() = get("settings_dialog_body")

@@ -42,6 +42,7 @@ These instructions define the required working rules for Codex in this repositor
 - Use `rg` and `rg --files` for search.
 - For large or ambiguous tasks, create a professional plan first, split the work into clear steps, and wait for user approval before implementation.
 - For small, obvious fixes, proceed directly on the `refactoring` branch while keeping the scope tight.
+- At the end of each task, decide whether `AGENTS.md` or `CODEX_PROJECT_MAP.md` need updates. Update them yourself when the change affects repository workflow, architecture, module layout, important paths, shared patterns, or verification commands; if no update is needed, state that in the final response.
 - Use the existing module boundaries:
   - `app` wires the application, DI, navigation, metadata, transfer service, and Android entry points.
   - `core:*` modules contain shared model, domain, data, database, network, datastore, common utilities, and UI primitives.
@@ -89,4 +90,5 @@ These instructions define the required working rules for Codex in this repositor
 ## Project map
 
 - Keep `CODEX_PROJECT_MAP.md` updated when adding, moving, or substantially changing modules, screens, services, repositories, shared UI, or verification commands.
+- Do not wait for an explicit user reminder to update project guidance files. Make the update/no-update decision as part of completing every task.
 - Use `CODEX_PROJECT_MAP.md` as the first navigation aid after `README.md`.

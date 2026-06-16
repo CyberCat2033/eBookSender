@@ -75,6 +75,14 @@ class MangaRepository @Inject constructor(
         bookmarkDao.normalizeMutualExclusion()
     }
 
+    suspend fun clearSavedSeries(): Boolean = withContext(Dispatchers.IO) {
+        bookmarkDao.clearSavedSeries() > 0
+    }
+
+    suspend fun hasSavedSeries(): Boolean = withContext(Dispatchers.IO) {
+        bookmarkDao.savedSeriesCount() > 0
+    }
+
     suspend fun authState(sourceId: String): MangaAuthState =
         adapter(sourceId).authState()
 
