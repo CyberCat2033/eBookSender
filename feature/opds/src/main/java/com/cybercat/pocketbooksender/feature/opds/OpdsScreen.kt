@@ -2,21 +2,14 @@ package com.cybercat.pocketbooksender.feature.opds
 
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -27,10 +20,12 @@ import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -335,44 +330,38 @@ private fun WebModeSelector(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    SingleChoiceSegmentedButtonRow(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(48.dp),
     ) {
-        FilterChip(
-            selected = selectedMode == WebContentMode.Opds,
-            onClick = {
-                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                onModeSelected(WebContentMode.Opds)
-            },
-            modifier = Modifier
-                .width(104.dp)
-                .height(40.dp),
-            label = {
+        val options = listOf(
+            WebContentMode.Opds to "OPDS",
+            WebContentMode.Manga to "Manga",
+        )
+        options.forEachIndexed { index, (mode, label) ->
+            SegmentedButton(
+                selected = selectedMode == mode,
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    onModeSelected(mode)
+                },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                icon = {
+                    Icon(
+                        imageVector = when (mode) {
+                            WebContentMode.Opds -> Icons.AutoMirrored.Outlined.MenuBook
+                            WebContentMode.Manga -> Icons.Outlined.Image
+                        },
+                        contentDescription = null,
+                    )
+                },
+            ) {
                 Text(
-                    text = "OPDS",
+                    text = label,
                     maxLines = 1,
                 )
-            },
-            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null) },
-        )
-        FilterChip(
-            selected = selectedMode == WebContentMode.Manga,
-            onClick = {
-                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                onModeSelected(WebContentMode.Manga)
-            },
-            modifier = Modifier
-                .width(116.dp)
-                .height(40.dp),
-            label = {
-                Text(
-                    text = "Manga",
-                    maxLines = 1,
-                )
-            },
-            leadingIcon = { Icon(Icons.Outlined.Image, contentDescription = null) },
-        )
+            }
+        }
     }
 }

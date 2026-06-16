@@ -17,7 +17,12 @@ These instructions define the required working rules for Codex in this repositor
 ## Android and UI standards
 
 - Use Kotlin and Jetpack Compose patterns already present in the project.
-- UI work must follow Material You / Material Design 3 principles.
+- UI work must follow Material Design 3 / Material You principles and use `androidx.compose.material3` components unless an existing project primitive is the better fit.
+- Treat Material Design 3, Material 3, and M3 as the same design system. Prefer current Material 3 component APIs and opt into experimental Material 3 APIs only at the narrowest practical scope.
+- Treat Material 3 Expressive as an M3 expansion, not a separate visual direction; adopt expressive components, motion, or typography only when they fit the app's existing utilitarian UI, accessibility, and shared motion patterns.
+- Route theming through `PocketBookSenderTheme` and `MaterialTheme` in `core:ui`; use `MaterialTheme.colorScheme`, `typography`, and `shapes` instead of hard-coded colors, text styles, elevations, or corner radii.
+- Preserve Material You personalization: keep dynamic color support on Android 12+ (`dynamicLightColorScheme` / `dynamicDarkColorScheme`) with the checked-in light/dark fallback schemes, and do not bypass the user's theme/dynamic-color settings.
+- Use semantic color roles in correct pairs (for example `primary` with `onPrimary`, `primaryContainer` with `onPrimaryContainer`, `errorContainer` with `onErrorContainer`) so dynamic color and fallback schemes keep accessible contrast.
 - Reuse existing theme, typography, colors, shared dialogs, status components, gesture helpers, and other `core:ui` primitives.
 - Keep UI adaptive, accessible, localized, and resilient to long text.
 - Do not create one-off copies of existing animations, dialogs, rows, overlays, or controls. Extract shared animation or interaction logic when reuse is evident. Proactively identify and eliminate arbitrary UI differences (e.g., mismatched animation durations or styling differences between similar controls) by proposing unified components/helpers to the user.

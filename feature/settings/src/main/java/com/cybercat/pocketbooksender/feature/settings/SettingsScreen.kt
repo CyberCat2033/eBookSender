@@ -742,7 +742,13 @@ fun SettingsScreen(
                                     onThemeChanged(option)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
-                            ) { Text(label) }
+                            ) {
+                                Text(
+                                    text = label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }

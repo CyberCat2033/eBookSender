@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
@@ -387,10 +389,7 @@ internal fun FeedLinksRow(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
-    Row(
-        modifier = modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
+    TrailingActionRow(modifier = modifier) {
         links.forEach { link ->
             OutlinedButton(
                 onClick = {
@@ -408,6 +407,24 @@ internal fun FeedLinksRow(
 }
 
 @Composable
+private fun TrailingActionRow(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Box(modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 internal fun OpdsEntryCard(
     entry: OpdsEntry,
     enabled: Boolean,
@@ -421,111 +438,167 @@ internal fun OpdsEntryCard(
     val strings = LocalStrings.current
     val navigationLinks = remember(entry) { entry.navigation.distinctBy { link -> link.href } }
     val isNavigation = remember(entry, navigationLinks) { entry.acquisitions.isEmpty() && navigationLinks.isNotEmpty() }
+    val primaryNavigationLink = remember(entry, navigationLinks, isNavigation) {
+        if (isNavigation && navigationLinks.size == 1) navigationLinks.first() else null
+    }
 
-    ElevatedCard(modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+    if (primaryNavigationLink != null) {
+        ElevatedCard(
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                onOpenLink(primaryNavigationLink)
+            },
+            enabled = enabled,
+            modifier = modifier.fillMaxWidth(),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                EntryArtwork(
-                    coverUrl = entry.coverHref,
-                    isNavigation = isNavigation,
-                    title = entry.title,
-                )
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = entry.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (entry.authors.isNotEmpty()) {
-                        Text(
-                            text = entry.authors.joinToString(", "),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
+            OpdsEntryCardContent(
+                entry = entry,
+                isNavigation = isNavigation,
+                navigationLinks = emptyList(),
+                showNavigationIndicator = true,
+                enabled = enabled,
+                strings = strings,
+                onOpenLink = onOpenLink,
+                onDownload = onDownload,
+                onActionHaptic = { feedbackConstant ->
+                    view.performHapticIfAllowed(context, enableHaptics, feedbackConstant)
+                },
+            )
+        }
+    } else {
+        ElevatedCard(modifier.fillMaxWidth()) {
+            OpdsEntryCardContent(
+                entry = entry,
+                isNavigation = isNavigation,
+                navigationLinks = navigationLinks,
+                showNavigationIndicator = false,
+                enabled = enabled,
+                strings = strings,
+                onOpenLink = onOpenLink,
+                onDownload = onDownload,
+                onActionHaptic = { feedbackConstant ->
+                    view.performHapticIfAllowed(context, enableHaptics, feedbackConstant)
+                },
+            )
+        }
+    }
+}
 
-            val cleanedSummary = remember(entry.summary) {
-                entry.summary?.takeIf { it.isNotBlank() }?.cleanSummary()
-            }
-            if (cleanedSummary != null) {
+@Composable
+private fun OpdsEntryCardContent(
+    entry: OpdsEntry,
+    isNavigation: Boolean,
+    navigationLinks: List<OpdsLink>,
+    showNavigationIndicator: Boolean,
+    enabled: Boolean,
+    strings: com.cybercat.pocketbooksender.localization.AppStrings,
+    onOpenLink: (OpdsLink) -> Unit,
+    onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
+    onActionHaptic: (Int) -> Unit,
+) {
+    Column(
+        modifier = Modifier.padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            EntryArtwork(
+                coverUrl = entry.coverHref,
+                isNavigation = isNavigation,
+                title = entry.title,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
                 Text(
-                    text = cleanedSummary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 4,
+                    text = entry.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (entry.authors.isNotEmpty()) {
+                    Text(
+                        text = entry.authors.joinToString(", "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
+            if (showNavigationIndicator) {
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
 
-            if (navigationLinks.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    navigationLinks.forEach { link ->
-                        OutlinedButton(
-                            onClick = {
-                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                onOpenLink(link)
-                            },
-                            enabled = enabled,
-                        ) {
-                            Icon(Icons.Outlined.Folder, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(link.displayTitle(strings))
-                        }
+        val cleanedSummary = remember(entry.summary) {
+            entry.summary?.takeIf { it.isNotBlank() }?.cleanSummary()
+        }
+        if (cleanedSummary != null) {
+            Text(
+                text = cleanedSummary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        if (navigationLinks.isNotEmpty()) {
+            TrailingActionRow {
+                navigationLinks.forEach { link ->
+                    OutlinedButton(
+                        onClick = {
+                            onActionHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onOpenLink(link)
+                        },
+                        enabled = enabled,
+                    ) {
+                        Icon(Icons.Outlined.Folder, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(link.displayTitle(strings))
                     }
                 }
             }
+        }
 
-            val supportedAcquisitions: List<Pair<OpdsAcquisition, String>> = remember(entry) {
+        val supportedAcquisitions: List<Pair<OpdsAcquisition, String>> = remember(entry) {
+            entry.acquisitions
+                .mapNotNull { acquisition ->
+                    acquisition.supportedDownloadFormat()?.let { format -> acquisition to format.label }
+                }
+                .distinctBy { (_, label) -> label }
+        }
+        val visibleAcquisitions: List<Pair<OpdsAcquisition, String>> = remember(entry, supportedAcquisitions) {
+            supportedAcquisitions.ifEmpty {
                 entry.acquisitions
-                    .mapNotNull { acquisition ->
-                        acquisition.supportedDownloadFormat()?.let { format -> acquisition to format.label }
-                    }
+                    .map { acquisition -> acquisition to acquisition.downloadFormatLabel() }
                     .distinctBy { (_, label) -> label }
             }
-            val visibleAcquisitions: List<Pair<OpdsAcquisition, String>> = remember(entry, supportedAcquisitions) {
-                supportedAcquisitions.ifEmpty {
-                    entry.acquisitions
-                        .map { acquisition -> acquisition to acquisition.downloadFormatLabel() }
-                        .distinctBy { (_, label) -> label }
-                }
-            }
+        }
 
-            if (visibleAcquisitions.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    visibleAcquisitions.forEach { (acquisition, label) ->
-                        Button(
-                            onClick = {
-                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
-                                onDownload(entry, acquisition)
-                            },
-                            enabled = enabled,
-                        ) {
-                            Icon(Icons.Outlined.Download, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(label)
-                        }
+        if (visibleAcquisitions.isNotEmpty()) {
+            TrailingActionRow {
+                visibleAcquisitions.forEach { (acquisition, label) ->
+                    Button(
+                        onClick = {
+                            onActionHaptic(HapticFeedbackConstants.CONFIRM)
+                            onDownload(entry, acquisition)
+                        },
+                        enabled = enabled,
+                    ) {
+                        Icon(Icons.Outlined.Download, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(label)
                     }
                 }
             }
         }
     }
 }
-
 @Composable
 internal fun EntryArtwork(
     coverUrl: String?,
