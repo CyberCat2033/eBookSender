@@ -290,7 +290,7 @@ internal fun MangaDownloadProgressOverlay(
         1 -> strings.mangaDownloadOneChapter
         else -> strings.get("manga_download_chapters_count", selectedCount)
     }
-    val chapterText = progressInfo?.currentChapterTitle
+
     val progress = progressInfo?.progress
     val animatedProgress by animateFloatAsState(
         targetValue = progress ?: 0f,
@@ -347,15 +347,7 @@ internal fun MangaDownloadProgressOverlay(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (!chapterText.isNullOrBlank()) {
-                        Text(
-                            text = chapterText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = contentColor.copy(alpha = 0.78f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+
                 }
             }
             if (progress == null) {

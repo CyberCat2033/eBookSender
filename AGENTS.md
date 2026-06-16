@@ -9,6 +9,7 @@ These instructions define the required working rules for Codex in this repositor
 - Follow Clean Code, KISS, DRY, and SOLID.
 - Prefer simple, explicit, maintainable solutions over clever or over-engineered ones.
 - Do not duplicate logic. When similar behavior appears in more than one place, extract it into a reusable component, function, service, helper, handler, or module that fits the current architecture.
+- Actively seek to unify functionality. If you identify multiple similar components or behaviors (e.g., three dropdown menus with near-identical logic and slightly different animation durations for no logical design reason), propose extracting them into a single unified helper or shared component to the user and implement it upon their approval.
 - Design changes with reasonable extensibility in mind, but add abstractions only when they remove real duplication or complexity.
 - Preserve the existing architecture and code style unless there is a clear technical reason to improve them.
 - When you see a better solution than the requested one, propose it and explain the tradeoff before applying it if the change is significant.
@@ -19,7 +20,7 @@ These instructions define the required working rules for Codex in this repositor
 - UI work must follow Material You / Material Design 3 principles.
 - Reuse existing theme, typography, colors, shared dialogs, status components, gesture helpers, and other `core:ui` primitives.
 - Keep UI adaptive, accessible, localized, and resilient to long text.
-- Do not create one-off copies of existing animations, dialogs, rows, overlays, or controls. Extract shared animation or interaction logic when reuse is evident.
+- Do not create one-off copies of existing animations, dialogs, rows, overlays, or controls. Extract shared animation or interaction logic when reuse is evident. Proactively identify and eliminate arbitrary UI differences (e.g., mismatched animation durations or styling differences between similar controls) by proposing unified components/helpers to the user.
 - Before adding haptic feedback or custom animation, check `CODEX_PROJECT_MAP.md` for the existing haptic and motion patterns.
 - Use `View.performHapticIfAllowed(...)` for haptics, respect `AppSettings.enableHaptics`, and choose feedback constants consistently with existing usage.
 - Reuse `AnimatedAlertDialog`, `StatusMessageHost`, gesture helpers, lazy-list animation specs, and existing overlay/expand/progress motion patterns before creating new motion code.
@@ -40,7 +41,7 @@ These instructions define the required working rules for Codex in this repositor
 - Start by reading the relevant files and existing analogues before editing.
 - Use `rg` and `rg --files` for search.
 - For large or ambiguous tasks, create a professional plan first, split the work into clear steps, and wait for user approval before implementation.
-- For small, obvious fixes, proceed directly while keeping the scope tight.
+- For small, obvious fixes, proceed directly on the `refactoring` branch while keeping the scope tight.
 - Use the existing module boundaries:
   - `app` wires the application, DI, navigation, metadata, transfer service, and Android entry points.
   - `core:*` modules contain shared model, domain, data, database, network, datastore, common utilities, and UI primitives.
@@ -51,10 +52,11 @@ These instructions define the required working rules for Codex in this repositor
 
 - Check `git status --short` before making changes.
 - Never overwrite, reset, or revert user changes unless explicitly requested.
-- For new large features, create a dedicated branch named `feature/<short-name>`.
-- Keep commits small and logically grouped.
-- Stage and commit only the files that belong to the current task.
-- Merge feature branches into `main`/`master` only after tests pass and the user agrees.
+- For new large features, create a dedicated branch named `feature/<short-name>`. After implementing the changes and having the user verify them (specifically on the release version installed on a phone), merge the branch into `main`/`master` if everything is in order.
+- For small tasks, minor refactoring, and code cleanup, work on a dedicated `refactoring` branch (or `refactor/<short-name>`) to avoid polluting the git history.
+- If only a few minor changes (e.g., 1-2 cosmetic edits, tiny bug fix) have accumulated, wait for more changes before committing (always check for accumulated changes after finishing a task).
+- If a change is significant, commit it with a descriptive and clear commit message (avoid short 1-2 word messages).
+- Keep commits logically grouped. Stage and commit only the files that belong to the current task.
 
 ## Verification
 

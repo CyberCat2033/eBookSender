@@ -278,13 +278,7 @@ class UploadQueueManagerImpl @Inject constructor(
 
     override fun updateQueue(updateBlock: (List<UploadItem>) -> List<UploadItem>) {
         _queue.update { current ->
-            updateBlock(current).map { item ->
-                if (item.status == UploadStatus.Uploaded && item.preview != null) {
-                    item.copy(preview = null)
-                } else {
-                    item
-                }
-            }.deduplicateQueue()
+            updateBlock(current).deduplicateQueue()
         }
     }
 
@@ -299,6 +293,7 @@ class UploadQueueManagerImpl @Inject constructor(
                     val item = payload.optJSONObject(index)?.toUploadItemOrNull() ?: continue
                     val canReadSource = canReadSource(Uri.parse(item.sourceUri))
                     val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
+                    if (restoredStatus == UploadStatus.Uploaded) continue
                     
                     val previewBitmap = if (restoredStatus != UploadStatus.Uploaded) {
                         val cachedCoverFile = getCoverCacheFile(item.id)
@@ -329,7 +324,7 @@ class UploadQueueManagerImpl @Inject constructor(
     private fun persistQueue(items: List<UploadItem>) {
         val file = queueStoreFile()
         val payload = JSONArray()
-        items.forEach { item ->
+        items.filter { it.status != UploadStatus.Uploaded }.forEach { item ->
             payload.put(item.toJson())
         }
 
@@ -607,7 +602,7 @@ class UploadQueueManagerImpl @Inject constructor(
         val dir = getCoverCacheDir()
         if (!dir.isDirectory) return
 
-        val activeIds = items.filter { it.status != UploadStatus.Uploaded }.map { it.id }.toSet()
+        val activeIds = items.map { it.id }.toSet()
 
         runCatching {
             dir.listFiles()?.forEach { file ->

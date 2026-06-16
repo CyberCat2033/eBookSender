@@ -335,11 +335,7 @@ class MangaRepository @Inject constructor(
             )
 
             val pageCount = fallbackPageCount
-            val progressDetail = if (directArchive == null) {
-                null
-            } else {
-                "Archive downloaded"
-            }
+            val progressDetail = null
             val completedPages = if (directArchive == null) {
                 fallbackPageCount
             } else {

@@ -77,14 +77,8 @@ fun SendScreen(
     var clearAnimatedRowCount by remember { mutableStateOf(0) }
     val queue = state.queue
     val activeTransferItemIds = state.activeTransferItemIds
-    val activeQueue = remember(queue, state.isTransferActive, activeTransferItemIds) {
-        if (state.isTransferActive && activeTransferItemIds.isNotEmpty()) {
-            queue.filter { item ->
-                item.status != UploadStatus.Uploaded || item.id in activeTransferItemIds
-            }
-        } else {
-            queue.filterNot { it.status == UploadStatus.Uploaded }
-        }
+    val activeQueue = remember(queue) {
+        queue.filterNot { it.status == UploadStatus.Uploaded }
     }
     var visuallyRemovedActiveItemIds by remember { mutableStateOf(emptySet<String>()) }
     val activeItemIds = remember(activeQueue) { activeQueue.mapTo(mutableSetOf()) { item -> item.id } }
@@ -101,12 +95,8 @@ fun SendScreen(
     }
     val canBatchRenameManga = activeMangaQueue.size > 1 && !state.isTransferActive && !clearInProgress
     var showMangaBatchEditor by remember { mutableStateOf(false) }
-    val uploadedQueue = remember(queue, state.isTransferActive) {
-        if (state.isTransferActive) {
-            emptyList()
-        } else {
-            queue.filter { it.status == UploadStatus.Uploaded }
-        }
+    val uploadedQueue = remember(queue) {
+        queue.filter { it.status == UploadStatus.Uploaded }
     }
     val animatedUploadedSectionCount = if (uploadedQueue.isNotEmpty()) 1 else 0
     val hasUploadableFiles = remember(displayedActiveQueue) {
