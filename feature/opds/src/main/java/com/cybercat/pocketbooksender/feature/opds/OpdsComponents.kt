@@ -186,11 +186,12 @@ internal fun SourcePicker(
     onEditCredentials: (OpdsSource) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val strings = LocalStrings.current
     val currentUrl = state.currentUrl.orEmpty().trimEnd('/')
     val selectedSource = state.sources.firstOrNull { source ->
         currentUrl.startsWith(source.url.trimEnd('/'))
     } ?: state.sources.firstOrNull()
-    val selectedTitle = selectedSource?.title ?: "No OPDS catalogs"
+    val selectedTitle = selectedSource?.title ?: strings.get("opds_no_sources")
     val context = LocalContext.current
     val view = LocalView.current
 
@@ -237,7 +238,7 @@ internal fun SourcePicker(
                                     onEditCredentials(source)
                                 },
                             ) {
-                                Icon(Icons.Outlined.VpnKey, contentDescription = "Edit credentials")
+                                Icon(Icons.Outlined.VpnKey, contentDescription = strings.get("opds_action_edit_credentials"))
                             }
                             IconButton(
                                 onClick = {
@@ -246,7 +247,7 @@ internal fun SourcePicker(
                                     onRemoveSource(source.id)
                                 },
                             ) {
-                                Icon(Icons.Outlined.Delete, contentDescription = "Delete OPDS source")
+                                Icon(Icons.Outlined.Delete, contentDescription = strings.get("opds_action_delete_source"))
                             }
                         }
                     },
@@ -346,7 +347,7 @@ internal fun SearchPanel(
                             view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                             onSearchChanged("")
                         }) {
-                            Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                            Icon(Icons.Outlined.Close, contentDescription = strings.get("action_clear"))
                         }
                     }
                 }

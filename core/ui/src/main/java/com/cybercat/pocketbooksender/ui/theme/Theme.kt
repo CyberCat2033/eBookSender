@@ -68,6 +68,7 @@ fun PocketBookSenderTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = Shapes,
         content = content,
     )
 }

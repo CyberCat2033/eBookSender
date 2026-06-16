@@ -4,26 +4,19 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
-import androidx.compose.foundation.background
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,7 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -136,62 +128,36 @@ fun PocketBookSenderApp(
         useDynamicColor = settingsState.settings.useDynamicColor
     ) {
         SyncSystemBarsWithTheme(darkTheme = darkTheme)
-        BoxWithConstraints(
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-        ) {
-            val useRail = maxWidth >= 720.dp
-
-            if (useRail) {
-                Row(
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background),
-                ) {
-                    AppNavigationRail(
-                        currentRoute = currentRoute,
-                        onNavigate = { route -> navController.navigateSingleTop(route) },
-                        onReselect = ::scrollDestinationToTop,
-                    )
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background),
-                    ) {
-                        AppNavHost(
-                            navController = navController,
-                            transferViewModel = transferViewModel,
-                            catalogViewModel = catalogViewModel,
-                            opdsViewModel = opdsViewModel,
-                            mangaViewModel = mangaViewModel,
-                            settingsViewModel = settingsViewModel,
-                            transferState = transferState,
-                            catalogState = catalogState,
-                            opdsState = opdsState,
-                            mangaState = mangaState,
-                            settingsState = settingsState,
-                            sendListState = sendListState,
-                            catalogListState = catalogListState,
-                            opdsListState = opdsListState,
-                            mangaListState = mangaListState,
-                            settingsScrollState = settingsScrollState,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            CompositionLocalProvider(
+                LocalAdaptiveLayoutInfo provides currentAdaptiveLayoutInfo(maxWidth),
+            ) {
+                val destinationLabels = MainDestinations.associateWith { destination ->
+                    destination.translatedLabel()
                 }
-            } else {
-                Scaffold(
-                    bottomBar = {
-                        AppNavigationBar(
-                            currentRoute = currentRoute,
-                            onNavigate = { route -> navController.navigateSingleTop(route) },
-                            onReselect = ::scrollDestinationToTop,
-                        )
+                NavigationSuiteScaffold(
+                    navigationSuiteItems = {
+                        MainDestinations.forEach { destination ->
+                            val selected = currentRoute == destination.route
+                            val label = destinationLabels.getValue(destination)
+                            item(
+                                selected = selected,
+                                onClick = {
+                                    if (selected) {
+                                        scrollDestinationToTop(destination.route)
+                                    } else {
+                                        navController.navigateSingleTop(destination.route)
+                                    }
+                                },
+                                icon = { Icon(destination.icon, contentDescription = label) },
+                                label = { Text(label) },
+                            )
+                        }
                     },
+                    modifier = Modifier.fillMaxSize(),
                     containerColor = MaterialTheme.colorScheme.background,
-                ) { innerPadding ->
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                ) {
                     AppNavHost(
                         navController = navController,
                         transferViewModel = transferViewModel,
@@ -209,9 +175,7 @@ fun PocketBookSenderApp(
                         opdsListState = opdsListState,
                         mangaListState = mangaListState,
                         settingsScrollState = settingsScrollState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
@@ -385,7 +349,7 @@ private fun AppNavHost(
                         ) {
                             Icon(
                                 imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = "Back",
+                                contentDescription = strings.get("action_back"),
                             )
                         }
                     }
@@ -464,62 +428,6 @@ private fun MainDestination.translatedLabel(): String {
         MainDestination.Catalog -> strings.navCatalog
         MainDestination.Opds -> strings.navWeb
         MainDestination.Settings -> strings.navSettings
-    }
-}
-
-@Composable
-private fun AppNavigationBar(
-    currentRoute: String?,
-    onNavigate: (String) -> Unit,
-    onReselect: (String) -> Unit,
-) {
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-    ) {
-        MainDestinations.forEach { destination ->
-            val selected = currentRoute == destination.route
-            val label = destination.translatedLabel()
-            NavigationBarItem(
-                selected = selected,
-                onClick = {
-                    if (selected) {
-                        onReselect(destination.route)
-                    } else {
-                        onNavigate(destination.route)
-                    }
-                },
-                icon = { Icon(destination.icon, contentDescription = label) },
-                label = { Text(label) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun AppNavigationRail(
-    currentRoute: String?,
-    onNavigate: (String) -> Unit,
-    onReselect: (String) -> Unit,
-) {
-    NavigationRail(
-        containerColor = MaterialTheme.colorScheme.surface,
-    ) {
-        MainDestinations.forEach { destination ->
-            val selected = currentRoute == destination.route
-            val label = destination.translatedLabel()
-            NavigationRailItem(
-                selected = selected,
-                onClick = {
-                    if (selected) {
-                        onReselect(destination.route)
-                    } else {
-                        onNavigate(destination.route)
-                    }
-                },
-                icon = { Icon(destination.icon, contentDescription = label) },
-                label = { Text(label) },
-            )
-        }
     }
 }
 

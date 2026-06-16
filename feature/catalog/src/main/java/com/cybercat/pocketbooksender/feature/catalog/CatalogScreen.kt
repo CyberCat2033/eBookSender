@@ -16,7 +16,6 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,6 +55,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
+import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.util.rememberDragSelectionState
@@ -85,6 +85,7 @@ fun CatalogScreen(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
+    val adaptiveLayout = LocalAdaptiveLayoutInfo.current
     val catalog = state.deviceCatalog
     val selectedFilePathsState = rememberUpdatedState(state.selectedFilePaths)
     val isEditModeState = rememberUpdatedState(state.isEditMode)
@@ -274,7 +275,6 @@ fun CatalogScreen(
                         }
                     }
                 },
-                windowInsets = WindowInsets(0.dp),
                 navigationIcon = {
                     AnimatedVisibility(
                         visible = state.isEditMode,
@@ -375,7 +375,7 @@ fun CatalogScreen(
                             },
                         )
                     }
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = adaptiveLayout.screenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (!isConnected) {

@@ -19,7 +19,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -50,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadStatus
+import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,6 +71,7 @@ fun SendScreen(
     onUploadAll: () -> Unit,
 ) {
     val strings = LocalStrings.current
+    val adaptiveLayout = LocalAdaptiveLayoutInfo.current
     var clearTrigger by remember { mutableStateOf(0) }
     var clearInProgress by remember { mutableStateOf(false) }
     var clearAnimatedRowCount by remember { mutableStateOf(0) }
@@ -159,7 +160,6 @@ fun SendScreen(
         topBar = {
             TopAppBar(
                 title = { Text(strings.appName) },
-                windowInsets = WindowInsets(0.dp),
                 actions = {
                     if (state.queue.isNotEmpty()) {
                         val context = LocalContext.current
@@ -191,7 +191,7 @@ fun SendScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = adaptiveLayout.screenHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item {

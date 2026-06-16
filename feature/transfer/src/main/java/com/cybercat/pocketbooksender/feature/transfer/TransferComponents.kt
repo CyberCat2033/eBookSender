@@ -320,7 +320,7 @@ fun ConnectionPanel(
                                     view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                                     onFtpInputChanged("")
                                 }) {
-                                    Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                                    Icon(Icons.Outlined.Close, contentDescription = strings.get("action_clear"))
                                 }
                             }
                         },

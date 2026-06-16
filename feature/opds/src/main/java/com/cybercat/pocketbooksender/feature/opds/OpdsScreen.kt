@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -51,6 +50,7 @@ import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsSource
 import com.cybercat.pocketbooksender.localization.LocalStrings
+import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.ui.StatusMessage
 import com.cybercat.pocketbooksender.ui.StatusMessageHost
@@ -89,6 +89,7 @@ fun OpdsScreen(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
+    val adaptiveLayout = LocalAdaptiveLayoutInfo.current
     var showAddSourceDialog by remember { mutableStateOf(false) }
     var newSourceUrl by remember { mutableStateOf("") }
     var newSourceTitle by remember { mutableStateOf("") }
@@ -150,7 +151,6 @@ fun OpdsScreen(
                         },
                     )
                 },
-                windowInsets = WindowInsets(0.dp),
                 navigationIcon = {
                     if (webMode == WebContentMode.Opds && state.canGoBack) {
                         IconButton(
@@ -162,7 +162,7 @@ fun OpdsScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = "Back",
+                                contentDescription = strings.get("action_back"),
                             )
                         }
                     } else if (webMode == WebContentMode.Manga) {
@@ -182,7 +182,7 @@ fun OpdsScreen(
                                 showAddSourceDialog = true
                             },
                         ) {
-                            Icon(Icons.Outlined.Add, contentDescription = "Add OPDS source")
+                            Icon(Icons.Outlined.Add, contentDescription = strings.get("opds_action_add_source"))
                         }
                     }
                 },
@@ -205,7 +205,7 @@ fun OpdsScreen(
                     .widthIn(max = contentMaxWidth)
                     .fillMaxSize()
                     .align(Alignment.TopCenter)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = adaptiveLayout.screenHorizontalPadding),
             ) {
                 WebModeSelector(
                     selectedMode = webMode,

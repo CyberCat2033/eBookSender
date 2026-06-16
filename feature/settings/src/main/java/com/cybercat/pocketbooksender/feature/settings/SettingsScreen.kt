@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -89,6 +88,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.model.AppTheme
+import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import kotlinx.coroutines.delay
@@ -113,6 +113,7 @@ private fun ValidatedSettingsField(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     val view = LocalView.current
+    val strings = LocalStrings.current
     val isChanged = textFieldValue.text != value
     val canCommitChange = isChanged && !isSaving && actionEnabled
 
@@ -171,7 +172,7 @@ private fun ValidatedSettingsField(
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Check,
-                                    contentDescription = "Save",
+                                    contentDescription = strings.get("action_save"),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
@@ -292,6 +293,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
+    val adaptiveLayout = LocalAdaptiveLayoutInfo.current
     val activeFolderRename = state.activeFolderRename
 
     // --- Rename warning dialog: local lifecycle for animated dismiss ---
@@ -362,7 +364,6 @@ fun SettingsScreen(
             key(containerColor, contentColor) {
                 TopAppBar(
                     title = { Text(strings.settingsTitle) },
-                    windowInsets = WindowInsets(0.dp),
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = containerColor,
                         scrolledContainerColor = containerColor,
@@ -379,7 +380,10 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(scrollState)
-                .padding(16.dp),
+                .padding(
+                    horizontal = adaptiveLayout.screenHorizontalPadding,
+                    vertical = 16.dp,
+                ),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             SettingsSection(title = strings.settingsStorageSection) {

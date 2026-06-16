@@ -11,3 +11,6 @@ captures/
 *.apk
 *.aab
 *.keystore
+
+# Codex
+.codex/

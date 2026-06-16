@@ -224,7 +224,7 @@ internal fun MangaSearchField(
                     view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                     onSearchChanged("")
                 }) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Clear")
+                    Icon(Icons.Outlined.Close, contentDescription = strings.get("action_clear"))
                 }
             }
         }
@@ -519,7 +519,7 @@ internal fun MangaBrowserCard(
                         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                         onClose()
                     }) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Close browser")
+                        Icon(Icons.Outlined.Close, contentDescription = strings.get("manga_action_close_browser"))
                     }
                 }
 
@@ -1048,7 +1048,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                         dismiss()
                     }
                 ) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Close")
+                    Icon(Icons.Outlined.Close, contentDescription = strings.get("action_close"))
                 }
             }
         },
@@ -1245,6 +1245,7 @@ fun MangaSelectionActions(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val view = androidx.compose.ui.platform.LocalView.current
+    val strings = LocalStrings.current
     IconButton(
         onClick = {
             view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
@@ -1252,7 +1253,7 @@ fun MangaSelectionActions(
         },
         enabled = enabled && hasNewChapters,
     ) {
-        Icon(Icons.Outlined.Checklist, contentDescription = "Select new chapters")
+        Icon(Icons.Outlined.Checklist, contentDescription = strings.get("manga_action_select_new_chapters"))
     }
     IconButton(
         onClick = {
@@ -1261,7 +1262,7 @@ fun MangaSelectionActions(
         },
         enabled = enabled && hasChapters,
     ) {
-        Icon(Icons.Outlined.SelectAll, contentDescription = "Select all chapters")
+        Icon(Icons.Outlined.SelectAll, contentDescription = strings.get("manga_action_select_all_chapters"))
     }
     IconButton(
         onClick = {
@@ -1270,6 +1271,6 @@ fun MangaSelectionActions(
         },
         enabled = enabled,
     ) {
-        Icon(Icons.Outlined.Close, contentDescription = "Clear chapter selection")
+        Icon(Icons.Outlined.Close, contentDescription = strings.get("manga_action_clear_chapter_selection"))
     }
 }
