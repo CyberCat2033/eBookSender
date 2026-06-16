@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -104,7 +105,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaSeriesDetails
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.data.manga.MangaSourceSummary
 import com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult
-import com.cybercat.pocketbooksender.data.manga.buildComxLoginPostBody
+import com.cybercat.pocketbooksender.data.manga.MangaNativeLoginConfig
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.BitmapCache
@@ -116,6 +117,77 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
+
+@Composable
+internal fun MangaSourceSelector(
+    state: MangaUiState,
+    enableHaptics: Boolean,
+    onSelectSource: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (state.sources.isEmpty()) return
+    var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    val selectedTitle = state.sources
+        .firstOrNull { it.id == state.selectedSourceId }?.title
+        ?: state.sources.first().title
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = {
+                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                if (state.sources.size > 1) expanded = true
+            },
+            enabled = !state.isLoading && !state.isDownloading,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = strings.mangaSource,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = selectedTitle,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (state.sources.size > 1) {
+                Icon(
+                    Icons.Filled.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.fillMaxWidth(0.92f),
+        ) {
+            state.sources.forEach { source ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = source.title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    onClick = {
+                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        expanded = false
+                        if (source.id != state.selectedSourceId) onSelectSource(source.id)
+                    },
+                )
+            }
+        }
+    }
+}
 
 @Composable
 internal fun MangaSearchPanel(
@@ -450,9 +522,14 @@ internal fun MangaBrowserCard(
     currentUrl: String?,
     sourceHomeUrl: String,
     userAgent: String?,
+    loginUrl: String?,
+    nativeLoginConfig: MangaNativeLoginConfig?,
+    pendingLoginPost: MangaPendingLoginPost?,
     enableHaptics: Boolean,
     onClose: () -> Unit,
     onWebPageLoaded: (String, String) -> Unit,
+    onNativeLoginSubmit: (targetUrl: String, username: String, password: String, doNotRemember: Boolean) -> Unit,
+    onLoginPostExecuted: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -460,6 +537,13 @@ internal fun MangaBrowserCard(
     val lifecycleOwner = LocalLifecycleOwner.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var showLoginDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pendingLoginPost) {
+        if (pendingLoginPost != null) {
+            webViewRef?.postUrl(pendingLoginPost.url, pendingLoginPost.postBody)
+            onLoginPostExecuted()
+        }
+    }
 
     DisposableEffect(lifecycleOwner, webViewRef) {
         val webView = webViewRef ?: return@DisposableEffect onDispose { }
@@ -501,11 +585,20 @@ internal fun MangaBrowserCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    TextButton(onClick = {
-                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                        showLoginDialog = true
-                    }) {
-                        Text(strings.mangaBtnLogin)
+                    if (nativeLoginConfig != null) {
+                        TextButton(onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            showLoginDialog = true
+                        }) {
+                            Text(strings.mangaBtnLogin)
+                        }
+                    } else if (!loginUrl.isNullOrBlank()) {
+                        TextButton(onClick = {
+                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                            webViewRef?.loadUrl(loginUrl)
+                        }) {
+                            Text(strings.mangaBtnLogin)
+                        }
                     }
                     IconButton(onClick = {
                         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
@@ -569,17 +662,15 @@ internal fun MangaBrowserCard(
         }
     }
 
-    if (showLoginDialog) {
-        ComxNativeLoginDialog(
+    if (showLoginDialog && nativeLoginConfig != null) {
+        MangaNativeLoginDialog(
+            config = nativeLoginConfig,
             onDismiss = { showLoginDialog = false },
             onSubmit = { loginName, loginPassword, doNotRemember ->
                 val targetUrl = webViewRef?.url
                     ?.takeIf { loadedUrl -> loadedUrl.startsWith(sourceHomeUrl) }
-                    ?: sourceHomeUrl
-                webViewRef?.postUrl(
-                    targetUrl,
-                    buildComxLoginPostBody(loginName, loginPassword, doNotRemember),
-                )
+                    ?: nativeLoginConfig.loginUrl
+                onNativeLoginSubmit(targetUrl, loginName, loginPassword, doNotRemember)
                 showLoginDialog = false
             },
         )
@@ -587,7 +678,8 @@ internal fun MangaBrowserCard(
 }
 
 @Composable
-internal fun ComxNativeLoginDialog(
+internal fun MangaNativeLoginDialog(
+    config: MangaNativeLoginConfig,
     onDismiss: () -> Unit,
     onSubmit: (String, String, Boolean) -> Unit,
 ) {
@@ -629,14 +721,16 @@ internal fun ComxNativeLoginDialog(
                     label = { Text(strings.mangaPassword) },
                     visualTransformation = PasswordVisualTransformation(),
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = doNotRemember,
-                        onCheckedChange = { doNotRemember = it },
-                    )
-                    Text(strings.mangaDoNotRemember)
+                if (config.showDoNotRemember) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = doNotRemember,
+                            onCheckedChange = { doNotRemember = it },
+                        )
+                        Text(strings.mangaDoNotRemember)
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),

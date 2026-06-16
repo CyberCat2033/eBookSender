@@ -58,6 +58,7 @@ fun MangaPane(
     modifier: Modifier = Modifier,
     onSearchChanged: (String) -> Unit,
     onSearch: () -> Unit,
+    onSelectSource: (String) -> Unit,
     onOpenBrowser: () -> Unit,
     onCloseBrowser: () -> Unit,
     onWebPageLoaded: (String, String) -> Unit,
@@ -73,6 +74,8 @@ fun MangaPane(
     onDownloadSubscriptionUpdates: () -> Unit,
     onCloseSubscriptionUpdates: () -> Unit,
     onRefreshAuthState: () -> Unit,
+    onNativeLoginSubmit: (targetUrl: String, username: String, password: String, doNotRemember: Boolean) -> Unit,
+    onLoginPostExecuted: () -> Unit,
     enableHaptics: Boolean,
 ) {
     val view = LocalView.current
@@ -152,6 +155,12 @@ fun MangaPane(
         ) {
             item(key = "manga-top") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    MangaSourceSelector(
+                        state = state,
+                        enableHaptics = enableHaptics,
+                        onSelectSource = onSelectSource,
+                    )
+
                     MangaSearchPanel(
                         state = state,
                         onSearchChanged = onSearchChanged,
@@ -290,19 +299,20 @@ fun MangaPane(
     }
 
     if (state.browserVisible) {
+        val selectedSource = state.sources.firstOrNull { source -> source.id == state.selectedSourceId }
         MangaBrowserCard(
             url = state.browserUrl,
             currentUrl = state.currentWebUrl,
-            sourceHomeUrl = state.sources
-                .firstOrNull { source -> source.id == state.selectedSourceId }
-                ?.homeUrl
-                ?: state.browserUrl,
-            userAgent = state.sources
-                .firstOrNull { source -> source.id == state.selectedSourceId }
-                ?.browserUserAgent,
+            sourceHomeUrl = selectedSource?.homeUrl ?: state.browserUrl,
+            userAgent = selectedSource?.browserUserAgent,
+            loginUrl = selectedSource?.loginUrl,
+            nativeLoginConfig = selectedSource?.nativeLoginConfig,
+            pendingLoginPost = state.pendingLoginPost,
             enableHaptics = enableHaptics,
             onClose = onCloseBrowser,
             onWebPageLoaded = onWebPageLoaded,
+            onNativeLoginSubmit = onNativeLoginSubmit,
+            onLoginPostExecuted = onLoginPostExecuted,
         )
     }
 }

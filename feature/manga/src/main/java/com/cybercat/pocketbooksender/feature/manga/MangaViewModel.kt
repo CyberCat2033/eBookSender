@@ -133,6 +133,24 @@ class MangaViewModel @Inject constructor(
         refreshMangaAuthState()
     }
 
+    fun performNativeLogin(targetUrl: String, username: String, password: String, doNotRemember: Boolean) {
+        val sourceId = _mangaState.value.selectedSourceId
+        val postBody = mangaRepository.buildLoginPostBody(sourceId, username, password, doNotRemember)
+        if (postBody != null) {
+            _mangaState.update { state ->
+                state.copy(
+                    pendingLoginPost = MangaPendingLoginPost(targetUrl, postBody)
+                )
+            }
+        }
+    }
+
+    fun clearPendingLoginPost() {
+        _mangaState.update { state ->
+            state.copy(pendingLoginPost = null)
+        }
+    }
+
     fun goBackManga() {
         _mangaState.update { state ->
             state.copy(

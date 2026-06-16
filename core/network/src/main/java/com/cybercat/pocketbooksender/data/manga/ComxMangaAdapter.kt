@@ -27,6 +27,17 @@ class ComxMangaAdapter @Inject constructor() : HtmlMangaSourceAdapter {
     override val browserUserAgent: String = UserAgent
     override val capabilities: MangaSourceCapabilities =
         MangaSourceCapabilities(authMode = MangaAuthMode.WebLogin)
+    override val nativeLoginConfig: MangaNativeLoginConfig =
+        MangaNativeLoginConfig(
+            loginUrl = HomeUrl,
+            showDoNotRemember = true,
+        )
+
+    override fun buildLoginPostBody(
+        username: String,
+        password: String,
+        doNotRemember: Boolean
+    ): ByteArray = buildComxLoginPostBody(username, password, doNotRemember)
 
     override suspend fun authState(): MangaAuthState = withContext(Dispatchers.IO) {
         val cookies = cookiesFor(HomeUrl)

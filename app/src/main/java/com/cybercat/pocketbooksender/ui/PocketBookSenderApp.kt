@@ -322,6 +322,7 @@ private fun AppNavHost(
                         listState = mangaListState,
                         onSearchChanged = mangaViewModel::onMangaSearchChanged,
                         onSearch = mangaViewModel::searchManga,
+                        onSelectSource = mangaViewModel::selectMangaSource,
                         onOpenBrowser = mangaViewModel::openMangaBrowser,
                         onCloseBrowser = mangaViewModel::closeMangaBrowser,
                         onWebPageLoaded = mangaViewModel::syncMangaWebPage,
@@ -337,6 +338,8 @@ private fun AppNavHost(
                         onDownloadSubscriptionUpdates = mangaViewModel::downloadSubscriptionUpdates,
                         onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
                         onRefreshAuthState = mangaViewModel::refreshMangaAuthState,
+                        onNativeLoginSubmit = mangaViewModel::performNativeLogin,
+                        onLoginPostExecuted = mangaViewModel::clearPendingLoginPost,
                     )
                 },
                 mangaTopBarNavigationIcon = {

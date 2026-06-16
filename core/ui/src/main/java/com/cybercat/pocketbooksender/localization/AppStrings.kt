@@ -174,6 +174,8 @@ class AppStrings(
     
     // Manga Pane
     val mangaLoginTitle: String get() = get("manga_login_title")
+    val mangaSourceSelect: String get() = get("manga_source_select")
+    val mangaSource: String get() = get("manga_source")
     val mangaSearchManga: String get() = get("manga_search_manga")
     val mangaSearchMangaPlaceholder: String get() = get("manga_search_manga_placeholder")
     val mangaDoNotRemember: String get() = get("manga_do_not_remember")

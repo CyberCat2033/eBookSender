@@ -29,6 +29,12 @@ interface HtmlMangaSourceAdapter : MangaSourceAdapter {
     val homeUrl: String
     val browserUserAgent: String?
         get() = null
+    val loginUrl: String?
+        get() = nativeLoginConfig?.loginUrl
+    val nativeLoginConfig: MangaNativeLoginConfig?
+        get() = null
+
+    fun buildLoginPostBody(username: String, password: String, doNotRemember: Boolean): ByteArray? = null
 
     fun buildSearchUrl(query: String): String
     fun ownsUrl(url: String): Boolean
@@ -65,6 +71,12 @@ data class MangaLoginRequest(
     val sourceId: String,
     val loginUrl: String,
     val successUrlPattern: String?,
+)
+
+data class MangaNativeLoginConfig(
+    val loginUrl: String,
+    val successUrlPattern: String? = null,
+    val showDoNotRemember: Boolean = false,
 )
 
 data class MangaSeriesSearchResult(
@@ -120,6 +132,8 @@ data class MangaSourceSummary(
     val title: String,
     val homeUrl: String,
     val browserUserAgent: String?,
+    val loginUrl: String? = null,
+    val nativeLoginConfig: MangaNativeLoginConfig? = null,
 )
 
 data class MangaSeriesBookmark(

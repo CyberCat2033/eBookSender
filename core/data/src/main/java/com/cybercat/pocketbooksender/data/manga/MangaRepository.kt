@@ -37,11 +37,11 @@ class MangaRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val historyDao: MangaChapterHistoryDao,
     private val bookmarkDao: MangaSeriesBookmarkDao,
-    private val comxAdapter: ComxMangaAdapter,
+    private val adapterSet: Set<@JvmSuppressWildcards HtmlMangaSourceAdapter>,
     private val archiveHelper: MangaArchiveHelper,
     private val networkStateChecker: NetworkStateChecker,
 ) {
-    private val adapters: List<HtmlMangaSourceAdapter> = listOf(comxAdapter)
+    private val adapters: List<HtmlMangaSourceAdapter> = adapterSet.sortedBy { it.title }
     private val searchCache = ConcurrentHashMap<String, TimedCacheEntry<List<MangaSeriesSearchResult>>>()
     private val seriesCache = ConcurrentHashMap<String, TimedCacheEntry<MangaSeriesPage>>()
 
@@ -52,6 +52,8 @@ class MangaRepository @Inject constructor(
                 title = adapter.title,
                 homeUrl = adapter.homeUrl,
                 browserUserAgent = adapter.browserUserAgent,
+                loginUrl = adapter.loginUrl,
+                nativeLoginConfig = adapter.nativeLoginConfig,
             )
         }
 
@@ -83,6 +85,14 @@ class MangaRepository @Inject constructor(
 
     fun buildSearchUrl(sourceId: String, query: String): String =
         adapter(sourceId).buildSearchUrl(query)
+
+    fun buildLoginPostBody(
+        sourceId: String,
+        username: String,
+        password: String,
+        doNotRemember: Boolean
+    ): ByteArray? =
+        adapter(sourceId).buildLoginPostBody(username, password, doNotRemember)
 
     suspend fun searchSeries(
         sourceId: String,
