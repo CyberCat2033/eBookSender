@@ -1,9 +1,7 @@
 package com.cybercat.pocketbooksender.transfer
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
-import android.provider.OpenableColumns
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import com.cybercat.pocketbooksender.domain.FileClassifier
@@ -48,6 +46,7 @@ class UploadQueueManagerImpl @Inject constructor(
     private val pathPlanner: PathPlanner,
     private val settingsRepository: SettingsRepository,
     private val coverCacheManager: CoverCacheManager,
+    private val localFileResolver: LocalFileResolver,
 ) : UploadQueueManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -118,14 +117,14 @@ class UploadQueueManagerImpl @Inject constructor(
                 if (uriString in existing) {
                     null
                 } else {
-                    val displayName = resolveDisplayName(uri)
+                    val displayName = localFileResolver.resolveDisplayName(uri)
                         ?: uri.lastPathSegment
                         ?: "Book-${UUID.randomUUID()}"
                     val extension = displayName.bookExtension().lowercase().trim()
 
                     val isSupported = extension in com.cybercat.pocketbooksender.domain.AllSupportedExtensions ||
                             (extension.endsWith(".zip") && extension.removeSuffix(".zip") in com.cybercat.pocketbooksender.domain.AllSupportedExtensions)
-                    val fileSize = resolveFileSize(uri)
+                    val fileSize = localFileResolver.resolveFileSize(uri)
                     val isTooBig = fileSize > 500L * 1024L * 1024L // 500 MB limit
 
                     if (!isSupported || isTooBig) {
@@ -136,7 +135,7 @@ class UploadQueueManagerImpl @Inject constructor(
                         skippedFiles.add("$displayName ($reason)")
                         null
                     } else {
-                        persistReadPermission(uri)
+                        localFileResolver.persistReadPermission(uri)
                         createUploadItem(uri, displayName, settings)
                     }
                 }
@@ -298,7 +297,7 @@ class UploadQueueManagerImpl @Inject constructor(
                         fallbackExtension = { name -> name.bookExtension().ifBlank { "bin" } },
                         fallbackTitle = { name -> name.bookTitleWithoutExtension() },
                     ) ?: return@forEach
-                    val canReadSource = canReadSource(Uri.parse(item.sourceUri))
+                    val canReadSource = localFileResolver.canRead(Uri.parse(item.sourceUri))
                     val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
                     if (restoredStatus == UploadStatus.Uploaded) return@forEach
 
@@ -468,50 +467,6 @@ class UploadQueueManagerImpl @Inject constructor(
                 item.plannedPath.takeIf { it.isNotBlank() }
             )
         }.toSet()
-
-    private fun resolveDisplayName(uri: Uri): String? {
-        return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
-        }
-    }
-
-    private fun resolveFileSize(uri: Uri): Long {
-        return try {
-            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                val index = cursor.getColumnIndex(OpenableColumns.SIZE)
-                if (index >= 0 && cursor.moveToFirst()) cursor.getLong(index) else 0L
-            } ?: 0L
-        } catch (_: Exception) {
-            0L
-        }
-    }
-
-    private fun persistReadPermission(uri: Uri) {
-        try {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
-            )
-        } catch (_: SecurityException) {
-        } catch (_: IllegalArgumentException) {
-        }
-    }
-
-    private fun canReadSource(uri: Uri): Boolean {
-        return when (uri.scheme?.lowercase()) {
-            null, "file" -> {
-                val path = uri.path.orEmpty()
-                path.isNotBlank() && File(path).let { file -> file.isFile && file.canRead() }
-            }
-            "content" -> runCatching {
-                context.contentResolver.openInputStream(uri)?.use { } ?: error("Cannot open source")
-            }.isSuccess
-            else -> runCatching {
-                context.contentResolver.openInputStream(uri)?.use { } ?: error("Cannot open source")
-            }.isSuccess
-        }
-    }
 
     private fun queueStoreFile(): File =
         File(context.filesDir, QueueStoreFileName)
