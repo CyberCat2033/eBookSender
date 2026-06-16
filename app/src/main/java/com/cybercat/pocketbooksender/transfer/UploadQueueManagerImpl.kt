@@ -5,6 +5,7 @@ import android.net.Uri
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import com.cybercat.pocketbooksender.domain.FileClassifier
+import com.cybercat.pocketbooksender.domain.MangaTitleParser
 import com.cybercat.pocketbooksender.domain.PathPlanner
 import com.cybercat.pocketbooksender.domain.bookExtension
 import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
@@ -47,6 +48,7 @@ class UploadQueueManagerImpl @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val coverCacheManager: CoverCacheManager,
     private val localFileResolver: LocalFileResolver,
+    private val mangaTitleParser: MangaTitleParser,
 ) : UploadQueueManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -352,9 +354,9 @@ class UploadQueueManagerImpl @Inject constructor(
         var mangaVolume: String? = null
         
         if (category == BookCategory.Manga) {
-            val parsed = parseMangaFilename(displayName)
-            mangaSeries = parsed.first ?: settings.defaultMangaSeries
-            mangaVolume = parsed.second ?: title
+            val parsed = mangaTitleParser.parse(displayName)
+            mangaSeries = parsed.series ?: settings.defaultMangaSeries
+            mangaVolume = parsed.volume ?: title
         }
 
         val preliminary = UploadItem(
@@ -373,26 +375,6 @@ class UploadQueueManagerImpl @Inject constructor(
         )
 
         return replan(preliminary, settings)
-    }
-
-    private fun parseMangaFilename(displayName: String): Pair<String?, String?> {
-        val title = displayName.bookTitleWithoutExtension().trim()
-        val patterns = listOf(
-            Regex("""^(.*?)\s+-\s+(.+)$"""), // "Naruto - 01", "Naruto - Chapter 1"
-            Regex("""^(.*?)\s*_\s*(\d+.*)$"""), // "Naruto_01", "Naruto_ch1"
-            Regex("""^(.*?)\s+([vV]?\d+.*)$"""), // "Naruto 01", "Naruto v01", "Naruto ch01"
-        )
-        for (pattern in patterns) {
-            val match = pattern.matchEntire(title)
-            if (match != null) {
-                val series = match.groupValues[1].trim().replace('_', ' ')
-                val volume = match.groupValues[2].trim()
-                if (series.isNotBlank() && volume.isNotBlank()) {
-                    return Pair(series, volume)
-                }
-            }
-        }
-        return Pair(null, null)
     }
 
     private suspend fun loadMetadata(item: UploadItem) {

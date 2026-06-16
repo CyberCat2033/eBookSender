@@ -55,6 +55,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSelectionKeys.kt` - shared stable manga selection keys used by subscription update UI and background download completion.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaArchiveHelper.kt` - packaging tool for creating CBZ/ZIP files from downloaded manga page images.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/FtpErrorMapper.kt` - mapper class translating FTP connection errors and URL parsing failures to localized user-facing strings.
+- `core/domain/src/main/java/com/cybercat/pocketbooksender/domain/MangaTitleParser.kt` - pure domain parser that derives manga series/volume hints from local file names before metadata extraction.
 
 ## Search and edit workflow
 
