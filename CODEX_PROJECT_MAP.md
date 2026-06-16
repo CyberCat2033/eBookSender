@@ -109,6 +109,8 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - `rememberDragSelectionState` encapsulates state tracking, drag distance calculation, and edge autoscrolling.
   - `detectDragGesturesAfterQuickLongPress` starts drag selection after a 300 ms quick long press and consumes active drag events before lazy-list scrolling.
   - `calculateAutoScrollDelta` drives edge autoscroll during drag selection; Catalog and Manga pair it with `LONG_PRESS` start feedback and `CLOCK_TICK` range-change feedback.
+  - `ClickSuppressionState` / `rememberClickSuppressionState` manages temporary click suppression on items to prevent false click triggers when releasing a drag selection gesture.
+  - `Modifier.pointerInputDragSelection` is a unified modifier that hooks up drag-selection start, drag, end/cancel, and click suppression.
 - Catalog motion: `feature/catalog/.../CatalogScreen.kt` and `CatalogComponents.kt`.
   - Top app bar title/actions use `AnimatedContent`; edit-mode close icon uses fade plus horizontal expand/shrink.
   - `SelectionSlot` animates checkbox slot width, alpha, and scale over `SelectionMotionDurationMillis = 220`.
@@ -130,7 +132,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Active manga download overlay enters/exits with fade plus vertical slide from the bottom.
   - Manga download progress uses low-stiffness no-bounce spring `animateFloatAsState`.
   - Subscription update groups rotate chevrons with a medium spring and expand/collapse chapter lists with spring expand/shrink plus fade.
-  - Chapter drag selection uses the shared quick-long-press gesture, edge autoscroll, and haptic ticks.
+  - Chapter drag selection and subscription updates dialog chapter selection use the shared quick-long-press gesture, edge autoscroll, and haptic ticks via `pointerInputDragSelection`.
 - OPDS motion: `feature/opds/.../OpdsScreen.kt` and `OpdsComponents.kt`.
   - Add-source and credentials dialogs reuse `AnimatedAlertDialog`.
   - OPDS entry rows use `Modifier.animateItem()` for list placement changes.
