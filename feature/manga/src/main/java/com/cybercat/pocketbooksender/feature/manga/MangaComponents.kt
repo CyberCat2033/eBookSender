@@ -125,7 +125,7 @@ internal fun MangaSourceSelector(
     onSelectSource: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (state.sources.isEmpty()) return
+    if (state.sources.size <= 1) return
     var expanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val view = LocalView.current
