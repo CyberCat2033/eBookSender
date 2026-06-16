@@ -25,12 +25,14 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -1206,13 +1208,16 @@ internal fun MangaSubscriptionUpdatesDialog(
             ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
                 ) {
                     AssistChip(
                         onClick = {
                             view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                             onSelectAll()
                         },
+                        modifier = Modifier.fillMaxHeight(),
                         label = { Text(strings.mangaUpdatesSelectAll) },
                     )
                     AssistChip(
@@ -1220,6 +1225,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                             view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                             onClearAll()
                         },
+                        modifier = Modifier.fillMaxHeight(),
                         label = { Text(strings.mangaUpdatesDeselectAll) },
                     )
                 }
