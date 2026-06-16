@@ -78,6 +78,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.cybercat.pocketbooksender.util.detectDragGesturesAfterQuickLongPress
+import com.cybercat.pocketbooksender.util.rememberDragSelectionState
+import android.os.SystemClock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -1098,6 +1106,69 @@ internal fun MangaSubscriptionUpdatesDialog(
     var collapsedSeriesKeys by rememberSaveable(updatesStateKey) { mutableStateOf<List<String>>(emptyList()) }
     var downloadAfterDismiss by remember { mutableStateOf(false) }
 
+    val selectedChapterKeysState = rememberUpdatedState(selectedChapterKeys)
+    val onToggleChapterState = rememberUpdatedState(onToggleChapter)
+
+    val listState = rememberLazyListState()
+    var listBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    val chapterRowBounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
+
+    val chapterTargets = remember(updates, collapsedSeriesKeys) {
+        val targets = mutableListOf<ChapterPointerTarget>()
+        var index = 0
+        updates.forEach { update ->
+            val series = update.page.details
+            val seriesKey = series.subscriptionUpdateSeriesKey()
+            val collapsed = seriesKey in collapsedSeriesKeys
+            if (!collapsed) {
+                update.newChapters.forEach { chapter ->
+                    val chapterKey = chapter.subscriptionUpdateSelectionKey()
+                    targets.add(ChapterPointerTarget(index++, chapterKey))
+                }
+            }
+        }
+        targets
+    }
+
+    var suppressSelectionClickUntilMillis by remember { mutableStateOf(0L) }
+    val SuppressSelectionClickMillis = 250L
+
+    fun suppressSelectionClicks() {
+        suppressSelectionClickUntilMillis = SystemClock.uptimeMillis() + SuppressSelectionClickMillis
+    }
+
+    fun suppressSelectionClicksUntilGestureEnds() {
+        suppressSelectionClickUntilMillis = Long.MAX_VALUE
+    }
+
+    fun selectionClickSuppressed(): Boolean =
+        SystemClock.uptimeMillis() < suppressSelectionClickUntilMillis
+
+    val dragSelectionState = rememberDragSelectionState(
+        lazyListState = listState,
+        hapticView = view,
+        context = context,
+        enableHaptics = enableHaptics,
+        getTargetAt = { y ->
+            val rootY = (listBounds?.top ?: return@rememberDragSelectionState null) + y
+            val targetKey = chapterRowBounds.entries
+                .firstOrNull { (_, bounds) ->
+                    rootY >= bounds.top && rootY <= bounds.bottom
+                }
+                ?.key ?: return@rememberDragSelectionState null
+            chapterTargets.firstOrNull { it.chapterId == targetKey }
+        },
+        getTargetIndex = { it.index },
+        getTargetId = { it.chapterId },
+        getInitialSelection = { selectedChapterKeysState.value },
+        getAllTargets = { chapterTargets },
+        onSetSelected = { key, selected -> onToggleChapterState.value(key, selected) },
+        edgeSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() },
+        onDragStarted = {
+            suppressSelectionClicksUntilGestureEnds()
+        }
+    )
+
     fun toggleSeriesCollapsed(seriesKey: String) {
         view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
         collapsedSeriesKeys = if (seriesKey in collapsedSeriesKeys) {
@@ -1166,9 +1237,30 @@ internal fun MangaSubscriptionUpdatesDialog(
                 }
 
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            listBounds = coordinates.boundsInRoot()
+                        }
+                        .pointerInput(chapterTargets) {
+                            detectDragGesturesAfterQuickLongPress(
+                                onDragStart = { offset -> dragSelectionState.startDrag(offset.y) },
+                                onDrag = { change, _ ->
+                                    change.consume()
+                                    dragSelectionState.drag(change.position.y)
+                                },
+                                onDragEnd = {
+                                    suppressSelectionClicks()
+                                    dragSelectionState.stopDrag()
+                                },
+                                onDragCancel = {
+                                    suppressSelectionClicks()
+                                    dragSelectionState.stopDrag()
+                                }
+                            )
+                        },
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     updates.forEach { update ->
@@ -1244,11 +1336,21 @@ internal fun MangaSubscriptionUpdatesDialog(
                                             val chapterKey = chapter.subscriptionUpdateSelectionKey()
                                             val isSelected = chapterKey in selectedChapterKeys
 
+                                            DisposableEffect(chapterKey) {
+                                                onDispose {
+                                                    chapterRowBounds.remove(chapterKey)
+                                                }
+                                            }
+
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
+                                                    .onGloballyPositioned { coordinates ->
+                                                        chapterRowBounds[chapterKey] = coordinates.boundsInRoot()
+                                                    }
                                                     .clickable {
+                                                        if (selectionClickSuppressed()) return@clickable
                                                         view.performHapticIfAllowed(
                                                             context,
                                                             enableHaptics,
@@ -1261,6 +1363,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                                                 Checkbox(
                                                     checked = isSelected,
                                                     onCheckedChange = { checked ->
+                                                        if (selectionClickSuppressed()) return@Checkbox
                                                         view.performHapticIfAllowed(
                                                             context,
                                                             enableHaptics,
