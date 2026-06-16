@@ -211,9 +211,7 @@ fun MangaPane(
                         lastReadChapter = state.lastReadChapterText,
                         chapters = state.chapters,
                         selectedCount = state.selectedChapterIds.size,
-                        newCount = state.chapters.count { chapter ->
-                            chapter.stableKey !in state.downloadedStableKeys
-                        },
+                        newCount = state.newChapterCount,
                         isDownloading = state.isDownloading,
                         enableHaptics = enableHaptics,
                         onSetFavorite = onSetMangaSeriesFavorite,

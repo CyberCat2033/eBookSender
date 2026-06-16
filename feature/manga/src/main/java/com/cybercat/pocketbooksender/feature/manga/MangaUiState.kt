@@ -39,8 +39,17 @@ data class MangaUiState(
     val selectedChapters: List<MangaChapter> =
         chapters.filter { chapter -> chapter.chapterId in selectedChapterIds }
 
+    val newChapters: List<MangaChapter>
+        get() = chapters.filter { chapter -> chapter.stableKey !in downloadedStableKeys }
+
+    val newChapterIds: Set<String>
+        get() = newChapters.mapTo(mutableSetOf()) { chapter -> chapter.chapterId }
+
+    val newChapterCount: Int
+        get() = newChapters.size
+
     val hasNewChapters: Boolean =
-        chapters.any { chapter -> chapter.stableKey !in downloadedStableKeys }
+        newChapters.isNotEmpty()
 }
 
 data class MangaDownloadUiProgress(

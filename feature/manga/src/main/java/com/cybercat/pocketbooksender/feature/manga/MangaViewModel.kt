@@ -285,10 +285,8 @@ class MangaViewModel @Inject constructor(
     }
 
     fun selectNewMangaChapters() {
+        val selectedIds = uiState.value.newChapterIds
         _mangaState.update { state ->
-            val selectedIds = state.chapters
-                .filter { chapter -> chapter.stableKey !in state.downloadedStableKeys }
-                .mapTo(mutableSetOf()) { chapter -> chapter.chapterId }
             state.copy(selectedChapterIds = selectedIds)
         }
     }
