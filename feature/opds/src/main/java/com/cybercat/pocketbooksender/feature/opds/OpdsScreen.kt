@@ -70,22 +70,22 @@ import com.cybercat.pocketbooksender.ui.theme.EmphasizedEasing
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.launch
 
-private const val WebModeEnterDurationMillis = 220
-private const val WebModeExitDurationMillis = 140
-private const val OpdsContentEnterDurationMillis = 220
-private const val OpdsContentFadeDurationMillis = 160
+private const val WEB_MODE_ENTER_DURATION_MILLIS = 220
+private const val WEB_MODE_EXIT_DURATION_MILLIS = 140
+private const val OPDS_CONTENT_ENTER_DURATION_MILLIS = 220
+private const val OPDS_CONTENT_FADE_DURATION_MILLIS = 160
 
-private val OpdsFeedFadeInSpec = spring<Float>(
+private val OPDS_FEED_FADE_IN_SPEC = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow
 )
 
-private val OpdsFeedFadeOutSpec = spring<Float>(
+private val OPDS_FEED_FADE_OUT_SPEC = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMedium
 )
 
-private val OpdsFeedPlacementSpec = spring<IntOffset>(
+private val OPDS_FEED_PLACEMENT_SPEC = spring<IntOffset>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow
 )
@@ -119,7 +119,6 @@ fun OpdsScreen(
     mangaTopBarActions: @Composable () -> Unit,
     mangaTopBarNavigationIcon: @Composable () -> Unit,
     mangaFloatingActionButton: @Composable () -> Unit,
-    isMangaDownloading: Boolean,
     isMangaSelectionActive: Boolean,
     mangaSelectedChapterCount: Int,
     onClearMangaSelection: () -> Unit
@@ -301,7 +300,6 @@ fun OpdsScreen(
             ) {
                 WebModeSelector(
                     selectedMode = webMode,
-                    enabled = !state.isDownloading && !isMangaDownloading,
                     enableHaptics = enableHaptics,
                     onModeSelected = onWebModeSelected,
                     modifier = Modifier.padding(bottom = 10.dp)
@@ -322,25 +320,25 @@ fun OpdsScreen(
                             (
                                 slideInHorizontally(
                                     animationSpec = tween(
-                                        durationMillis = WebModeEnterDurationMillis,
+                                        durationMillis = WEB_MODE_ENTER_DURATION_MILLIS,
                                         easing = EmphasizedEasing
                                     ),
                                     initialOffsetX = { width -> direction * width / 5 }
                                 ) + fadeIn(
                                     animationSpec = tween(
-                                        durationMillis = WebModeEnterDurationMillis
+                                        durationMillis = WEB_MODE_ENTER_DURATION_MILLIS
                                     )
                                 )
                                 ).togetherWith(
                                 slideOutHorizontally(
                                     animationSpec = tween(
-                                        durationMillis = WebModeExitDurationMillis,
+                                        durationMillis = WEB_MODE_EXIT_DURATION_MILLIS,
                                         easing = EmphasizedEasing
                                     ),
                                     targetOffsetX = { width -> -direction * width / 8 }
                                 ) + fadeOut(
                                     animationSpec = tween(
-                                        durationMillis = WebModeExitDurationMillis
+                                        durationMillis = WEB_MODE_EXIT_DURATION_MILLIS
                                     )
                                 )
                             )
@@ -454,14 +452,14 @@ private fun OpdsCatalogContent(
         launch {
             contentAlpha.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = OpdsContentFadeDurationMillis)
+                animationSpec = tween(durationMillis = OPDS_CONTENT_FADE_DURATION_MILLIS)
             )
         }
         launch {
             contentOffsetY.animateTo(
                 targetValue = 0f,
                 animationSpec = tween(
-                    durationMillis = OpdsContentEnterDurationMillis,
+                    durationMillis = OPDS_CONTENT_ENTER_DURATION_MILLIS,
                     easing = EmphasizedEasing
                 )
             )
@@ -551,9 +549,9 @@ private fun OpdsCatalogContent(
                     onOpenLink = onOpenLink,
                     onDownload = onDownload,
                     modifier = Modifier.animateItem(
-                        fadeInSpec = OpdsFeedFadeInSpec,
-                        fadeOutSpec = OpdsFeedFadeOutSpec,
-                        placementSpec = OpdsFeedPlacementSpec
+                        fadeInSpec = OPDS_FEED_FADE_IN_SPEC,
+                        fadeOutSpec = OPDS_FEED_FADE_OUT_SPEC,
+                        placementSpec = OPDS_FEED_PLACEMENT_SPEC
                     )
                 )
             }
@@ -608,7 +606,6 @@ private fun OpdsUiState.opdsContentMotionKey(feedLinkCount: Int): OpdsContentMot
 @Composable
 private fun WebModeSelector(
     selectedMode: WebContentMode,
-    enabled: Boolean,
     enableHaptics: Boolean,
     onModeSelected: (WebContentMode) -> Unit,
     modifier: Modifier = Modifier
@@ -635,7 +632,6 @@ private fun WebModeSelector(
                     )
                     onModeSelected(mode)
                 },
-                enabled = enabled,
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                 icon = {
                     Icon(

@@ -505,7 +505,6 @@ private fun AppNavHost(
                         )
                     }
                 },
-                isMangaDownloading = mangaState.isDownloading,
                 isMangaSelectionActive = mangaState.selectedChapterIds.isNotEmpty(),
                 mangaSelectedChapterCount = mangaState.selectedChapterIds.size,
                 onClearMangaSelection = {
