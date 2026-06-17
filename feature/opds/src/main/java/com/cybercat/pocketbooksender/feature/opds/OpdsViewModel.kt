@@ -5,18 +5,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.opds.DownloadOpdsEntriesUseCase
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
+import com.cybercat.pocketbooksender.data.opds.OpdsAuthenticationRequiredException
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
-import com.cybercat.pocketbooksender.data.opds.OpdsAuthenticationRequiredException
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsRepository
+import com.cybercat.pocketbooksender.data.opds.OpdsSearchCatalogUnavailableException
+import com.cybercat.pocketbooksender.data.opds.SearchOpdsCatalogUseCase
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import com.cybercat.pocketbooksender.util.launchTemporaryStatus
 import com.cybercat.pocketbooksender.util.onFailureRethrowing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.net.URL
 import javax.inject.Inject
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -32,16 +33,17 @@ import kotlinx.coroutines.launch
 class OpdsViewModel @Inject constructor(
     private val opdsRepository: OpdsRepository,
     private val downloadOpdsEntriesUseCase: DownloadOpdsEntriesUseCase,
+    private val searchOpdsCatalogUseCase: SearchOpdsCatalogUseCase,
     private val queueManager: UploadQueueManager,
-    private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
+    private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
 ) : ViewModel() {
 
-    private val _opdsState = MutableStateFlow(OpdsUiState())
+    private val mutableOpdsState = MutableStateFlow(OpdsUiState())
     private var initialCatalogLoadRequested = false
 
     val uiState: StateFlow<OpdsUiState> = combine(
         opdsRepository.sources,
-        _opdsState
+        mutableOpdsState
     ) { sources, opdsState ->
         opdsState.copy(sources = sources)
     }.stateIn(
@@ -61,17 +63,19 @@ class OpdsViewModel @Inject constructor(
                 if (sources.isEmpty()) return@onEach
 
                 val firstSource = sources.first()
-                if (_opdsState.value.urlInput.isBlank()) {
-                    _opdsState.update { state ->
+                if (mutableOpdsState.value.urlInput.isBlank()) {
+                    mutableOpdsState.update { state ->
                         state.copy(
                             urlInput = firstSource.url,
-                            titleInput = firstSource.title,
+                            titleInput = firstSource.title
                         )
                     }
                 }
 
-                val snapshot = _opdsState.value
-                if (!initialCatalogLoadRequested && snapshot.currentUrl == null && snapshot.catalog == null) {
+                val snapshot = mutableOpdsState.value
+                if (!initialCatalogLoadRequested && snapshot.currentUrl == null &&
+                    snapshot.catalog == null
+                ) {
                     initialCatalogLoadRequested = true
                     loadOpdsCatalog(url = firstSource.url, history = emptyList())
                 }
@@ -80,107 +84,130 @@ class OpdsViewModel @Inject constructor(
     }
 
     fun onUrlInputChanged(value: String) {
-        _opdsState.update { it.copy(urlInput = value) }
+        mutableOpdsState.update { it.copy(urlInput = value) }
     }
 
     fun onTitleInputChanged(value: String) {
-        _opdsState.update { it.copy(titleInput = value) }
+        mutableOpdsState.update { it.copy(titleInput = value) }
     }
 
     fun onSearchInputChanged(value: String) {
-        _opdsState.update { it.copy(searchInput = value) }
+        mutableOpdsState.update { it.copy(searchInput = value) }
     }
 
     fun setWebContentMode(mode: WebContentMode) {
-        _opdsState.update { it.copy(webMode = mode) }
+        mutableOpdsState.update { it.copy(webMode = mode) }
     }
 
     fun clearError() {
-        _opdsState.update { it.copy(errorMessage = null) }
+        mutableOpdsState.update { it.copy(errorMessage = null) }
     }
 
-    fun saveOpdsSource(title: String, url: String, username: String? = null, password: String? = null) {
+    fun saveOpdsSource(
+        title: String,
+        url: String,
+        username: String? = null,
+        password: String? = null
+    ) {
         viewModelScope.launch {
             runCatching {
                 opdsRepository.addSource(
                     title = title.trim(),
                     url = url.trim(),
                     username = username?.trim()?.ifBlank { null },
-                    password = password?.trim()?.ifBlank { null },
+                    password = password?.trim()?.ifBlank { null }
                 )
             }.onSuccess {
                 showOpdsStatus(localizationManager.currentStrings.value.opdsStatusSourceSaved)
             }.onFailure { error ->
-                _opdsState.update { state ->
+                mutableOpdsState.update { state ->
                     state.copy(
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotSaveSource,
-                        statusMessage = null,
+                        errorMessage =
+                            error.message
+                                ?: localizationManager.currentStrings.value
+                                    .opdsErrorCannotSaveSource,
+                        statusMessage = null
                     )
                 }
             }
         }
     }
 
-    fun openCredentialsDialog(source: com.cybercat.pocketbooksender.data.opds.OpdsSource, urlToRetry: String? = null) {
-        _opdsState.update { state ->
+    fun openCredentialsDialog(
+        source: com.cybercat.pocketbooksender.data.opds.OpdsSource,
+        urlToRetry: String? = null
+    ) {
+        mutableOpdsState.update { state ->
             state.copy(
                 showAuthDialog = true,
                 authDialogSourceId = source.id,
                 authDialogSourceTitle = source.title,
                 authDialogUsername = source.username.orEmpty(),
                 authDialogPassword = source.password.orEmpty(),
-                authDialogUrlToRetry = urlToRetry,
+                authDialogUrlToRetry = urlToRetry
             )
         }
     }
 
     fun onAuthUsernameChanged(value: String) {
-        _opdsState.update { it.copy(authDialogUsername = value) }
+        mutableOpdsState.update { it.copy(authDialogUsername = value) }
     }
 
     fun onAuthPasswordChanged(value: String) {
-        _opdsState.update { it.copy(authDialogPassword = value) }
+        mutableOpdsState.update { it.copy(authDialogPassword = value) }
     }
 
     fun dismissCredentialsDialog() {
-        _opdsState.update { state ->
+        mutableOpdsState.update { state ->
             state.copy(
                 showAuthDialog = false,
                 authDialogSourceId = null,
-                authDialogUrlToRetry = null,
+                authDialogUrlToRetry = null
             )
         }
     }
 
     fun saveCredentials() {
-        val snapshot = _opdsState.value
+        val snapshot = mutableOpdsState.value
         val sourceId = snapshot.authDialogSourceId ?: return
         val username = snapshot.authDialogUsername
         val password = snapshot.authDialogPassword
         val urlToRetry = snapshot.authDialogUrlToRetry
 
         viewModelScope.launch {
-            val source = opdsRepository.sources.first().firstOrNull { it.id == sourceId } ?: return@launch
+            val source =
+                opdsRepository.sources.first().firstOrNull { it.id == sourceId } ?: return@launch
             runCatching {
                 opdsRepository.addSource(
                     title = source.title,
                     url = source.url,
                     username = username.trim().ifBlank { null },
-                    password = password.trim().ifBlank { null },
+                    password = password.trim().ifBlank { null }
                 )
             }.onSuccess {
-                _opdsState.update { it.copy(showAuthDialog = false, authDialogSourceId = null, authDialogUrlToRetry = null) }
-                showOpdsStatus(localizationManager.currentStrings.value.opdsStatusCredentialsUpdated)
+                mutableOpdsState.update {
+                    it.copy(
+                        showAuthDialog = false,
+                        authDialogSourceId = null,
+                        authDialogUrlToRetry = null
+                    )
+                }
+                showOpdsStatus(
+                    localizationManager.currentStrings.value.opdsStatusCredentialsUpdated
+                )
                 if (urlToRetry != null) {
                     loadOpdsCatalog(urlToRetry, snapshot.history)
                 }
             }.onFailure { error ->
-                _opdsState.update { state ->
+                mutableOpdsState.update { state ->
                     state.copy(
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.opdsErrorCannotSaveCredentials,
+                        errorMessage =
+                            error.message
+                                ?: localizationManager.currentStrings.value
+                                    .opdsErrorCannotSaveCredentials,
                         showAuthDialog = false,
                         authDialogSourceId = null,
-                        authDialogUrlToRetry = null,
+                        authDialogUrlToRetry = null
                     )
                 }
             }
@@ -194,7 +221,7 @@ class OpdsViewModel @Inject constructor(
     }
 
     fun openOpdsInput() {
-        openOpdsUrl(_opdsState.value.urlInput)
+        openOpdsUrl(mutableOpdsState.value.urlInput)
     }
 
     fun openOpdsSource(url: String) {
@@ -202,49 +229,50 @@ class OpdsViewModel @Inject constructor(
         openOpdsUrl(
             url = trimmedUrl,
             history = emptyList(),
-            paging = OpdsPagingState(),
+            paging = OpdsPagingState()
         )
     }
 
     fun openOpdsUrl(url: String) {
         val trimmedUrl = validateOpdsUrl(url) ?: return
-        val previous = _opdsState.value
+        val previous = mutableOpdsState.value
         openOpdsUrl(
             url = trimmedUrl,
             history = previous.currentUrl?.let { currentUrl ->
                 previous.history + OpdsHistoryEntry(
-                    title = previous.catalog?.title ?: localizationManager.currentStrings.value.opdsHistoryFallbackTitle,
+                    title =
+                        previous.catalog?.title
+                            ?: localizationManager.currentStrings.value.opdsHistoryFallbackTitle,
                     url = currentUrl,
-                    paging = previous.paging.toSnapshot(),
+                    paging = previous.paging.toSnapshot()
                 )
             } ?: previous.history,
-            paging = OpdsPagingState(),
+            paging = OpdsPagingState()
         )
     }
 
-    private fun openOpdsUrl(
-        url: String,
-        history: List<OpdsHistoryEntry>,
-        paging: OpdsPagingState,
-    ) {
+    private fun openOpdsUrl(url: String, history: List<OpdsHistoryEntry>, paging: OpdsPagingState) {
         loadOpdsCatalog(
             url = url,
             history = history,
-            paging = paging,
+            paging = paging
         )
     }
 
     fun openOpdsLink(link: OpdsLink) {
         when {
             link.isNextLink() -> goNextOpdsPage()
+
             link.isPreviousLink() -> goPreviousOpdsPage()
+
             link.isStartLink() -> {
                 openOpdsUrl(
                     url = link.href,
                     history = emptyList(),
-                    paging = OpdsPagingState(),
+                    paging = OpdsPagingState()
                 )
             }
+
             else -> openOpdsUrl(link.href)
         }
     }
@@ -253,27 +281,27 @@ class OpdsViewModel @Inject constructor(
         val trimmedUrl = url.trim()
         if (trimmedUrl.isNotBlank()) return trimmedUrl
 
-        _opdsState.update {
+        mutableOpdsState.update {
             it.copy(
                 errorMessage = localizationManager.currentStrings.value.opdsErrorUrlEmpty,
-                statusMessage = null,
+                statusMessage = null
             )
         }
         return null
     }
 
     fun goBackOpds() {
-        val snapshot = _opdsState.value
+        val snapshot = mutableOpdsState.value
         val previous = snapshot.history.lastOrNull() ?: return
         loadOpdsCatalog(
             url = previous.url,
             history = snapshot.history.dropLast(1),
-            paging = previous.paging.toPagingState(),
+            paging = previous.paging.toPagingState()
         )
     }
 
     fun goPreviousOpdsPage() {
-        val snapshot = _opdsState.value
+        val snapshot = mutableOpdsState.value
         val previousPage = snapshot.paging.previousPages.lastOrNull() ?: return
         loadOpdsCatalog(
             url = previousPage.url,
@@ -281,13 +309,13 @@ class OpdsViewModel @Inject constructor(
             paging = snapshot.paging.copy(
                 currentPage = (snapshot.paging.currentPage - 1).coerceAtLeast(1),
                 previousPages = snapshot.paging.previousPages.dropLast(1),
-                nextLink = null,
-            ),
+                nextLink = null
+            )
         )
     }
 
     fun goNextOpdsPage() {
-        val snapshot = _opdsState.value
+        val snapshot = mutableOpdsState.value
         val nextLink = snapshot.paging.nextLink ?: return
         val currentPage = snapshot.currentPageHistoryEntry() ?: return
         loadOpdsCatalog(
@@ -296,32 +324,33 @@ class OpdsViewModel @Inject constructor(
             paging = snapshot.paging.copy(
                 currentPage = snapshot.paging.currentPage + 1,
                 previousPages = snapshot.paging.previousPages + currentPage,
-                nextLink = null,
-            ),
+                nextLink = null
+            )
         )
     }
 
     fun searchOpds() {
-        val snapshot = _opdsState.value
+        val snapshot = mutableOpdsState.value
         val query = snapshot.searchInput.trim()
         val currentUrl = snapshot.currentUrl
         val catalog = snapshot.catalog
 
         if (query.isBlank()) {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
                     errorMessage = localizationManager.currentStrings.value.opdsErrorSearchEmpty,
-                    statusMessage = null,
+                    statusMessage = null
                 )
             }
             return
         }
 
         if (currentUrl == null || catalog == null) {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
-                    errorMessage = localizationManager.currentStrings.value.opdsErrorOpenCatalogFirst,
-                    statusMessage = null,
+                    errorMessage = localizationManager.currentStrings.value
+                        .opdsErrorOpenCatalogFirst,
+                    statusMessage = null
                 )
             }
             return
@@ -332,50 +361,47 @@ class OpdsViewModel @Inject constructor(
         }
 
         if (searchLink == null) {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
-                    errorMessage = localizationManager.currentStrings.value.opdsErrorNoSearchSupport,
-                    statusMessage = null,
+                    errorMessage = localizationManager.currentStrings.value
+                        .opdsErrorNoSearchSupport,
+                    statusMessage = null
                 )
             }
             return
         }
 
         viewModelScope.launch {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
                     isLoading = true,
                     errorMessage = null,
                     statusMessage = null,
-                    catalog = null,
+                    catalog = null
                 )
             }
 
-            runCatching {
-                val searchUrls = opdsRepository.buildSearchUrls(currentUrl, searchLink, query)
-                val catalogs = searchUrls.mapNotNull { searchUrl ->
-                    runCatching { loadOpdsSearchCatalog(searchUrl, query) }.getOrNull()
-                }
-                if (catalogs.isEmpty()) {
-                    throw IllegalStateException(localizationManager.currentStrings.value.opdsErrorCannotOpenSearch)
-                }
-                catalogs
-            }.onSuccess { catalogs ->
-                val mergedCatalog = mergeSearchCatalogs(query, catalogs.map { (_, catalog) -> catalog })
-                _opdsState.update { state ->
+            val strings = localizationManager.currentStrings.value
+            searchOpdsCatalogUseCase(
+                baseUrl = currentUrl,
+                searchLink = searchLink,
+                query = query,
+                mergedCatalogTitle = strings.get("opds_search_results_title", query)
+            ).onSuccess { result ->
+                mutableOpdsState.update { state ->
                     state.copy(
-                        currentUrl = catalogs.first().first,
-                        urlInput = catalogs.first().first,
-                        catalog = mergedCatalog,
+                        currentUrl = result.currentUrl,
+                        urlInput = result.currentUrl,
+                        catalog = result.catalog,
                         history = snapshot.history + OpdsHistoryEntry(
                             title = catalog.title,
                             url = currentUrl,
-                            paging = snapshot.paging.toSnapshot(),
+                            paging = snapshot.paging.toSnapshot()
                         ),
-                        paging = OpdsPagingState().withCatalogLinks(mergedCatalog),
+                        paging = OpdsPagingState().withCatalogLinks(result.catalog),
                         isLoading = false,
                         errorMessage = null,
-                        statusMessage = null,
+                        statusMessage = null
                     )
                 }
             }.onFailureRethrowing { error ->
@@ -386,46 +412,53 @@ class OpdsViewModel @Inject constructor(
                         runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
                     }
                     if (matchingSource != null) {
-                        _opdsState.update { state ->
+                        mutableOpdsState.update { state ->
                             state.copy(
                                 isLoading = false,
                                 catalog = snapshot.catalog,
                                 currentUrl = snapshot.currentUrl,
                                 history = snapshot.history,
-                                paging = snapshot.paging,
+                                paging = snapshot.paging
                             )
                         }
                         openCredentialsDialog(matchingSource, urlToRetry = error.url)
                         return@launch
                     }
                 }
-                _opdsState.update { state -> state.copy(isLoading = false) }
-                showOpdsError(error.message ?: localizationManager.currentStrings.value.opdsErrorCannotBuildSearchUrl)
+                mutableOpdsState.update { state -> state.copy(isLoading = false) }
+                val message = when (error) {
+                    is OpdsSearchCatalogUnavailableException ->
+                        localizationManager.currentStrings.value.opdsErrorCannotOpenSearch
+
+                    else ->
+                        error.message
+                            ?: localizationManager.currentStrings.value
+                                .opdsErrorCannotBuildSearchUrl
+                }
+                showOpdsError(message)
             }
         }
     }
 
-    fun downloadOpdsAcquisition(
-        entry: OpdsEntry,
-        acquisition: OpdsAcquisition,
-    ) {
-        val baseUrl = _opdsState.value.currentUrl
+    fun downloadOpdsAcquisition(entry: OpdsEntry, acquisition: OpdsAcquisition) {
+        val baseUrl = mutableOpdsState.value.currentUrl
         if (baseUrl == null) {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
-                    errorMessage = localizationManager.currentStrings.value.opdsErrorOpenCatalogFirst,
-                    statusMessage = null,
+                    errorMessage = localizationManager.currentStrings.value
+                        .opdsErrorOpenCatalogFirst,
+                    statusMessage = null
                 )
             }
             return
         }
 
         viewModelScope.launch {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
                     isDownloading = true,
                     errorMessage = null,
-                    statusMessage = null,
+                    statusMessage = null
                 )
             }
 
@@ -433,10 +466,15 @@ class OpdsViewModel @Inject constructor(
                 opdsRepository.downloadPublication(baseUrl, entry, acquisition)
             }.onSuccess { file ->
                 queueManager.addUris(listOf(Uri.fromFile(file)))
-                _opdsState.update { state ->
+                mutableOpdsState.update { state ->
                     state.copy(isDownloading = false)
                 }
-                showOpdsStatus(localizationManager.currentStrings.value.get("opds_status_added_to_queue", file.name))
+                showOpdsStatus(
+                    localizationManager.currentStrings.value.get(
+                        "opds_status_added_to_queue",
+                        file.name
+                    )
+                )
             }.onFailureRethrowing { error ->
                 if (error is OpdsAuthenticationRequiredException) {
                     val currentSources = opdsRepository.sources.first()
@@ -445,62 +483,74 @@ class OpdsViewModel @Inject constructor(
                         runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
                     }
                     if (matchingSource != null) {
-                        _opdsState.update { state -> state.copy(isDownloading = false) }
+                        mutableOpdsState.update { state -> state.copy(isDownloading = false) }
                         openCredentialsDialog(matchingSource)
                         return@launch
                     }
                 }
-                _opdsState.update { state -> state.copy(isDownloading = false) }
-                showOpdsError(error.message ?: localizationManager.currentStrings.value.opdsErrorCannotDownload)
+                mutableOpdsState.update { state -> state.copy(isDownloading = false) }
+                showOpdsError(
+                    error.message
+                        ?: localizationManager.currentStrings.value.opdsErrorCannotDownload
+                )
             }
         }
     }
 
     fun downloadOpdsEntries(entries: List<OpdsEntry>) {
-        val baseUrl = _opdsState.value.currentUrl
+        val baseUrl = mutableOpdsState.value.currentUrl
         if (baseUrl == null) {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
-                    errorMessage = localizationManager.currentStrings.value.opdsErrorOpenCatalogFirst,
-                    statusMessage = null,
+                    errorMessage = localizationManager.currentStrings.value
+                        .opdsErrorOpenCatalogFirst,
+                    statusMessage = null
                 )
             }
             return
         }
 
         if (!downloadOpdsEntriesUseCase.hasDownloadableEntries(entries)) {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
-                    errorMessage = localizationManager.currentStrings.value.opdsErrorNoDownloadableEntries,
-                    statusMessage = null,
+                    errorMessage = localizationManager.currentStrings.value
+                        .opdsErrorNoDownloadableEntries,
+                    statusMessage = null
                 )
             }
             return
         }
 
         viewModelScope.launch {
-            _opdsState.update {
+            mutableOpdsState.update {
                 it.copy(
                     isDownloading = true,
                     errorMessage = null,
-                    statusMessage = null,
+                    statusMessage = null
                 )
             }
 
             downloadOpdsEntriesUseCase(baseUrl, entries)
                 .onSuccess { result ->
                     if (result.downloadedFiles.isNotEmpty()) {
-                        queueManager.addUris(result.downloadedFiles.map { file -> Uri.fromFile(file) })
+                        queueManager.addUris(
+                            result.downloadedFiles.map { file ->
+                                Uri.fromFile(file)
+                            }
+                        )
                     }
 
-                    _opdsState.update { state ->
+                    mutableOpdsState.update { state ->
                         state.copy(
                             isDownloading = false,
                             errorMessage = if (result.failedCount > 0) {
-                                localizationManager.currentStrings.value.get("opds_error_failed_to_download_entries", result.failedCount)
+                                localizationManager.currentStrings.value.get(
+                                    "opds_error_failed_to_download_entries",
+                                    result.failedCount
+                                )
                             } else {
                                 null
-                            },
+                            }
                         )
                     }
 
@@ -508,13 +558,16 @@ class OpdsViewModel @Inject constructor(
                         showOpdsStatus(
                             localizationManager.currentStrings.value.get(
                                 "opds_status_added_to_queue_multiple",
-                                result.downloadedFiles.size,
+                                result.downloadedFiles.size
                             )
                         )
                     }
                 }.onFailureRethrowing { error ->
-                    _opdsState.update { state -> state.copy(isDownloading = false) }
-                    showOpdsError(error.message ?: localizationManager.currentStrings.value.opdsErrorCannotDownload)
+                    mutableOpdsState.update { state -> state.copy(isDownloading = false) }
+                    showOpdsError(
+                        error.message
+                            ?: localizationManager.currentStrings.value.opdsErrorCannotDownload
+                    )
                 }
         }
     }
@@ -522,23 +575,23 @@ class OpdsViewModel @Inject constructor(
     private fun loadOpdsCatalog(
         url: String,
         history: List<OpdsHistoryEntry>,
-        paging: OpdsPagingState = OpdsPagingState(),
+        paging: OpdsPagingState = OpdsPagingState()
     ) {
         viewModelScope.launch {
-            val snapshotBeforeLoad = _opdsState.value
-            _opdsState.update {
+            val snapshotBeforeLoad = mutableOpdsState.value
+            mutableOpdsState.update {
                 it.copy(
                     isLoading = true,
                     errorMessage = null,
                     statusMessage = null,
-                    catalog = null,
+                    catalog = null
                 )
             }
 
             runCatching {
                 opdsRepository.loadCatalog(url)
             }.onSuccess { catalog ->
-                _opdsState.update { state ->
+                mutableOpdsState.update { state ->
                     state.copy(
                         currentUrl = url,
                         urlInput = url,
@@ -547,7 +600,7 @@ class OpdsViewModel @Inject constructor(
                         paging = paging.withCatalogLinks(catalog),
                         isLoading = false,
                         errorMessage = null,
-                        statusMessage = null,
+                        statusMessage = null
                     )
                 }
             }.onFailureRethrowing { error ->
@@ -559,77 +612,25 @@ class OpdsViewModel @Inject constructor(
                     }
                     if (matchingSource != null) {
                         // Restore previous catalog so back button and content are preserved
-                        _opdsState.update { state ->
+                        mutableOpdsState.update { state ->
                             state.copy(
                                 isLoading = false,
                                 catalog = snapshotBeforeLoad.catalog,
                                 currentUrl = snapshotBeforeLoad.currentUrl,
                                 history = snapshotBeforeLoad.history,
-                                paging = snapshotBeforeLoad.paging,
+                                paging = snapshotBeforeLoad.paging
                             )
                         }
                         openCredentialsDialog(matchingSource, urlToRetry = url)
                         return@launch
                     }
                 }
-                _opdsState.update { state -> state.copy(isLoading = false) }
-                showOpdsError(error.message ?: localizationManager.currentStrings.value.opdsErrorCannotOpenCatalog)
+                mutableOpdsState.update { state -> state.copy(isLoading = false) }
+                showOpdsError(
+                    error.message
+                        ?: localizationManager.currentStrings.value.opdsErrorCannotOpenCatalog
+                )
             }
-        }
-    }
-
-    private suspend fun loadOpdsSearchCatalog(
-        searchUrl: String,
-        query: String,
-    ): Pair<String, OpdsCatalog> {
-        val catalog = opdsRepository.loadCatalog(searchUrl)
-        if (!searchUrl.contains("/opds/authorsindex/", ignoreCase = true)) {
-            return searchUrl to catalog
-        }
-
-        val authorLink = catalog.entries
-            .singleOrNull()
-            ?.navigation
-            ?.firstOrNull { link -> link.href.contains("/opds/authors/", ignoreCase = true) }
-
-        if (authorLink == null) {
-            return searchUrl to catalog.filterAuthorEntries(query)
-        }
-
-        val expandedCatalog = opdsRepository.loadCatalog(authorLink.href).filterAuthorEntries(query)
-        return authorLink.href to expandedCatalog
-    }
-
-    private fun mergeSearchCatalogs(
-        query: String,
-        catalogs: List<OpdsCatalog>,
-    ): OpdsCatalog {
-        if (catalogs.size == 1) return catalogs.first()
-
-        return OpdsCatalog(
-            title = "Search: $query",
-            entries = catalogs.flatMap { catalog -> catalog.entries },
-            links = catalogs
-                .flatMap { catalog -> catalog.links }
-                .distinctBy { link ->
-                    listOf(link.href, link.rel.orEmpty(), link.type.orEmpty()).joinToString("|")
-                },
-        )
-    }
-
-    private fun OpdsCatalog.filterAuthorEntries(query: String): OpdsCatalog {
-        val tokens = query.searchTokens()
-        if (tokens.size < 2) return this
-
-        val filteredEntries = entries.filter { entry ->
-            val title = entry.title.searchComparableText()
-            tokens.all { token -> token in title }
-        }
-
-        return if (filteredEntries.isEmpty()) {
-            this
-        } else {
-            copy(entries = filteredEntries)
         }
     }
 
@@ -637,29 +638,31 @@ class OpdsViewModel @Inject constructor(
         val nextLink = catalog.links.firstOrNull(OpdsLink::isNextLink)
         return copy(
             nextLink = nextLink,
-            totalPages = totalPages ?: if (nextLink == null && currentPage > 1) currentPage else null,
+            totalPages =
+                totalPages ?: if (nextLink == null && currentPage > 1) currentPage else null
         )
     }
 
     private fun OpdsUiState.currentPageHistoryEntry(): OpdsPageHistoryEntry? {
         val currentUrl = currentUrl ?: return null
         return OpdsPageHistoryEntry(
-            title = catalog?.title ?: localizationManager.currentStrings.value.opdsHistoryFallbackTitle,
-            url = currentUrl,
+            title =
+                catalog?.title ?: localizationManager.currentStrings.value.opdsHistoryFallbackTitle,
+            url = currentUrl
         )
     }
 
     private fun showOpdsStatus(message: String) {
         viewModelScope.launchTemporaryStatus(
             message = message,
-            delayMillis = OpdsStatusMessageMillis,
+            delayMillis = OPDS_STATUS_MESSAGE_MILLIS,
             setMessage = { msg ->
-                _opdsState.update { state ->
+                mutableOpdsState.update { state ->
                     state.copy(statusMessage = msg, errorMessage = null)
                 }
             },
             clearIfStillCurrent = { msg ->
-                _opdsState.update { state ->
+                mutableOpdsState.update { state ->
                     if (state.statusMessage == msg) state.copy(statusMessage = null) else state
                 }
             }
@@ -669,34 +672,22 @@ class OpdsViewModel @Inject constructor(
     private fun showOpdsError(message: String) {
         viewModelScope.launchTemporaryStatus(
             message = message,
-            delayMillis = OpdsErrorMessageMillis,
+            delayMillis = OPDS_ERROR_MESSAGE_MILLIS,
             setMessage = { msg ->
-                _opdsState.update { state ->
+                mutableOpdsState.update { state ->
                     state.copy(errorMessage = msg, statusMessage = null)
                 }
             },
             clearIfStillCurrent = { msg ->
-                _opdsState.update { state ->
+                mutableOpdsState.update { state ->
                     if (state.errorMessage == msg) state.copy(errorMessage = null) else state
                 }
             }
         )
     }
 
-    private fun String.searchTokens(): List<String> =
-        trim()
-            .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
-            .replace(Regex("\\s+"), " ")
-            .lowercase()
-            .split(' ')
-            .map { token -> token.trim('-', ' ') }
-            .filter { token -> token.length >= 2 }
-
-    private fun String.searchComparableText(): String =
-        searchTokens().joinToString(" ")
-
     private companion object {
-        const val OpdsStatusMessageMillis = 2300L
-        const val OpdsErrorMessageMillis = 5500L
+        const val OPDS_STATUS_MESSAGE_MILLIS = 2300L
+        const val OPDS_ERROR_MESSAGE_MILLIS = 5500L
     }
 }

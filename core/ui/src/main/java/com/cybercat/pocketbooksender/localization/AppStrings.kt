@@ -174,6 +174,7 @@ class AppStrings(
     val opdsBtnDownload: String get() = get("opds_btn_download")
     val opdsSearchPlaceholder: String get() = get("opds_search_placeholder")
     val opdsSearchCatalog: String get() = get("opds_search_catalog")
+    val opdsSearchResultsTitle: String get() = get("opds_search_results_title")
     val opdsNoSearchSupport: String get() = get("opds_no_search_support")
     val opdsStatusOpening: String get() = get("opds_status_opening")
     val opdsRelStart: String get() = get("opds_rel_start")

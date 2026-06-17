@@ -160,6 +160,7 @@
   "opds_btn_download": "Download (%1$d)",
   "opds_search_placeholder": "Search",
   "opds_search_catalog": "Search catalog",
+  "opds_search_results_title": "Search: %1$s",
   "opds_no_search_support": "This catalog page does not expose OPDS search.",
   "opds_status_opening": "Opening catalog",
   "opds_rel_start": "Start",

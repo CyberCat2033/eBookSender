@@ -160,6 +160,7 @@
   "opds_btn_download": "Скачать (%1$d)",
   "opds_search_placeholder": "Поиск",
   "opds_search_catalog": "Поиск по каталогу",
+  "opds_search_results_title": "Поиск: %1$s",
   "opds_no_search_support": "Эта страница каталога не поддерживает поиск OPDS.",
   "opds_status_opening": "Открытие каталога...",
   "opds_rel_start": "В начало",
