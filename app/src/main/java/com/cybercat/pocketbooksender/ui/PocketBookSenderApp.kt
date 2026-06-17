@@ -3,69 +3,75 @@ package com.cybercat.pocketbooksender.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.SystemClock
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.core.tween
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.NavHostController
-import com.cybercat.pocketbooksender.util.performHapticIfAllowed
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Download
-import com.cybercat.pocketbooksender.ui.navigation.MainDestination
-import com.cybercat.pocketbooksender.ui.navigation.MainDestinations
 import com.cybercat.pocketbooksender.feature.catalog.CatalogScreen
 import com.cybercat.pocketbooksender.feature.catalog.CatalogViewModel
+import com.cybercat.pocketbooksender.feature.manga.MangaViewModel
+import com.cybercat.pocketbooksender.feature.opds.OpdsScreen
+import com.cybercat.pocketbooksender.feature.opds.OpdsViewModel
 import com.cybercat.pocketbooksender.feature.settings.SettingsScreen
 import com.cybercat.pocketbooksender.feature.settings.SettingsViewModel
 import com.cybercat.pocketbooksender.feature.transfer.SendScreen
 import com.cybercat.pocketbooksender.feature.transfer.TransferViewModel
-import com.cybercat.pocketbooksender.feature.opds.OpdsScreen
-import com.cybercat.pocketbooksender.feature.opds.OpdsViewModel
-import com.cybercat.pocketbooksender.feature.manga.MangaViewModel
-import com.cybercat.pocketbooksender.ui.theme.PocketBookSenderTheme
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
+import com.cybercat.pocketbooksender.ui.navigation.MainDestination
+import com.cybercat.pocketbooksender.ui.navigation.MainDestinations
+import com.cybercat.pocketbooksender.ui.theme.PocketBookSenderTheme
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-private const val NavEnterDurationMillis = 200
-private const val NavExitDurationMillis = 80
+private const val NAV_ENTER_DURATION_MILLIS = 200
+private const val NAV_EXIT_DURATION_MILLIS = 80
 
 private class NavigationClickGate(
-    private val debounceMillis: Long = NavEnterDurationMillis.toLong(),
+    private val debounceMillis: Long = NAV_ENTER_DURATION_MILLIS.toLong()
 ) {
     private var lastRoute: String? = null
     private var lastClickUptimeMillis: Long = 0L
@@ -87,7 +93,7 @@ private class NavigationClickGate(
 fun PocketBookSenderApp(
     sharedUris: List<Uri>,
     onSharedUrisConsumed: () -> Unit,
-    rootViewModel: RootViewModel = hiltViewModel(),
+    rootViewModel: RootViewModel = hiltViewModel()
 ) {
     val settings by rootViewModel.settings.collectAsStateWithLifecycle()
 
@@ -115,11 +121,14 @@ fun PocketBookSenderApp(
         topScrollJob = coroutineScope.launch {
             when (route) {
                 MainDestination.Send.route -> sendListState.animateScrollToTop()
+
                 MainDestination.Catalog.route -> catalogListState.animateScrollToTop()
+
                 MainDestination.Opds.route -> {
                     opdsListState.animateScrollToTop()
                     mangaListState.animateScrollToTop()
                 }
+
                 MainDestination.Settings.route -> settingsScrollState.animateScrollTo(0)
             }
         }
@@ -138,11 +147,12 @@ fun PocketBookSenderApp(
         SyncSystemBarsWithTheme(darkTheme = darkTheme)
         BoxWithConstraints(Modifier.fillMaxSize()) {
             CompositionLocalProvider(
-                LocalAdaptiveLayoutInfo provides currentAdaptiveLayoutInfo(maxWidth),
+                LocalAdaptiveLayoutInfo provides currentAdaptiveLayoutInfo(maxWidth)
             ) {
                 val destinationLabels = MainDestinations.associateWith { destination ->
                     destination.translatedLabel()
                 }
+                val navigationLayoutType = currentNavigationSuiteLayoutType()
                 NavigationSuiteScaffold(
                     navigationSuiteItems = {
                         MainDestinations.forEach { destination ->
@@ -160,13 +170,14 @@ fun PocketBookSenderApp(
                                     }
                                 },
                                 icon = { Icon(destination.icon, contentDescription = label) },
-                                label = { Text(label) },
+                                label = { Text(label) }
                             )
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
+                    layoutType = navigationLayoutType,
                     containerColor = MaterialTheme.colorScheme.background,
-                    contentColor = MaterialTheme.colorScheme.onBackground,
+                    contentColor = MaterialTheme.colorScheme.onBackground
                 ) {
                     AppNavHost(
                         navController = navController,
@@ -176,13 +187,21 @@ fun PocketBookSenderApp(
                         opdsListState = opdsListState,
                         mangaListState = mangaListState,
                         settingsScrollState = settingsScrollState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
         }
     }
 }
+
+@Composable
+private fun currentNavigationSuiteLayoutType(): NavigationSuiteType =
+    if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        NavigationSuiteType.NavigationRail
+    } else {
+        NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(currentWindowAdaptiveInfo())
+    }
 
 @Composable
 @Suppress("DEPRECATION")
@@ -229,26 +248,26 @@ private fun AppNavHost(
     opdsListState: LazyListState,
     mangaListState: LazyListState,
     settingsScrollState: ScrollState,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,
         startDestination = MainDestination.Send.route,
         modifier = modifier,
         enterTransition = {
-            fadeIn(animationSpec = tween(NavEnterDurationMillis)) +
-            scaleIn(initialScale = 0.96f, animationSpec = tween(NavEnterDurationMillis))
+            fadeIn(animationSpec = tween(NAV_ENTER_DURATION_MILLIS)) +
+                scaleIn(initialScale = 0.96f, animationSpec = tween(NAV_ENTER_DURATION_MILLIS))
         },
         exitTransition = {
-            fadeOut(animationSpec = tween(NavExitDurationMillis))
+            fadeOut(animationSpec = tween(NAV_EXIT_DURATION_MILLIS))
         },
         popEnterTransition = {
-            fadeIn(animationSpec = tween(NavEnterDurationMillis)) +
-            scaleIn(initialScale = 0.96f, animationSpec = tween(NavEnterDurationMillis))
+            fadeIn(animationSpec = tween(NAV_ENTER_DURATION_MILLIS)) +
+                scaleIn(initialScale = 0.96f, animationSpec = tween(NAV_ENTER_DURATION_MILLIS))
         },
         popExitTransition = {
-            fadeOut(animationSpec = tween(NavExitDurationMillis))
-        },
+            fadeOut(animationSpec = tween(NAV_EXIT_DURATION_MILLIS))
+        }
     ) {
         composable(MainDestination.Send.route) {
             val transferViewModel: TransferViewModel = hiltViewModel()
@@ -267,7 +286,7 @@ private fun AppNavHost(
                 onDocumentsTagChanged = transferViewModel::updateDocumentsTag,
                 onMangaSeriesChanged = transferViewModel::updateMangaSeries,
                 onQueuedMangaSeriesChanged = transferViewModel::updateQueuedMangaSeries,
-                onUploadAll = transferViewModel::uploadAll,
+                onUploadAll = transferViewModel::uploadAll
             )
         }
         composable(MainDestination.Catalog.route) {
@@ -284,7 +303,7 @@ private fun AppNavHost(
                 onSetFileSelection = catalogViewModel::setFileSelection,
                 onToggleGroupSelection = catalogViewModel::toggleGroupSelection,
                 onDeleteSelectedFiles = catalogViewModel::deleteSelectedFiles,
-                onClearDeleteError = catalogViewModel::clearDeleteError,
+                onClearDeleteError = catalogViewModel::clearDeleteError
             )
         }
         composable(MainDestination.Opds.route) {
@@ -303,7 +322,9 @@ private fun AppNavHost(
                 opdsListState = opdsListState,
                 onSearchChanged = opdsViewModel::onSearchInputChanged,
                 onWebModeSelected = opdsViewModel::setWebContentMode,
-                onSaveSource = { title, url, username, password -> opdsViewModel.saveOpdsSource(title, url, username, password) },
+                onSaveSource = { title, url, username, password ->
+                    opdsViewModel.saveOpdsSource(title, url, username, password)
+                },
                 onRemoveSource = opdsViewModel::removeOpdsSource,
                 onOpenSource = opdsViewModel::openOpdsSource,
                 onOpenLink = opdsViewModel::openOpdsLink,
@@ -331,32 +352,42 @@ private fun AppNavHost(
                         onWebPageLoaded = mangaViewModel::syncMangaWebPage,
                         onOpenSeries = mangaViewModel::openMangaSeries,
                         onToggleChapter = mangaViewModel::toggleMangaChapter,
-                        onSetMangaSeriesFavorite = mangaViewModel::setSelectedMangaFavorite,
-                        onSetMangaSeriesSubscribed = mangaViewModel::setSelectedMangaSubscribed,
-                        onCheckSubscriptions = mangaViewModel::checkMangaSubscriptions,
+                        onSetMangaSeriesFavorite =
+                            mangaViewModel::setSelectedMangaFavorite,
+                        onSetMangaSeriesSubscribed =
+                            mangaViewModel::setSelectedMangaSubscribed,
+                        onCheckSubscriptions =
+                            mangaViewModel::checkMangaSubscriptions,
                         onDownloadSelected = mangaViewModel::downloadSelectedMangaChapters,
-                        onToggleSubscriptionUpdateChapter = mangaViewModel::toggleSubscriptionUpdateChapter,
-                        onSelectAllSubscriptionUpdateChapters = mangaViewModel::selectAllSubscriptionUpdateChapters,
-                        onClearSubscriptionUpdateChapters = mangaViewModel::clearSubscriptionUpdateChapters,
+                        onToggleSubscriptionUpdateChapter =
+                            mangaViewModel::toggleSubscriptionUpdateChapter,
+                        onSelectAllSubscriptionUpdateChapters =
+                            mangaViewModel::selectAllSubscriptionUpdateChapters,
+                        onClearSubscriptionUpdateChapters =
+                            mangaViewModel::clearSubscriptionUpdateChapters,
                         onDownloadSubscriptionUpdates = mangaViewModel::downloadSubscriptionUpdates,
                         onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
                         onRefreshAuthState = mangaViewModel::refreshMangaAuthState,
                         onNativeLoginSubmit = mangaViewModel::performNativeLogin,
-                        onLoginPostExecuted = mangaViewModel::clearPendingLoginPost,
+                        onLoginPostExecuted = mangaViewModel::clearPendingLoginPost
                     )
                 },
                 mangaTopBarNavigationIcon = {
                     if (mangaState.selectedSeries != null) {
                         IconButton(
                             onClick = {
-                                view.performHapticIfAllowed(context, enableHaptics, android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    android.view.HapticFeedbackConstants.VIRTUAL_KEY
+                                )
                                 mangaViewModel.goBackManga()
                             },
-                            enabled = !mangaState.isLoading && !mangaState.isDownloading,
+                            enabled = !mangaState.isLoading && !mangaState.isDownloading
                         ) {
                             Icon(
-                                imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = strings.get("action_back"),
+                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = strings.get("action_back")
                             )
                         }
                     }
@@ -369,32 +400,49 @@ private fun AppNavHost(
                         enableHaptics = enableHaptics,
                         onSelectNew = mangaViewModel::selectNewMangaChapters,
                         onSelectAll = mangaViewModel::selectAllMangaChapters,
-                        onClear = mangaViewModel::clearMangaChapterSelection,
+                        onClear = mangaViewModel::clearMangaChapterSelection
                     )
                 },
                 mangaFloatingActionButton = {
                     val selectedCount = mangaState.selectedChapterIds.size
                     androidx.compose.animation.AnimatedVisibility(
                         visible = selectedCount > 0 && !mangaState.isDownloading,
-                        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { height -> height },
-                        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { height -> height },
+                        enter =
+                            androidx.compose.animation.fadeIn() +
+                                androidx.compose.animation.slideInVertically { height -> height },
+                        exit =
+                            androidx.compose.animation.fadeOut() +
+                                androidx.compose.animation.slideOutVertically { height -> height }
                     ) {
                         androidx.compose.material3.ExtendedFloatingActionButton(
                             onClick = {
-                                view.performHapticIfAllowed(context, enableHaptics, android.view.HapticFeedbackConstants.CONFIRM)
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    android.view.HapticFeedbackConstants.CONFIRM
+                                )
                                 mangaViewModel.downloadSelectedMangaChapters()
                             },
-                            icon = { Icon(androidx.compose.material.icons.Icons.Outlined.Download, contentDescription = null) },
-                            text = { Text(strings.get("opds_btn_download", selectedCount)) },
+                            icon = {
+                                Icon(
+                                    Icons.Outlined.Download,
+                                    contentDescription = null
+                                )
+                            },
+                            text = { Text(strings.get("opds_btn_download", selectedCount)) }
                         )
                     }
                 },
                 isMangaSelectionActive = mangaState.selectedChapterIds.isNotEmpty(),
                 mangaSelectedChapterCount = mangaState.selectedChapterIds.size,
                 onClearMangaSelection = {
-                    view.performHapticIfAllowed(context, enableHaptics, android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        android.view.HapticFeedbackConstants.VIRTUAL_KEY
+                    )
                     mangaViewModel.clearMangaChapterSelection()
-                },
+                }
             )
         }
         composable(MainDestination.Settings.route) {
@@ -413,11 +461,13 @@ private fun AppNavHost(
                 onDefaultDocumentsTagChanged = settingsViewModel::setDefaultDocumentsTag,
                 onDefaultMangaSeriesChanged = settingsViewModel::setDefaultMangaSeries,
                 onBookFileNameTemplateChanged = settingsViewModel::setBookFileNameTemplate,
-                onDocumentsFileNameTemplateChanged = settingsViewModel::setDocumentsFileNameTemplate,
+                onDocumentsFileNameTemplateChanged =
+                    settingsViewModel::setDocumentsFileNameTemplate,
                 onMangaFileNameTemplateChanged = settingsViewModel::setMangaFileNameTemplate,
                 onDynamicColorChanged = settingsViewModel::setUseDynamicColor,
                 onHapticFeedbackEnabledChanged = settingsViewModel::setEnableHaptics,
-                onBypassVpnForLocalConnectionsChanged = settingsViewModel::setBypassVpnForLocalConnections,
+                onBypassVpnForLocalConnectionsChanged =
+                    settingsViewModel::setBypassVpnForLocalConnections,
                 onClearDownloadCache = settingsViewModel::clearDownloadCache,
                 onClearStatusMessage = settingsViewModel::clearStatusMessage,
                 onThemeChanged = settingsViewModel::setTheme,
@@ -427,7 +477,7 @@ private fun AppNavHost(
                 onCancelPendingRename = settingsViewModel::cancelPendingRename,
                 onLogoutAll = settingsViewModel::logoutAll,
                 onConfirmLogoutAll = settingsViewModel::confirmLogoutAll,
-                onDismissLogoutWarning = settingsViewModel::dismissLogoutWarning,
+                onDismissLogoutWarning = settingsViewModel::dismissLogoutWarning
             )
         }
     }
