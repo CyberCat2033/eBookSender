@@ -8,8 +8,6 @@ import com.cybercat.pocketbooksender.util.ExpiringLruCache
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLDecoder
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -97,9 +95,10 @@ class OpdsRepository @Inject constructor(
         username: String? = null,
         password: String? = null
     ) {
-        val normalizedUrl = normalizeUrl(url)
+        val normalizedUrl = normalizeOpdsUrl(url)
         val sourceTitle = title.ifBlank {
-            runCatching { URL(normalizedUrl).host.removePrefix("www.") }.getOrDefault("OPDS")
+            runCatching { java.net.URL(normalizedUrl).host.removePrefix("www.") }
+                .getOrDefault("OPDS")
         }
 
         sourceDao.upsert(
@@ -120,7 +119,7 @@ class OpdsRepository @Inject constructor(
     }
 
     suspend fun loadCatalog(url: String): OpdsCatalog = withContext(Dispatchers.IO) {
-        val normalizedUrl = normalizeUrl(url)
+        val normalizedUrl = normalizeOpdsUrl(url)
         catalogCache.get(normalizedUrl)?.let { cachedCatalog ->
             return@withContext cachedCatalog
         }
@@ -152,15 +151,15 @@ class OpdsRepository @Inject constructor(
             accept = acquisition.type ?: "*/*"
         )
         try {
-            val fileName = chooseFileName(
+            val fileName = chooseOpdsDownloadFileName(
                 connection = connection,
                 url = resolvedUrl,
                 entry = entry,
                 acquisition = acquisition
             )
             val outputDir = File(context.cacheDir, "opds").apply { mkdirs() }
-            val outputFile = uniqueFile(outputDir, fileName)
-            val tempFile = uniqueFile(outputDir, "${outputFile.name}.download")
+            val outputFile = uniqueOpdsDownloadFile(outputDir, fileName)
+            val tempFile = uniqueOpdsDownloadFile(outputDir, "${outputFile.name}.download")
 
             try {
                 connection.runDisconnectingOnCancellation { ensureActive ->
@@ -232,93 +231,6 @@ class OpdsRepository @Inject constructor(
 
     private fun OpdsLink.resolvedAgainst(baseUrl: String): OpdsLink =
         copy(href = OpdsUrlResolver.resolveUrl(baseUrl, href))
-
-    private fun normalizeUrl(url: String): String {
-        val trimmed = url.trim()
-        if (trimmed.isBlank()) throw IllegalArgumentException("OPDS URL is empty")
-        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            trimmed
-        } else {
-            "https://$trimmed"
-        }
-    }
-
-    private fun chooseFileName(
-        connection: HttpURLConnection,
-        url: String,
-        entry: OpdsEntry,
-        acquisition: OpdsAcquisition
-    ): String {
-        val dispositionName = connection.getHeaderField("Content-Disposition")
-            ?.let(::fileNameFromDisposition)
-        val urlName = runCatching {
-            URLDecoder.decode(URL(url).path.substringAfterLast('/'), Charsets.UTF_8.name())
-        }.getOrNull()?.takeIf { it.isNotBlank() }
-
-        val baseName = dispositionName
-            ?: urlName
-            ?: entry.title.ifBlank { acquisition.title.orEmpty() }
-            ?: "book"
-
-        val sanitized = baseName.sanitizeFileName().ifBlank { "book" }
-        return if (sanitized.bookExtension().isNotBlank()) {
-            sanitized
-        } else {
-            val extension = acquisition.extensionFromType()
-            if (extension.isBlank()) sanitized else "$sanitized.$extension"
-        }
-    }
-
-    private fun fileNameFromDisposition(disposition: String): String? {
-        val utfName = Regex("filename\\*=UTF-8''([^;]+)", RegexOption.IGNORE_CASE)
-            .find(disposition)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.let { URLDecoder.decode(it, Charsets.UTF_8.name()) }
-
-        if (!utfName.isNullOrBlank()) return utfName
-
-        return Regex("filename=\"?([^\";]+)\"?", RegexOption.IGNORE_CASE)
-            .find(disposition)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-    }
-
-    private fun uniqueFile(directory: File, desiredName: String): File {
-        val name = desiredName.sanitizeFileName().ifBlank { "book" }
-        var candidate = File(directory, name)
-        if (!candidate.exists()) return candidate
-
-        val extension = name.bookExtension()
-        val stem = if (extension.isBlank()) name else name.dropLast(extension.length + 1)
-        var index = 2
-        while (candidate.exists()) {
-            val nextName = if (extension.isBlank()) {
-                "$stem-$index"
-            } else {
-                "$stem-$index.$extension"
-            }
-            candidate = File(directory, nextName)
-            index += 1
-        }
-        return candidate
-    }
-
-    private fun String.sanitizeFileName(): String = replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        .replace(Regex("\\s+"), "_")
-        .trim('_', '.', ' ')
-
-    private fun OpdsAcquisition.extensionFromType(): String {
-        val mime = type.orEmpty().lowercase()
-        return when {
-            mime.contains("epub") -> "epub"
-            mime.contains("fb2") -> "fb2"
-            mime.contains("mobipocket") || mime.contains("mobi") -> "mobi"
-            else -> ""
-        }
-    }
 
     private class OpdsDownloadProgressReporter(
         private val totalBytes: Long?,

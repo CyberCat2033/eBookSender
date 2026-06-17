@@ -84,7 +84,7 @@ class MangaRepository @Inject constructor(
     }
 
     suspend fun openSeries(sourceId: String, seriesId: String): MangaSeriesPage {
-        val key = "$sourceId:${seriesId.normalizeCacheKey()}"
+        val key = "$sourceId:${seriesId.mangaSeriesCacheKey()}"
         seriesCache.get(key)?.let { cachedPage ->
             saveSeriesSnapshot(cachedPage.details)
             return cachedPage
@@ -261,18 +261,17 @@ class MangaRepository @Inject constructor(
         seriesId: String,
         error: Throwable
     ): MangaSeriesPage? {
-        if (!error.isHttpNotFound()) return null
+        if (!error.isMangaSeriesNotFound()) return null
 
         val saved = bookmarkDao.findSeries(sourceId, seriesId) ?: return null
-        val candidates = runCatching {
-            searchSeries(sourceId, saved.title)
-        }.getOrDefault(emptyList())
-            .rankForSavedTitle(saved.title)
-            .filterNot { result ->
-                result.seriesId.normalizeCacheKey() ==
-                    seriesId.normalizeCacheKey()
-            }
-            .take(MAX_MOVED_SERIES_CANDIDATES)
+        val candidates = rankRecoveredSeriesCandidates(
+            savedTitle = saved.title,
+            originalSeriesId = seriesId,
+            results = runCatching {
+                searchSeries(sourceId, saved.title)
+            }.getOrDefault(emptyList()),
+            maxCandidates = MAX_MOVED_SERIES_CANDIDATES
+        )
 
         candidates.forEach { candidate ->
             val page = runCatching {
@@ -308,7 +307,7 @@ class MangaRepository @Inject constructor(
             lastCheckedAtMillis = existing?.lastCheckedAtMillis ?: saved.lastCheckedAtMillis
         )
         bookmarkDao.upsert(replacement)
-        if (saved.seriesId.normalizeCacheKey() != details.seriesId.normalizeCacheKey()) {
+        if (saved.seriesId.mangaSeriesCacheKey() != details.seriesId.mangaSeriesCacheKey()) {
             bookmarkDao.deleteSeries(saved.sourceId, saved.seriesId)
         }
     }
@@ -370,39 +369,3 @@ private fun MangaSeriesDetails.toBookmarkEntity(
     lastOpenedAtMillis = now,
     lastCheckedAtMillis = null
 )
-
-private fun String.normalizeCacheKey(): String = trim().trimEnd('/').lowercase()
-
-private fun Throwable.isHttpNotFound(): Boolean =
-    message?.contains("HTTP 404", ignoreCase = true) == true
-
-private fun List<MangaSeriesSearchResult>.rankForSavedTitle(
-    savedTitle: String
-): List<MangaSeriesSearchResult> {
-    val savedKey = savedTitle.mangaTitleMatchKey()
-    if (savedKey.isBlank()) return emptyList()
-
-    return map { result ->
-        result to result.title.mangaTitleMatchScore(savedKey)
-    }
-        .filter { (_, score) -> score > 0 }
-        .sortedWith(
-            compareByDescending<Pair<MangaSeriesSearchResult, Int>> { (_, score) -> score }
-                .thenBy { (result, _) -> result.title.length }
-        )
-        .map { (result, _) -> result }
-        .distinctBy { result -> result.seriesId.normalizeCacheKey() }
-}
-
-private fun String.mangaTitleMatchScore(savedKey: String): Int {
-    val resultKey = mangaTitleMatchKey()
-    if (resultKey.isBlank()) return 0
-    return when {
-        resultKey == savedKey -> 4
-        resultKey.contains(savedKey) -> 3
-        savedKey.contains(resultKey) -> 2
-        else -> 0
-    }
-}
-
-private fun String.mangaTitleMatchKey(): String = lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), "")

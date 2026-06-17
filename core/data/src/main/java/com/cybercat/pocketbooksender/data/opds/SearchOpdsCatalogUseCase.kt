@@ -1,8 +1,6 @@
 package com.cybercat.pocketbooksender.data.opds
 
 import java.io.IOException
-import java.net.URI
-import java.net.URLEncoder
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +28,7 @@ class SearchOpdsCatalogUseCase @Inject constructor(
             Result.success(
                 SearchOpdsCatalogResult(
                     currentUrl = catalogs.first().url,
-                    catalog = mergeSearchCatalogs(
+                    catalog = mergeOpdsSearchCatalogs(
                         title = mergedCatalogTitle,
                         catalogs = catalogs.map(SearchOpdsCatalog::catalog)
                     )
@@ -49,7 +47,7 @@ class SearchOpdsCatalogUseCase @Inject constructor(
         query: String
     ): List<String> {
         val bookSearchUrl = buildSearchUrl(baseUrl, searchLink, query)
-        return (listOf(bookSearchUrl) + bookSearchUrl.flibustaAuthorSearchUrls(query)).distinct()
+        return buildOpdsSearchUrls(bookSearchUrl, query)
     }
 
     private suspend fun buildSearchUrl(
@@ -57,7 +55,7 @@ class SearchOpdsCatalogUseCase @Inject constructor(
         searchLink: OpdsLink,
         query: String
     ): String = withContext(Dispatchers.IO) {
-        val resolvedLink = resolveTemplateUrl(baseUrl, searchLink.href)
+        val resolvedLink = resolveOpdsTemplateUrl(baseUrl, searchLink.href)
         val template = when {
             searchLink.href.contains(SEARCH_TERMS_PLACEHOLDER) -> resolvedLink
 
@@ -70,7 +68,7 @@ class SearchOpdsCatalogUseCase @Inject constructor(
             }
         }
 
-        expandSearchTemplate(template, query)
+        expandOpdsSearchTemplate(template, query)
     }
 
     private suspend fun loadSearchCatalog(searchUrl: String, query: String): SearchOpdsCatalog? {
@@ -86,12 +84,13 @@ class SearchOpdsCatalogUseCase @Inject constructor(
                 ?.firstOrNull { link -> link.href.contains("/opds/authors/", ignoreCase = true) }
 
             if (authorLink == null) {
-                return SearchOpdsCatalog(searchUrl, catalog.filterAuthorEntries(query))
+                return SearchOpdsCatalog(searchUrl, catalog.filterAuthorSearchEntries(query))
             }
 
             SearchOpdsCatalog(
                 url = authorLink.href,
-                catalog = opdsRepository.loadCatalog(authorLink.href).filterAuthorEntries(query)
+                catalog = opdsRepository.loadCatalog(authorLink.href)
+                    .filterAuthorSearchEntries(query)
             )
         } catch (error: CancellationException) {
             throw error
@@ -116,60 +115,11 @@ class SearchOpdsCatalogUseCase @Inject constructor(
                 throw IOException("OpenSearch template was not found")
             }
 
-            return resolveTemplateUrl(url, template)
+            return resolveOpdsTemplateUrl(url, template)
         } finally {
             connection.disconnect()
         }
     }
-
-    private fun resolveTemplateUrl(baseUrl: String, href: String): String {
-        val escapedHref = href
-            .replace("{", "%7B")
-            .replace("}", "%7D")
-        return OpdsUrlResolver.resolveUrl(baseUrl, escapedHref)
-            .replace("%7B", "{")
-            .replace("%7D", "}")
-    }
-
-    private fun mergeSearchCatalogs(title: String, catalogs: List<OpdsCatalog>): OpdsCatalog {
-        if (catalogs.size == 1) return catalogs.first()
-
-        return OpdsCatalog(
-            title = title,
-            entries = catalogs.flatMap { catalog -> catalog.entries },
-            links = catalogs
-                .flatMap { catalog -> catalog.links }
-                .distinctBy { link ->
-                    listOf(link.href, link.rel.orEmpty(), link.type.orEmpty()).joinToString("|")
-                }
-        )
-    }
-
-    private fun OpdsCatalog.filterAuthorEntries(query: String): OpdsCatalog {
-        val tokens = query.searchTokens()
-        if (tokens.size < 2) return this
-
-        val filteredEntries = entries.filter { entry ->
-            val title = entry.title.searchComparableText()
-            tokens.all { token -> token in title }
-        }
-
-        return if (filteredEntries.isEmpty()) {
-            this
-        } else {
-            copy(entries = filteredEntries)
-        }
-    }
-
-    private fun String.searchTokens(): List<String> = trim()
-        .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
-        .replace(Regex("\\s+"), " ")
-        .lowercase()
-        .split(' ')
-        .map { token -> token.trim('-', ' ') }
-        .filter { token -> token.length >= 2 }
-
-    private fun String.searchComparableText(): String = searchTokens().joinToString(" ")
 
     private companion object {
         const val SEARCH_TERMS_PLACEHOLDER = "{searchTerms"
@@ -183,39 +133,3 @@ data class SearchOpdsCatalogResult(val currentUrl: String, val catalog: OpdsCata
 class OpdsSearchCatalogUnavailableException : Exception()
 
 private data class SearchOpdsCatalog(val url: String, val catalog: OpdsCatalog)
-
-private fun expandSearchTemplate(template: String, query: String): String {
-    val encodedQuery = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
-    return template
-        .replace(Regex("\\{searchTerms\\??\\}"), encodedQuery)
-        .replace(Regex("[?&][^?&=]+=\\{[^}]+\\}"), "")
-        .replace(Regex("\\{[^}]+\\}"), "")
-        .replace("?&", "?")
-        .trimEnd('?', '&')
-}
-
-private fun String.flibustaAuthorSearchUrls(query: String): List<String> {
-    val uri = runCatching { URI(this) }.getOrNull() ?: return emptyList()
-    val host = uri.host.orEmpty().lowercase()
-    if ("flibusta" !in host && "flub" !in host) return emptyList()
-
-    val normalizedQuery = query.cleanAuthorSearchQuery()
-    if (normalizedQuery.isBlank()) return emptyList()
-
-    val authorPrefix = normalizedQuery
-        .split(' ')
-        .lastOrNull { token -> token.length >= 2 }
-        ?: return emptyList()
-
-    val baseUrl = "${uri.scheme}://${uri.rawAuthority}"
-    return listOf("$baseUrl/opds/authorsindex/${authorPrefix.urlPathEncode()}")
-}
-
-private fun String.cleanAuthorSearchQuery(): String = trim()
-    .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
-    .replace(Regex("\\s+"), " ")
-    .trim()
-    .lowercase()
-
-private fun String.urlPathEncode(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
-    .replace("+", "%20")

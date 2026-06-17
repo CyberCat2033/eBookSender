@@ -290,8 +290,7 @@ fun SendScreen(
                         ) { triggerRemove ->
                             UploadItemRow(
                                 item = item,
-                                progress =
-                                    runtimeState.uploadProgressById[item.id] ?: item.progress,
+                                progress = runtimeState.progressFor(item.id, item.progress),
                                 documentsTags = state.documentsTags,
                                 mangaSeriesSuggestions = state.mangaSeriesSuggestions,
                                 enableHaptics = state.settings.enableHaptics,
@@ -331,7 +330,8 @@ fun SendScreen(
             ) {
                 UploadProgressOverlay(
                     queue = transferQueue,
-                    progressById = runtimeState.uploadProgressById
+                    currentUploadItemId = runtimeState.currentUploadItemId,
+                    currentUploadProgress = runtimeState.currentUploadProgress
                 )
             }
         }

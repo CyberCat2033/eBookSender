@@ -499,20 +499,25 @@ fun UploadedSection(
 @Composable
 fun UploadProgressOverlay(
     queue: List<UploadItem>,
-    progressById: Map<String, Float>,
+    currentUploadItemId: String?,
+    currentUploadProgress: Float,
     modifier: Modifier = Modifier
 ) {
-    val uploadingItems = queue.filter { it.status == UploadStatus.Uploading }
+    val currentItem = currentUploadItemId?.let { itemId ->
+        queue.firstOrNull { item -> item.id == itemId }
+    } ?: queue.firstOrNull { item -> item.status == UploadStatus.Uploading }
     val uploadedCount = queue.count { it.status == UploadStatus.Uploaded }
     val failedCount = queue.count { it.status == UploadStatus.Failed }
     val totalCount = queue.size
 
     if (totalCount == 0) return
 
-    val activeProgressSum = uploadingItems.sumOf { item ->
-        (progressById[item.id] ?: item.progress).toDouble()
-    }.toFloat()
-    val overallProgress = (uploadedCount + activeProgressSum) / totalCount
+    val activeProgress = if (currentItem?.status == UploadStatus.Uploading) {
+        currentUploadProgress.coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val overallProgress = (uploadedCount + activeProgress) / totalCount
 
     val animatedProgress by animateFloatAsState(
         targetValue = overallProgress,
@@ -524,7 +529,6 @@ fun UploadProgressOverlay(
     )
     val strings = LocalStrings.current
     val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-    val currentItem = uploadingItems.firstOrNull()
 
     Surface(
         modifier = modifier

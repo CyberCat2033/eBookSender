@@ -61,7 +61,7 @@ class TransferViewModel @Inject constructor(
     private val _isConnecting = MutableStateFlow(false)
     private val _isTransferActive = MutableStateFlow(false)
     private val _activeTransferItemIds = MutableStateFlow<Set<String>>(emptySet())
-    private val _uploadProgressById = MutableStateFlow<Map<String, Float>>(emptyMap())
+    private val _currentUploadProgress = MutableStateFlow(ActiveUploadProgress())
     private val _errorState = MutableStateFlow<FtpErrorState?>(null)
     private val _showVpnBypassDialog = MutableStateFlow(false)
     private val _ftpSuggestions =
@@ -71,12 +71,13 @@ class TransferViewModel @Inject constructor(
     val transferRuntimeState: StateFlow<TransferRuntimeUiState> = combine(
         _isTransferActive,
         _activeTransferItemIds,
-        _uploadProgressById
-    ) { isTransferActive, activeTransferItemIds, uploadProgressById ->
+        _currentUploadProgress
+    ) { isTransferActive, activeTransferItemIds, currentUploadProgress ->
         TransferRuntimeUiState(
             isTransferActive = isTransferActive,
             activeTransferItemIds = activeTransferItemIds,
-            uploadProgressById = uploadProgressById
+            currentUploadItemId = currentUploadProgress.itemId,
+            currentUploadProgress = currentUploadProgress.progress
         )
     }.stateIn(
         scope = viewModelScope,
@@ -315,7 +316,7 @@ class TransferViewModel @Inject constructor(
         )
 
         _activeTransferItemIds.value = pending.map { it.id }.toSet()
-        _uploadProgressById.value = pending.associate { item -> item.id to 0f }
+        _currentUploadProgress.value = ActiveUploadProgress()
         _isTransferActive.value = true
         _errorState.value = null
         _showVpnBypassDialog.value = false
@@ -333,9 +334,8 @@ class TransferViewModel @Inject constructor(
     private fun handleTransferEvent(event: TransferEvent) {
         when (event) {
             is TransferEvent.ItemStarted -> {
-                _uploadProgressById.update { current ->
-                    current + (event.itemId to 0f)
-                }
+                _currentUploadProgress.value =
+                    ActiveUploadProgress(itemId = event.itemId, progress = 0f)
                 updateQueuedTransferStatus(
                     itemId = event.itemId,
                     status = UploadStatus.Uploading,
@@ -344,18 +344,22 @@ class TransferViewModel @Inject constructor(
             }
 
             is TransferEvent.ItemProgress -> {
-                _uploadProgressById.update { current ->
-                    if (current[event.itemId] == event.progress) {
+                _currentUploadProgress.update { current ->
+                    if (current.itemId == event.itemId && current.progress == event.progress) {
                         current
                     } else {
-                        current + (event.itemId to event.progress)
+                        ActiveUploadProgress(itemId = event.itemId, progress = event.progress)
                     }
                 }
             }
 
             is TransferEvent.ItemUploaded -> {
-                _uploadProgressById.update { current ->
-                    current + (event.itemId to 1f)
+                _currentUploadProgress.update { current ->
+                    if (current.itemId == event.itemId) {
+                        current.copy(progress = 1f)
+                    } else {
+                        current
+                    }
                 }
                 updateQueuedTransferStatus(
                     itemId = event.itemId,
@@ -365,8 +369,8 @@ class TransferViewModel @Inject constructor(
             }
 
             is TransferEvent.ItemFailed -> {
-                _uploadProgressById.update { current ->
-                    current - event.itemId
+                _currentUploadProgress.update { current ->
+                    if (current.itemId == event.itemId) ActiveUploadProgress() else current
                 }
                 updateQueuedTransferStatus(
                     itemId = event.itemId,
@@ -384,7 +388,7 @@ class TransferViewModel @Inject constructor(
             is TransferEvent.Completed -> {
                 _isTransferActive.value = false
                 _activeTransferItemIds.value = emptySet()
-                _uploadProgressById.value = emptyMap()
+                _currentUploadProgress.value = ActiveUploadProgress()
                 val device = connectionManager.connectedDevice.value
                 if (device != null) {
                     refreshRemoteFolderSuggestions(device)
@@ -493,3 +497,5 @@ sealed interface FtpErrorState {
     object QueueEmpty : FtpErrorState
     object NoPendingFiles : FtpErrorState
 }
+
+private data class ActiveUploadProgress(val itemId: String? = null, val progress: Float = 0f)
