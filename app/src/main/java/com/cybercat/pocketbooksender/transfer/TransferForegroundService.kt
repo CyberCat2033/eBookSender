@@ -35,6 +35,8 @@ class TransferForegroundService : Service() {
 
     @Inject lateinit var localFileResolver: LocalFileResolver
 
+    @Inject lateinit var uploadPreparationUseCase: UploadPreparationUseCase
+
     private val transferNotifications by lazy {
         TransferNotificationManager(
             context = this,
@@ -175,7 +177,7 @@ class TransferForegroundService : Service() {
     ): Result<Unit> {
         val uri = Uri.parse(item.sourceUri)
         val preparedInput = runCatching {
-            prepareUploadInput(uri, item)
+            uploadPreparationUseCase.prepareUploadInput(uri, item)
         }.getOrElse { error ->
             return Result.failure(error)
         }
@@ -221,49 +223,6 @@ class TransferForegroundService : Service() {
         }
     }
 
-    private suspend fun prepareUploadInput(
-        uri: Uri,
-        item: TransferUploadItem
-    ): PreparedUploadInput = withContext(Dispatchers.IO) {
-        if (!item.needsCbzMetadataRewrite()) {
-            return@withContext PreparedUploadInput(
-                uri = uri,
-                tempFile = null,
-                size = localFileResolver.resolveFileSize(uri)
-            )
-        }
-
-        val tempDir = File(cacheDir, "prepared-upload").apply { mkdirs() }
-        val tempFile = File.createTempFile("cbz-metadata-", ".cbz", tempDir)
-
-        try {
-            val rootFolder = contentResolver.openInputStream(uri)?.use { input ->
-                CbzMetadataRewriter.findSingleCommonRootFolder(input)
-            }
-            val source = contentResolver.openInputStream(uri)
-                ?: throw IllegalStateException(
-                    localizationManager.currentStrings.value.get(
-                        "transfer_error_cannot_open_file",
-                        item.originalName
-                    )
-                )
-            source.use { input ->
-                tempFile.outputStream().use { output ->
-                    CbzMetadataRewriter.rewrite(
-                        input = input,
-                        output = output,
-                        metadata = item.toCbzMetadata(),
-                        rootFolder = rootFolder
-                    )
-                }
-            }
-            PreparedUploadInput(uri = uri, tempFile = tempFile, size = tempFile.length())
-        } catch (error: Throwable) {
-            tempFile.delete()
-            throw error
-        }
-    }
-
     private fun notifyProgress(text: String, completed: Int, total: Int) {
         transferNotifications.notifyProgress(text, completed, total)
     }
@@ -281,27 +240,4 @@ class TransferForegroundService : Service() {
             Intent(context, TransferForegroundService::class.java)
                 .putExtra(EXTRA_REQUEST_ID, requestId)
     }
-}
-
-private data class PreparedUploadInput(val uri: Uri, val tempFile: File?, val size: Long) {
-    fun openStream(): InputStream? = tempFile?.inputStream()
-
-    fun cleanup() {
-        tempFile?.delete()
-    }
-}
-
-private fun TransferUploadItem.needsCbzMetadataRewrite(): Boolean =
-    category == BookCategory.Manga && extension.equals("cbz", ignoreCase = true)
-
-private fun TransferUploadItem.toCbzMetadata(): CbzMetadata = CbzMetadata(
-    title = plannedPath.fileNameWithoutExtension().ifBlank { title },
-    series = mangaSeries,
-    number = mangaVolume
-)
-
-private fun String.fileNameWithoutExtension(): String {
-    val fileName = trim('/').substringAfterLast('/')
-    val dotIndex = fileName.lastIndexOf('.')
-    return if (dotIndex > 0) fileName.substring(0, dotIndex) else fileName
 }
