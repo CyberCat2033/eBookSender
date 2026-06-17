@@ -5,8 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.IBinder
+import com.cybercat.pocketbooksender.data.device.DeviceLibraryRefresher
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
-import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
 import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.network.isLocalNetworkBypassBlocked
@@ -30,7 +30,7 @@ class TransferForegroundService : Service() {
 
     @Inject lateinit var localizationManager: LocalizationManager
 
-    @Inject lateinit var rescanCoordinator: PocketBookRescanCoordinator
+    @Inject lateinit var deviceLibraryRefresher: DeviceLibraryRefresher
 
     @Inject lateinit var downloadCacheManager: DownloadCacheManager
 
@@ -161,7 +161,7 @@ class TransferForegroundService : Service() {
             }
         } finally {
             if (uploaded > 0) {
-                rescanCoordinator.requestRescanAndWait(request.device)
+                deviceLibraryRefresher.refreshAndWait(request.device)
             }
             transferCoordinator.emit(
                 TransferEvent.Completed(

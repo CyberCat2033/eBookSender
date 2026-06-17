@@ -1,13 +1,13 @@
 package com.cybercat.pocketbooksender.feature.transfer
 
 import com.cybercat.pocketbooksender.model.AppSettings
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.model.UploadItem
 
 data class TransferUiState(
     val ftpInput: String = "",
     val isConnecting: Boolean = false,
-    val connectedDevice: PocketBookDevice? = null,
+    val connectedDevice: RemoteDevice? = null,
     val isTransferActive: Boolean = false,
     val activeTransferItemIds: Set<String> = emptySet(),
     val uploadProgressById: Map<String, Float> = emptyMap(),

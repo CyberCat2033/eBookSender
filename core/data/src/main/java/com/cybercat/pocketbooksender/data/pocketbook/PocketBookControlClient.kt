@@ -1,7 +1,7 @@
 package com.cybercat.pocketbooksender.data.pocketbook
 
 import com.cybercat.pocketbooksender.data.network.LocalDeviceNetworkProvider
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -15,54 +15,51 @@ import kotlinx.coroutines.withContext
 class PocketBookControlClient @Inject constructor(
     private val localDeviceNetworkProvider: LocalDeviceNetworkProvider
 ) {
-    suspend fun requestDatabaseRescan(device: PocketBookDevice): Result<Unit> =
+    suspend fun requestDatabaseRescan(device: RemoteDevice): Result<Unit> =
         request(device = device, method = "POST", path = "rescan")
 
-    private suspend fun request(
-        device: PocketBookDevice,
-        method: String,
-        path: String
-    ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val connection =
-                (
-                    localDeviceNetworkProvider.openConnection(
-                        device.controlUrl(path)
-                    ) as HttpURLConnection
-                    )
-                    .apply {
-                        requestMethod = method
-                        connectTimeout = CONNECT_TIMEOUT_MILLIS
-                        readTimeout = READ_TIMEOUT_MILLIS
-                        useCaches = false
-                        setRequestProperty("Cache-Control", "no-cache")
-                        setRequestProperty("Accept", "application/json")
+    private suspend fun request(device: RemoteDevice, method: String, path: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val connection =
+                    (
+                        localDeviceNetworkProvider.openConnection(
+                            device.controlUrl(path)
+                        ) as HttpURLConnection
+                        )
+                        .apply {
+                            requestMethod = method
+                            connectTimeout = CONNECT_TIMEOUT_MILLIS
+                            readTimeout = READ_TIMEOUT_MILLIS
+                            useCaches = false
+                            setRequestProperty("Cache-Control", "no-cache")
+                            setRequestProperty("Accept", "application/json")
+                        }
+
+                try {
+                    val code = connection.responseCode
+                    runCatching {
+                        if (code in 200..299) {
+                            connection.inputStream
+                        } else {
+                            connection.errorStream
+                        }?.close()
                     }
-
-            try {
-                val code = connection.responseCode
-                runCatching {
-                    if (code in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream
-                    }?.close()
+                    if (code !in 200..299) {
+                        throw IOException("PocketBook control $method /$path failed: HTTP $code")
+                    }
+                } finally {
+                    connection.disconnect()
                 }
-                if (code !in 200..299) {
-                    throw IOException("PocketBook control $method /$path failed: HTTP $code")
-                }
-            } finally {
-                connection.disconnect()
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
             }
-        }.onFailure { error ->
-            if (error is CancellationException) throw error
         }
-    }
 
-    private fun PocketBookDevice.controlUrl(path: String): URL =
+    private fun RemoteDevice.controlUrl(path: String): URL =
         URL("http", host, controlPort(), "/$path")
 
-    private fun PocketBookDevice.controlPort(): Int =
+    private fun RemoteDevice.controlPort(): Int =
         (port + 1).takeIf { it in 1..MAX_PORT } ?: DEFAULT_CONTROL_PORT
 
     private companion object {

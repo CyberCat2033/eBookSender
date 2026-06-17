@@ -7,7 +7,8 @@ import com.cybercat.pocketbooksender.domain.contentExtension
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.DeviceCatalog
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.DeviceProfile
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,8 +32,7 @@ import kotlinx.coroutines.withContext
 @Singleton
 class DeviceCatalogRepository @Inject constructor(
     private val ftpGateway: FtpGateway,
-    private val databaseReader: PocketBookDatabaseReader,
-    private val catalogTreeBuilder: CatalogTreeBuilder,
+    private val pocketBookCatalogSource: PocketBookCatalogSource,
     private val catalogFolderScanner: CatalogFolderScanner,
     private val connectionManager: ConnectionManager,
     private val settingsRepository: SettingsRepository
@@ -82,7 +82,7 @@ class DeviceCatalogRepository @Inject constructor(
             .launchIn(scope)
     }
 
-    suspend fun refresh(device: PocketBookDevice) {
+    suspend fun refresh(device: RemoteDevice) {
         _catalog.update { it.copy(isLoading = true) }
         val settings = settingsRepository.settings.first()
         val result = loadMutex.withLock {
@@ -122,7 +122,7 @@ class DeviceCatalogRepository @Inject constructor(
         )
     }
 
-    suspend fun deleteFiles(device: PocketBookDevice, paths: List<String>) =
+    suspend fun deleteFiles(device: RemoteDevice, paths: List<String>) =
         withContext(Dispatchers.IO) {
             val settings = settingsRepository.settings.first()
             val safePaths = paths.map { validateCatalogDeletePath(it, settings) }.distinct()
@@ -229,35 +229,55 @@ class DeviceCatalogRepository @Inject constructor(
         manga.forEach { group -> addCandidate(group.path, group.files) }
     }
 
-    suspend fun load(device: PocketBookDevice, settings: AppSettings): DeviceCatalog =
+    suspend fun load(device: RemoteDevice, settings: AppSettings): DeviceCatalog =
         withContext(Dispatchers.IO) {
-            val databaseCatalog = runCatching { loadFromPocketBookDatabase(device, settings) }
-                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
-                .getOrNull()
-            if (databaseCatalog != null && !databaseCatalog.isEmpty) {
-                databaseCatalog
-            } else {
-                loadFromFolders(device, settings)
+            val scannedAtMillis = System.currentTimeMillis()
+            val sources = when (device.profile) {
+                DeviceProfile.PocketBook -> listOf(
+                    pocketBookCatalogSource,
+                    catalogFolderScanner
+                )
+
+                DeviceProfile.GenericFtp -> listOf(catalogFolderScanner)
             }
+            loadFromSources(
+                sources = sources,
+                device = device,
+                settings = settings,
+                scannedAtMillis = scannedAtMillis
+            )
         }
 
-    private suspend fun loadFromPocketBookDatabase(
-        device: PocketBookDevice,
-        settings: AppSettings
-    ): DeviceCatalog = catalogTreeBuilder.buildFromDatabaseFiles(
-        files = databaseReader.readCatalogFiles(device, settings),
-        settings = settings,
-        scannedAtMillis = System.currentTimeMillis()
-    )
-
-    private suspend fun loadFromFolders(
-        device: PocketBookDevice,
-        settings: AppSettings
-    ): DeviceCatalog = catalogFolderScanner.scan(
-        device = device,
-        settings = settings,
-        scannedAtMillis = System.currentTimeMillis()
-    )
+    private suspend fun loadFromSources(
+        sources: List<DeviceCatalogSource>,
+        device: RemoteDevice,
+        settings: AppSettings,
+        scannedAtMillis: Long
+    ): DeviceCatalog {
+        var firstError: Throwable? = null
+        sources.forEach { source ->
+            runCatching {
+                source.load(
+                    device = device,
+                    settings = settings,
+                    scannedAtMillis = scannedAtMillis
+                )
+            }
+                .onSuccess { catalog ->
+                    if (!catalog.isEmpty || source == catalogFolderScanner) {
+                        return catalog
+                    }
+                }
+                .onFailure { error ->
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    if (firstError == null) {
+                        firstError = error
+                    }
+                }
+        }
+        firstError?.let { throw it }
+        return DeviceCatalog(scannedAtMillis = scannedAtMillis)
+    }
 
     private data class CatalogDeleteFolderCandidate(val path: String, val filePaths: Set<String>)
 

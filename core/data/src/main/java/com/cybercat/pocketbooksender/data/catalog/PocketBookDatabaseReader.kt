@@ -4,9 +4,10 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.data.pocketbook.PocketBookLibraryPaths
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.DEFAULT_FTP_RELATIVE_ROOT_PATH
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
 import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -14,15 +15,13 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val POCKET_BOOK_STORAGE_PREFIX = "/mnt/ext1/"
-
 @Singleton
 class PocketBookDatabaseReader @Inject constructor(
     @ApplicationContext private val context: Context,
     private val ftpGateway: FtpGateway
 ) {
     internal suspend fun readCatalogFiles(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         settings: AppSettings
     ): List<DbCatalogFile> {
         val dbFile = downloadDatabaseSnapshot(
@@ -31,18 +30,19 @@ class PocketBookDatabaseReader @Inject constructor(
         return readDatabaseFiles(dbFile, device, settings)
     }
 
-    private suspend fun downloadDatabaseSnapshot(device: PocketBookDevice): File {
+    private suspend fun downloadDatabaseSnapshot(device: RemoteDevice): File {
         val directory = File(context.cacheDir, CACHE_DIRECTORY).apply { mkdirs() }
 
         DATABASE_FILES.forEach { name ->
             File(directory, name).delete()
         }
 
-        val dbFile = File(directory, DATABASE_NAME)
+        val dbFile = File(directory, PocketBookLibraryPaths.DATABASE_NAME)
         dbFile.outputStream().use { outputStream ->
             ftpGateway.downloadFile(
                 device = device,
-                remoteRelativePath = "$REMOTE_DATABASE_DIRECTORY/$DATABASE_NAME",
+                remoteRelativePath =
+                    "${PocketBookLibraryPaths.REMOTE_DATABASE_DIRECTORY}/${PocketBookLibraryPaths.DATABASE_NAME}",
                 output = outputStream
             ).getOrThrow()
         }
@@ -52,7 +52,8 @@ class PocketBookDatabaseReader @Inject constructor(
             file.outputStream().use { outputStream ->
                 ftpGateway.downloadFile(
                     device = device,
-                    remoteRelativePath = "$REMOTE_DATABASE_DIRECTORY/$name",
+                    remoteRelativePath =
+                        "${PocketBookLibraryPaths.REMOTE_DATABASE_DIRECTORY}/$name",
                     output = outputStream
                 ).onFailure {
                     file.delete()
@@ -65,7 +66,7 @@ class PocketBookDatabaseReader @Inject constructor(
 
     private fun readDatabaseFiles(
         dbFile: File,
-        device: PocketBookDevice,
+        device: RemoteDevice,
         settings: AppSettings
     ): List<DbCatalogFile> {
         val database = SQLiteDatabase.openDatabase(
@@ -95,15 +96,14 @@ class PocketBookDatabaseReader @Inject constructor(
         }
     }
 
-    private fun Cursor.toDbCatalogFiles(storageRootPrefix: String): List<DbCatalogFile> {
-        return buildList {
+    private fun Cursor.toDbCatalogFiles(storageRootPrefix: String): List<DbCatalogFile> =
+        buildList {
             while (moveToNext()) {
                 runCatching { toDbCatalogFile(storageRootPrefix) }
                     .getOrNull()
                     ?.let(::add)
             }
         }
-    }
 
     private fun Cursor.requireCatalogShape() {
         val missingColumns = REQUIRED_CATALOG_COLUMNS.filter { getColumnIndex(it) < 0 }
@@ -146,11 +146,12 @@ class PocketBookDatabaseReader @Inject constructor(
 
     private companion object {
         const val CACHE_DIRECTORY = "pocketbook-catalog"
-        const val REMOTE_DATABASE_DIRECTORY = "system/explorer-3"
-        const val DATABASE_NAME = "explorer-3.db"
 
-        val OPTIONAL_DATABASE_FILES = listOf("$DATABASE_NAME-wal", "$DATABASE_NAME-shm")
-        val DATABASE_FILES = listOf(DATABASE_NAME) + OPTIONAL_DATABASE_FILES
+        val OPTIONAL_DATABASE_FILES = listOf(
+            "${PocketBookLibraryPaths.DATABASE_NAME}-wal",
+            "${PocketBookLibraryPaths.DATABASE_NAME}-shm"
+        )
+        val DATABASE_FILES = listOf(PocketBookLibraryPaths.DATABASE_NAME) + OPTIONAL_DATABASE_FILES
 
         val CATALOG_QUERY = """
             SELECT
@@ -185,12 +186,13 @@ class PocketBookDatabaseReader @Inject constructor(
         private val REQUIRED_CATALOG_COLUMNS = listOf("folder", "filename")
     }
 
-    private class UnsupportedCatalogDatabaseException(message: String) : IllegalStateException(message)
+    private class UnsupportedCatalogDatabaseException(message: String) :
+        IllegalStateException(message)
 }
 
-private fun PocketBookDevice.storageRootPrefix(settings: AppSettings): String {
+private fun RemoteDevice.storageRootPrefix(settings: AppSettings): String {
     val mountRoot = normalizeFtpRootPath(rootPath).takeUnless { it == "/" }
-        ?: POCKET_BOOK_STORAGE_PREFIX.trimEnd('/')
+        ?: PocketBookLibraryPaths.STORAGE_PREFIX.trimEnd('/')
     val relativeRoot = normalizeFtpRelativeRootPath(settings.rootPath)
     return if (relativeRoot.isBlank()) {
         "$mountRoot/"

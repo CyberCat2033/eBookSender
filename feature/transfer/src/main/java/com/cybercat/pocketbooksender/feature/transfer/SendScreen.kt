@@ -351,7 +351,8 @@ private fun AnimatedRemovalItem(
         if (clearTrigger > lastSeenClearTrigger && visible && clearInProgress) {
             lastSeenClearTrigger = clearTrigger
             delay(
-                minOf(staggerIndex, QueueClearMaxStaggeredRows).toLong() * QueueClearStaggerMillis
+                minOf(staggerIndex, QUEUE_CLEAR_MAX_STAGGERED_ROWS).toLong() *
+                    QUEUE_CLEAR_STAGGER_MILLIS
             )
             triggeredByClear = true
             visible = false
@@ -362,7 +363,7 @@ private fun AnimatedRemovalItem(
 
     LaunchedEffect(visible) {
         if (!visible && !triggeredByClear) {
-            delay(QueueSingleRemoveMillis)
+            delay(QUEUE_SINGLE_REMOVE_MILLIS)
             onRemoved()
         }
     }

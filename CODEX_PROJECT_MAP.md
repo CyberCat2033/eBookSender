@@ -6,20 +6,20 @@ This file helps Codex navigate the project quickly and edit files safely. Keep i
 
 ## Project overview
 
-PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Material 3, Hilt, Room, DataStore, FTP integration, OPDS browsing, foreground manga/download transfer support, persisted upload queue state, and runtime localization.
+PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Material 3, Hilt, Room, DataStore, FTP integration, automatic remote-device profile detection, OPDS browsing, foreground manga/download transfer support, persisted upload queue state, and runtime localization. PocketBook remains the primary optimized device profile; generic FTP devices are supported through folder scanning and no-op library refresh.
 
 ## Gradle modules
 
 - `:app` - Android application entry point, DI setup, navigation shell, metadata extraction, transfer and manga foreground services, persisted queue implementation, app resources, manifest, and launcher assets.
-- `:core:model` - shared app models such as upload items, settings, device catalog, categories, and PocketBook device data.
+- `:core:model` - shared app models such as upload items, settings, device catalog, categories, `RemoteDevice`, and `DeviceProfile`.
 - `:core:common` - common utilities, constants, formatting helpers, coroutine helpers, result helpers, and small shared primitives.
 - `:core:domain` - pure domain logic: FTP URL parsing, file classification, path planning, filename sanitizing, book formats, and natural sorting.
 - `:core:database` - Room database, DAOs, entities, and type converters.
 - `:core:datastore` - DataStore-backed settings repository.
 - `:core:network` - OPDS parsing/models/download formats and manga source adapters such as Com-X.
-- `:core:data` - repositories and data orchestration for catalog, FTP, OPDS, manga, transfer, connection management, and PocketBook control.
+- `:core:data` - repositories and data orchestration for catalog, FTP, OPDS, manga, transfer, connection management, automatic device profile detection, profile-aware library refresh, and PocketBook-specific control.
 - `:core:ui` - shared Compose UI, Material 3 theme, animated dialogs, status components, remote covers, bitmap cache, localization, gestures, and haptics.
-- `:feature:catalog` - PocketBook catalog screen, state, components (split into `CatalogComponents.kt`, `CatalogConstants.kt`, `CatalogExtensions.kt`), selection, deletion, and catalog ViewModel.
+- `:feature:catalog` - device catalog screen, state, components (split into `CatalogComponents.kt`, `CatalogConstants.kt`, `CatalogExtensions.kt`), selection, deletion, and catalog ViewModel.
 - `:feature:manga` - manga pane, state, components (split into `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`, `MangaSubscriptionUpdatesDialog.kt`), selection behavior, and manga ViewModel.
 - `:feature:opds` - Web/OPDS screen, OPDS components (split into `OpdsComponents.kt`, `OpdsDialogs.kt`, `OpdsEntryItems.kt`), state, navigation, auth/download controllers, and ViewModel.
 - `:feature:settings` - settings screen, state, components and dialogs (split into `SettingsScreen.kt`, `SettingsComponents.kt`, `SettingsDialogs.kt`, `StorageSettingsSection.kt`, `NamingSettingsSection.kt`, `InterfaceSettingsSection.kt`, `MaintenanceSettingsSection.kt`), language and folder/template settings, and ViewModel.
@@ -32,7 +32,8 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `gradle/libs.versions.toml` - dependency and plugin versions.
 - `build.gradle.kts` - root Gradle plugin declarations.
 - `app/build.gradle.kts` - app configuration and dependencies.
-- `core/model/src/main/java/com/cybercat/pocketbooksender/model/AppSettings.kt` - persisted user settings model, shared FTP mount/relative-root path normalization, folder/template preferences, theme/haptics, localization, and local PocketBook VPN-bypass behavior.
+- `core/model/src/main/java/com/cybercat/pocketbooksender/model/AppSettings.kt` - persisted user settings model, shared FTP mount/relative-root path normalization, folder/template preferences, theme/haptics, localization, and local-device VPN-bypass behavior.
+- `core/model/src/main/java/com/cybercat/pocketbooksender/model/RemoteDevice.kt` - connected remote FTP device model, detected `DeviceProfile`, profile-derived capabilities, working-root path, and display FTP URL.
 - `core/common/src/main/java/com/cybercat/pocketbooksender/network/LocalNetworkBypassUnavailableException.kt` - shared warning error for Android/VPN policies that block optional local-route bypass.
 - `core/model/src/main/java/com/cybercat/pocketbooksender/model/UploadItemEntity.kt` - serializable app-local upload queue persistence entity and mappers; runtime-only fields such as upload progress and `Bitmap` previews are not persisted.
 - `app/src/main/AndroidManifest.xml` - Android components, permissions, intent filters, and services.
@@ -53,12 +54,17 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/MangaArchiveMetadataParser.kt` - CBZ/CBR preview extraction using ZIP/RAR format detection and bounded image decoding.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/MetadataPreviewDecoder.kt` - shared bounded bitmap preview decoder for local metadata parsers.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/MobiMetadataParser.kt` - bounded PalmDB/MOBI/EXTH parser for MOBI/AZW3 title, author, publisher/year/language, and cover image records.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/transfer/ConnectionManager.kt` - shared PocketBook connection state.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogRepository.kt` - PocketBook catalog repository; coordinates catalog state, deletion, database reader, tree builder, and FTP folder fallback scanner.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/transfer/ConnectionManager.kt` - shared remote-device connection state.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/device/DeviceProfileDetector.kt` - automatic profile detector; probes PocketBook library DB visibility after FTP connection and falls back to `GenericFtp`.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/device/DeviceLibraryRefresher.kt` - profile-aware library refresh boundary; delegates PocketBook rescan and returns success for generic FTP devices.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogRepository.kt` - profile-aware catalog repository; coordinates catalog state, deletion, PocketBook DB source, and FTP folder source.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogSource.kt` - catalog source interface used by profile-specific and generic catalog loaders.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/PocketBookCatalogSource.kt` - PocketBook catalog source that builds `DeviceCatalog` from the `explorer-3.db` snapshot.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/ftp/CommonsNetFtpGateway.kt` - Apache Commons Net FTP gateway; opens the FTP mount root from the link, then creates/opens the Settings relative root where the app hierarchy lives.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/pocketbook/PocketBookLibraryPaths.kt` - shared PocketBook library database paths and storage prefix used by profile detection and database reading.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/PocketBookDatabaseReader.kt` - PocketBook `explorer-3.db` snapshot reader; downloads the SQLite database files from the FTP mount root, opens the local copy read-only, and maps cursor rows under the Settings relative root to catalog file records.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogTreeBuilder.kt` - pure catalog tree builder for database records; filters supported file types, deduplicates PocketBook book records, maps metadata to `CatalogFile`, and groups Books/Documents/Manga with natural sorting.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogFolderScanner.kt` - FTP folder fallback scanner for catalog loading when the PocketBook SQLite database is unavailable or empty.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogFolderScanner.kt` - generic FTP folder catalog source and PocketBook fallback when the SQLite database is unavailable or empty.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/DownloadOpdsEntriesUseCase.kt` - OPDS multi-entry download interactor; selects supported acquisitions, coordinates parallel publication downloads, reports each completed file through a callback so cancellation keeps already downloaded files, and returns downloaded files plus per-entry failure counts to the OPDS download controller.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/SearchOpdsCatalogUseCase.kt` - OPDS search interactor; builds search URLs, handles catalog/author-index fallback loading, merges search catalogs, preserves cancellation/auth failures, and returns a search result catalog to the OPDS ViewModel.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/MatchOpdsAuthSourceUseCase.kt` - OPDS auth-source resolver; returns the saved `OpdsSource` whose host matches the URL that raised `OpdsAuthenticationRequiredException`, so the ViewModel can open the credentials dialog for the correct source.
@@ -67,7 +73,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsCredentialsProviderImpl.kt` - Room-backed OPDS credentials provider that matches saved source credentials by request host.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsHttpClient.kt` - OPDS `HttpURLConnection` boundary; applies Accept/User-Agent headers, Basic auth from URLs or saved source credentials, manual redirects, timeouts, and HTTP status validation.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsUrlResolver.kt` - shared OPDS relative URL resolver used by catalog links, acquisitions, redirects, and search template resolution.
-- `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service; coordinates service lifecycle, wake lock, transfer requests, completion rescan, and OPDS/manga app-cache cleanup after successful uploads.
+- `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service; coordinates service lifecycle, wake lock, transfer requests, profile-aware library refresh, and OPDS/manga app-cache cleanup after successful uploads.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferNotificationManager.kt` - notification channel, progress notification, and minimized-app completion notification helper for foreground FTP uploads.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/DownloadCacheManager.kt` - shared app-local OPDS/manga download-cache cleanup helper used by transfer completion and queue removal.
 - `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded, supports user cancellation, and adds fully completed chapters to the upload queue.
@@ -82,12 +88,13 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSourceRegistry.kt` - sorted source adapter registry that exposes `MangaSourceSummary` data and resolves source adapters by id for repository/downloader callers.
 - `app/src/main/java/com/cybercat/pocketbooksender/di/MangaSourceModule.kt` - collects every installed manga source adapter into a Hilt set of `HtmlMangaSourceAdapter` using multibindings.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/NetworkStateChecker.kt` - Android connectivity helper used to avoid manga retry loops while no active internet-capable network is available.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/LocalDeviceNetworkProvider.kt` - Android network route helper for optional VPN bypass on local PocketBook FTP and control HTTP rescan requests, including a bind probe before using a direct Wi-Fi/Ethernet route.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/LocalDeviceNetworkProvider.kt` - Android network route helper for optional VPN bypass on local FTP and device library-refresh requests, including a bind probe before using a direct Wi-Fi/Ethernet route.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSelectionKeys.kt` - shared stable manga selection keys used by subscription update UI and background download completion.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaArchiveHelper.kt` - packaging tool for creating CBZ/ZIP files from downloaded manga page images.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaAdapter.kt` - Com-X source adapter; owns the `HtmlMangaSourceAdapter` contract and delegates HTTP/session work plus HTML parsing.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaHttpClient.kt` - Com-X HTTP/session boundary for `HttpURLConnection`, WebView cookies, guard challenge handling, image downloads, and archive authorization/downloads.
-- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHtmlParser.kt` - Com-X HTML parser facade; keeps guard detection and series details/chapter-list parsing while delegating search and reader-page extraction.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHtmlParser.kt` - Com-X HTML parser facade; keeps guard detection while delegating search, series-page, and reader-page extraction.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxSeriesPageParser.kt` - Com-X series page parser for series details and chapter-list extraction from `window.__DATA__` or reader links.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxSearchParser.kt` - Com-X search parser for readed blocks, poster links, and JSON-LD search-result fallbacks.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxReaderPageParser.kt` - Com-X reader-page parser for chapter image extraction from `window.__DATA__`, image tags, `srcset`, and script URLs.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxParsingHelpers.kt` - shared Com-X parser helpers for URL ownership/normalization, title cleanup, JSON field/window-data extraction, and image URL handling.

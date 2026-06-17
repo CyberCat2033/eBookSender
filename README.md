@@ -1,8 +1,9 @@
 # PocketBook Sender Android App
 
-Android client for sending books to the PocketBook FTP app in this repository.
+Android client for sending books to FTP-capable reading devices, with PocketBook as the primary
+optimized platform.
 
-Current status: usable Compose MVP with QR/manual connection input, real FTP availability checks, file/share intake, default classification, path planning, metadata previews, PocketBook catalog browsing, configurable OPDS sources, OPDS download-to-queue, native Com-X manga search/download, DataStore settings, Room schema, and FTP atomic upload gateway.
+Current status: usable Compose MVP with QR/manual connection input, real FTP availability checks, automatic device profile detection, file/share intake, default classification, path planning, metadata previews, device catalog browsing with PocketBook database metadata when available, configurable OPDS sources, OPDS download-to-queue, native Com-X manga search/download, DataStore settings, Room schema, and FTP atomic upload gateway.
 
 ## Project Layout
 
@@ -17,10 +18,11 @@ The first iteration is intentionally a single Android module with package bounda
 Important packages:
 
 - `ui` - Compose app shell, navigation, screens, ViewModel.
-- `model` - app models and enums.
+- `model` - app models and enums, including remote device profiles.
 - `domain` - file classification, FTP URL parsing, filename/path planning.
-- `data/catalog` - PocketBook library database snapshot loading, parsing, and FTP folder fallback.
+- `data/catalog` - profile-aware device catalog loading, including PocketBook library database parsing and FTP folder scanning.
 - `data/ftp` - FTP gateway based on Apache Commons Net.
+- `data/pocketbook` / `data/device` - PocketBook-specific profile helpers, automatic device profile detection, and profile-aware library refresh.
 - `data/opds` - OPDS model/parser/repository for saved sources, browsing, and downloads.
 - `data/database` - Room schema for devices, OPDS sources, and upload queue.
 - `data/settings` - DataStore preferences.
@@ -33,6 +35,7 @@ Important packages:
 - Scan QR with Google Code Scanner or paste an FTP link/IP manually.
 - Pressing `Connect` with an empty FTP field launches the QR scanner.
 - Pressing `Connect` with a non-empty FTP field parses the address, logs in anonymously, opens the FTP root from the link, creates/opens the relative root path from Settings, and runs an FTP `LIST` check before the device is considered connected.
+- After connection succeeds, the app automatically detects a device profile. PocketBook is selected when the PocketBook library database path is visible; otherwise the device is treated as generic FTP.
 - Accept files from Android picker.
 - Accept shared files through `ACTION_SEND` / `ACTION_SEND_MULTIPLE`.
 - Classify files by extension:
@@ -56,8 +59,8 @@ Important packages:
   - Documents default: `{title}`
   - Manga default: `{series}_{volume}`
   - Supported tokens: `{title}`, `{author}`, `{tag}`, `{series}`, `{volume}`, `{year}`, `{index}`, `{publisher}`, `{ext}`, `{original}`.
-- Edit `Documents` tags directly in queue items. Suggestions are loaded only from PocketBook folders under `/Documents`.
-- Edit Manga series directly in queue items. Suggestions are loaded only from PocketBook folders under `/Manga`.
+- Edit `Documents` tags directly in queue items. Suggestions are loaded from device folders under `/Documents`.
+- Edit Manga series directly in queue items. Suggestions are loaded from device folders under `/Manga`.
 - Per-item category/tag/series editors are collapsed by default. Queue items show only a compact type summary until expanded.
 - When multiple manga files are in the active queue, show a batch editor that applies one Manga series to all active manga items at once.
 - Hide uploaded files from the active queue and show them in a collapsed `Uploaded` section.
@@ -65,9 +68,9 @@ Important packages:
 - Queue cards animate when uploaded items leave the active list.
 - Upload execution runs through `TransferForegroundService`, so a user-started transfer continues when the app is backgrounded.
 - Transfer progress is shown through the foreground-service notification; completion notifications are posted only when the app is minimized/backgrounded. Android 13+ notification permission is requested at app start.
-- Read PocketBook storage into the `Catalog` tab without downloading book contents:
-  - primary source is PocketBook's `system/explorer-3/explorer-3.db` library database, downloaded as a local snapshot together with `-wal` and `-shm`;
-  - FTP folder scanning remains as fallback when the database snapshot cannot be loaded;
+- Read connected device storage into the `Catalog` tab without downloading book contents:
+  - PocketBook profile uses `system/explorer-3/explorer-3.db` as the primary source, downloaded as a local snapshot together with `-wal` and `-shm`;
+  - FTP folder scanning remains as fallback for PocketBook and is the primary source for generic FTP devices;
   - `Books` are grouped by author folder or database author metadata;
   - `Documents` is grouped by tag folders;
   - `Manga` is grouped by series folders with the latest file shown.
@@ -125,12 +128,12 @@ CBR handling:
   - archives whose pages all live under one common root folder have that internal root renamed to the final planned filename.
 - Manga archive format is detected by file signature, not only extension. A `.cbr` file that is actually ZIP is treated like CBZ.
 - Current RAR support is limited to RAR4 and lower. RAR5 archives should be uploaded as-is unless another extraction backend is added later.
-- CBR-to-CBZ conversion is intentionally not exposed anymore; conversion was removed as unnecessary for the current PocketBook flow.
+- CBR-to-CBZ conversion is intentionally not exposed anymore; conversion was removed as unnecessary for the current device upload flow.
 - Replace spaces in standard book filenames with underscores.
 - Upload over FTP using temp file + rename:
   - `.Title.epub.uploading`
   - `Title.epub`
-- OPDS books and manga chapters downloaded through the `Web` tab are stored in app cache while queued, then their cached source files are deleted after successful upload to the PocketBook.
+- OPDS books and manga chapters downloaded through the `Web` tab are stored in app cache while queued, then their cached source files are deleted after successful upload to the device.
 - Folder renaming on the device is validated before execution:
   - Checks if the source folder exists on the device (using CWD and PWD). If it does not exist (e.g. for a new user), the rename operation is skipped on the device and treated as successful, allowing new folders to be created dynamically on the fly during upload.
   - Detects name conflict errors (like FTP `550`) and presents a user-friendly error message rather than a generic failure alert.

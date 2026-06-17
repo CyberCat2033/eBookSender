@@ -1,7 +1,7 @@
 package com.cybercat.pocketbooksender.ui
 
 import com.cybercat.pocketbooksender.localization.AppStrings
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.network.isLocalNetworkBypassBlocked
 import java.io.InterruptedIOException
 import java.net.ConnectException
@@ -13,11 +13,7 @@ import javax.inject.Singleton
 
 @Singleton
 class FtpErrorMapper @Inject constructor() {
-    fun mapConnectionError(
-        error: Throwable,
-        device: PocketBookDevice,
-        strings: AppStrings
-    ): String {
+    fun mapConnectionError(error: Throwable, device: RemoteDevice, strings: AppStrings): String {
         val causes = error.causalChain()
         val reason = when {
             error.isLocalNetworkBypassBlocked() ->

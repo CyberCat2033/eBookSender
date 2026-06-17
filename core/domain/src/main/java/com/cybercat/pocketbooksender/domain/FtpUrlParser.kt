@@ -1,11 +1,11 @@
 package com.cybercat.pocketbooksender.domain
 
 import android.net.Uri
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
 
 object FtpUrlParser {
-    fun parse(input: String): Result<PocketBookDevice> = runCatching {
+    fun parse(input: String): Result<RemoteDevice> = runCatching {
         val raw = input.trim()
         require(raw.isNotBlank()) { "FTP URL is empty" }
 
@@ -22,7 +22,7 @@ object FtpUrlParser {
         val username = uri.userInfo?.substringBefore(':')?.ifBlank { "anonymous" } ?: "anonymous"
         val rootPath = normalizeFtpRootPath(uri.path.orEmpty())
 
-        PocketBookDevice(
+        RemoteDevice(
             host = host,
             port = port,
             username = username,

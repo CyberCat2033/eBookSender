@@ -3,11 +3,11 @@ package com.cybercat.pocketbooksender.feature.catalog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
-import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
+import com.cybercat.pocketbooksender.data.device.DeviceLibraryRefresher
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.DeviceCatalog
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -20,12 +20,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
+@Suppress("ktlint:standard:backing-property-naming")
 class CatalogViewModel @Inject constructor(
     private val deviceCatalogRepository: DeviceCatalogRepository,
     private val connectionManager: ConnectionManager,
     private val settingsRepository: SettingsRepository,
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
-    private val rescanCoordinator: PocketBookRescanCoordinator,
+    private val deviceLibraryRefresher: DeviceLibraryRefresher
 ) : ViewModel() {
 
     private val _isEditMode = MutableStateFlow(false)
@@ -42,10 +43,11 @@ class CatalogViewModel @Inject constructor(
         _isDeleting,
         _deleteErrorMessage
     ) { args ->
-        val device = args[0] as PocketBookDevice?
+        val device = args[0] as RemoteDevice?
         val catalog = args[1] as DeviceCatalog
         val settings = args[2] as AppSettings
         val isEdit = args[3] as Boolean
+
         @Suppress("UNCHECKED_CAST")
         val selected = args[4] as Set<String>
         val deleting = args[5] as Boolean
@@ -80,7 +82,7 @@ class CatalogViewModel @Inject constructor(
         val device = uiState.value.connectedDevice ?: return
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
-            rescanCoordinator.requestRescanAndWait(device)
+            deviceLibraryRefresher.refreshAndWait(device)
             deviceCatalogRepository.refresh(device)
             val elapsedTime = System.currentTimeMillis() - startTime
             val remaining = 800L - elapsedTime
@@ -146,7 +148,9 @@ class CatalogViewModel @Inject constructor(
                 _selectedFilePaths.value = emptySet()
                 _isEditMode.value = false
             }.onFailure { error ->
-                _deleteErrorMessage.value = error.message ?: localizationManager.currentStrings.value.catalogErrorFailedToDelete
+                _deleteErrorMessage.value =
+                    error.message
+                        ?: localizationManager.currentStrings.value.catalogErrorFailedToDelete
             }
             _isDeleting.value = false
         }

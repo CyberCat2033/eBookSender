@@ -1,7 +1,7 @@
 package com.cybercat.pocketbooksender.transfer
 
 import com.cybercat.pocketbooksender.model.BookCategory
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
@@ -18,7 +18,7 @@ class TransferCoordinator @Inject constructor() {
     )
     val events = _events.asSharedFlow()
 
-    fun submit(device: PocketBookDevice, items: List<TransferUploadItem>): String {
+    fun submit(device: RemoteDevice, items: List<TransferUploadItem>): String {
         val id = UUID.randomUUID().toString()
         pendingRequest.set(
             TransferRequest(
@@ -43,7 +43,7 @@ class TransferCoordinator @Inject constructor() {
 
 data class TransferRequest(
     val id: String,
-    val device: PocketBookDevice,
+    val device: RemoteDevice,
     val items: List<TransferUploadItem>
 )
 

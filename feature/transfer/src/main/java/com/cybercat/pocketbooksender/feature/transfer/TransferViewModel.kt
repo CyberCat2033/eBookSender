@@ -1,10 +1,10 @@
 package com.cybercat.pocketbooksender.feature.transfer
 
-import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
+import com.cybercat.pocketbooksender.data.device.DeviceProfileDetector
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.TransferLauncher
@@ -16,7 +16,7 @@ import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
@@ -28,12 +28,6 @@ import com.cybercat.pocketbooksender.transfer.TransferFailureReason
 import com.cybercat.pocketbooksender.transfer.TransferUploadItem
 import com.cybercat.pocketbooksender.ui.FtpErrorMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.InterruptedIOException
-import java.net.ConnectException
-import java.net.NoRouteToHostException
-import java.net.SocketTimeoutException
-import java.net.UnknownHostException
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -51,13 +45,13 @@ import kotlinx.coroutines.launch
 @Suppress("ktlint:standard:backing-property-naming")
 @HiltViewModel
 class TransferViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val connectionManager: ConnectionManager,
     private val queueManager: UploadQueueManager,
     private val catalogRepository: DeviceCatalogRepository,
     private val settingsRepository: SettingsRepository,
     private val transferCoordinator: TransferCoordinator,
     private val ftpGateway: FtpGateway,
+    private val deviceProfileDetector: DeviceProfileDetector,
     private val localizationManager: LocalizationManager,
     private val transferLauncher: TransferLauncher,
     private val ftpErrorMapper: FtpErrorMapper
@@ -92,7 +86,7 @@ class TransferViewModel @Inject constructor(
     ) { values ->
         val ftpInput = values[0] as String
         val isConnecting = values[1] as Boolean
-        val device = values[2] as PocketBookDevice?
+        val device = values[2] as RemoteDevice?
         val isTransfer = values[3] as Boolean
         val activeTransferItemIds = values[4] as Set<String>
         val uploadProgressById = values[5] as Map<String, Float>
@@ -207,15 +201,16 @@ class TransferViewModel @Inject constructor(
         _showVpnBypassDialog.value = false
 
         viewModelScope.launch {
-            ftpGateway.checkConnection(device)
-                .onSuccess {
-                    _isConnecting.value = false
-                    connectionManager.connect(device)
-                    _ftpInput.value = device.ftpUrl
-                    _errorState.value = null
-                    _showVpnBypassDialog.value = false
-                }
-                .onFailure { error ->
+            val connectionResult = ftpGateway.checkConnection(device)
+            if (connectionResult.isSuccess) {
+                val detectedDevice = deviceProfileDetector.detect(device)
+                _isConnecting.value = false
+                connectionManager.connect(detectedDevice)
+                _ftpInput.value = detectedDevice.ftpUrl
+                _errorState.value = null
+                _showVpnBypassDialog.value = false
+            } else {
+                connectionResult.onFailure { error ->
                     _isConnecting.value = false
                     connectionManager.disconnect()
                     if (error.isLocalNetworkBypassBlocked()) {
@@ -225,6 +220,7 @@ class TransferViewModel @Inject constructor(
                         _errorState.value = FtpErrorState.Connection(error, device)
                     }
                 }
+            }
         }
     }
 
@@ -422,7 +418,7 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private fun refreshRemoteFolderSuggestions(device: PocketBookDevice) {
+    private fun refreshRemoteFolderSuggestions(device: RemoteDevice) {
         viewModelScope.launch {
             val settings = settingsRepository.settings.first()
             val tags = ftpGateway.listDirectories(
@@ -439,7 +435,7 @@ class TransferViewModel @Inject constructor(
 }
 
 sealed interface FtpErrorState {
-    data class Connection(val error: Throwable, val device: PocketBookDevice) : FtpErrorState
+    data class Connection(val error: Throwable, val device: RemoteDevice) : FtpErrorState
     data class InvalidUrl(val error: Throwable) : FtpErrorState
     data class RawMessage(val message: String) : FtpErrorState
     object ConnectBeforeUpload : FtpErrorState

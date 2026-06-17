@@ -119,7 +119,7 @@ class AppStrings(
     val sendStatusCheckingFtp: String get() = get("send_status_checking_ftp")
     val sendBtnClearQueue: String get() = get("send_btn_clear_queue")
     val sendBtnCollapseUploaded: String get() = get("send_btn_collapse_uploaded")
-    val sendHeaderConnectPocketbook: String get() = get("send_header_connect_pocketbook")
+    val sendHeaderConnectDevice: String get() = get("send_header_connect_device")
     val sendActionEditDetails: String get() = get("send_action_edit_details")
     val sendActionHideDetails: String get() = get("send_action_hide_details")
     val sendMsgNoFiles: String get() = get("send_msg_no_files")

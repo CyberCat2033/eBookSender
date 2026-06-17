@@ -103,7 +103,7 @@ fun ConnectionPanel(
     val headerTitle = when {
         state.isConnected -> strings.sendMsgConnected
         state.isConnecting -> strings.sendStatusCheckingFtp
-        else -> strings.sendHeaderConnectPocketbook
+        else -> strings.sendHeaderConnectDevice
     }
     val headerSubtitle = state.connectedDevice?.ftpUrl ?: strings.sendScanQrDesc
 
@@ -155,7 +155,11 @@ fun ConnectionPanel(
                     ) {
                         Icon(
                             Icons.Outlined.Close,
-                            contentDescription = if (state.isConnected) strings.sendBtnDisconnect else null
+                            contentDescription = if (state.isConnected) {
+                                strings.sendBtnDisconnect
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
@@ -245,7 +249,11 @@ fun ConnectionPanel(
                             Icon(Icons.Outlined.WifiTethering, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                if (state.isConnecting) strings.sendStatusChecking else strings.sendBtnConnect
+                                if (state.isConnecting) {
+                                    strings.sendStatusChecking
+                                } else {
+                                    strings.sendBtnConnect
+                                }
                             )
                         }
                     }
@@ -437,7 +445,11 @@ fun UploadedSection(
                 }) {
                     Icon(
                         imageVector = Icons.Outlined.ExpandMore,
-                        contentDescription = if (expanded) strings.sendBtnCollapseUploaded else strings.sendBtnShowUploaded,
+                        contentDescription = if (expanded) {
+                            strings.sendBtnCollapseUploaded
+                        } else {
+                            strings.sendBtnShowUploaded
+                        },
                         modifier = Modifier.rotate(rotationState)
                     )
                 }
@@ -608,11 +620,12 @@ val QueuePlacementSpec = spring<IntOffset>(
 
 fun queueClearDelayMillis(rowCount: Int): Long {
     if (rowCount <= 0) return 0L
-    val stagger = minOf(rowCount - 1, QueueClearMaxStaggeredRows).toLong() * QueueClearStaggerMillis
-    return stagger + QueueClearExitSettleMillis
+    val stagger =
+        minOf(rowCount - 1, QUEUE_CLEAR_MAX_STAGGERED_ROWS).toLong() * QUEUE_CLEAR_STAGGER_MILLIS
+    return stagger + QUEUE_CLEAR_EXIT_SETTLE_MILLIS
 }
 
-const val QueueClearMaxStaggeredRows = 8
-const val QueueClearStaggerMillis = 45L
-const val QueueSingleRemoveMillis = 560L
-const val QueueClearExitSettleMillis = QueueSingleRemoveMillis + 120L
+const val QUEUE_CLEAR_MAX_STAGGERED_ROWS = 8
+const val QUEUE_CLEAR_STAGGER_MILLIS = 45L
+const val QUEUE_SINGLE_REMOVE_MILLIS = 560L
+const val QUEUE_CLEAR_EXIT_SETTLE_MILLIS = QUEUE_SINGLE_REMOVE_MILLIS + 120L

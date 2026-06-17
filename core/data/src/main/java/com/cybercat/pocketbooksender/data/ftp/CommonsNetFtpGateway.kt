@@ -1,7 +1,7 @@
 package com.cybercat.pocketbooksender.data.ftp
 
 import com.cybercat.pocketbooksender.data.network.LocalDeviceNetworkProvider
-import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
 import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
 import java.io.InputStream
@@ -17,7 +17,7 @@ import org.apache.commons.net.ftp.FTPReply
 class CommonsNetFtpGateway @Inject constructor(
     private val localDeviceNetworkProvider: LocalDeviceNetworkProvider
 ) : FtpGateway {
-    override suspend fun checkConnection(device: PocketBookDevice): Result<FtpSessionInfo> =
+    override suspend fun checkConnection(device: RemoteDevice): Result<FtpSessionInfo> =
         withFtpClient(device) { client ->
             runCatching {
                 client.listFiles()
@@ -32,7 +32,7 @@ class CommonsNetFtpGateway @Inject constructor(
         }
 
     override suspend fun uploadAtomically(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         remoteRelativePath: String,
         input: InputStream,
         onProgress: ((Long) -> Unit)?
@@ -71,7 +71,7 @@ class CommonsNetFtpGateway @Inject constructor(
     }
 
     override suspend fun listDirectories(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         remoteRelativePath: String
     ): Result<List<String>> = withFtpClient(device) { client ->
         runCatching {
@@ -84,7 +84,7 @@ class CommonsNetFtpGateway @Inject constructor(
     }
 
     override suspend fun listEntries(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         remoteRelativePath: String
     ): Result<List<FtpEntry>> = withFtpClient(device) { client ->
         runCatching {
@@ -110,7 +110,7 @@ class CommonsNetFtpGateway @Inject constructor(
     }
 
     override suspend fun downloadFile(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         remoteRelativePath: String,
         output: OutputStream
     ): Result<Unit> = withFtpClient(device) { client ->
@@ -125,7 +125,7 @@ class CommonsNetFtpGateway @Inject constructor(
     }
 
     override suspend fun deleteFile(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         remoteRelativePath: String
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
@@ -137,7 +137,7 @@ class CommonsNetFtpGateway @Inject constructor(
     }
 
     override suspend fun deleteDirectory(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         remoteRelativePath: String
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
@@ -149,7 +149,7 @@ class CommonsNetFtpGateway @Inject constructor(
     }
 
     override suspend fun rename(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         fromPath: String,
         toPath: String
     ): Result<Unit> = withFtpClient(device) { client ->
@@ -175,7 +175,7 @@ class CommonsNetFtpGateway @Inject constructor(
     }
 
     private suspend fun <T> withFtpClient(
-        device: PocketBookDevice,
+        device: RemoteDevice,
         block: (FTPClient) -> Result<T>
     ): Result<T> = withContext(Dispatchers.IO) {
         val client = FTPClient()
@@ -214,7 +214,7 @@ class CommonsNetFtpGateway @Inject constructor(
         }
     }
 
-    private fun FTPClient.openWorkingRoot(device: PocketBookDevice) {
+    private fun FTPClient.openWorkingRoot(device: RemoteDevice) {
         val mountRoot = normalizeFtpRootPath(device.rootPath)
         check(changeWorkingDirectory(mountRoot)) {
             "Cannot open $mountRoot: $replyString"
