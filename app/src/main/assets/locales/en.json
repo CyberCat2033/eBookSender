@@ -258,6 +258,7 @@
   "manga_error_search_empty": "Manga search query is empty",
   "manga_status_no_manga_found": "No manga found",
   "manga_error_cannot_search": "Cannot search manga source",
+  "manga_error_login_expired": "Com-X session expired. Sign in again.",
   "manga_error_cannot_open_series": "Cannot open manga series",
   "manga_error_cannot_update_favorite": "Cannot update favorite manga",
   "manga_error_cannot_update_subscription": "Cannot update manga subscription",

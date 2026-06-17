@@ -293,6 +293,7 @@ class AppStrings(
     val mangaErrorSearchEmpty: String get() = get("manga_error_search_empty")
     val mangaStatusNoMangaFound: String get() = get("manga_status_no_manga_found")
     val mangaErrorCannotSearch: String get() = get("manga_error_cannot_search")
+    val mangaErrorLoginExpired: String get() = get("manga_error_login_expired")
     val mangaErrorCannotOpenSeries: String get() = get("manga_error_cannot_open_series")
     val mangaErrorCannotUpdateFavorite: String get() = get("manga_error_cannot_update_favorite")
     val mangaErrorCannotUpdateSubscription: String get() = get(

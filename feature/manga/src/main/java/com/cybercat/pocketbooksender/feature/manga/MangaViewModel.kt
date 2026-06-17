@@ -3,7 +3,9 @@ package com.cybercat.pocketbooksender.feature.manga
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
+import com.cybercat.pocketbooksender.data.manga.MANGA_AUTHENTICATION_EXPIRED_MESSAGE
 import com.cybercat.pocketbooksender.data.manga.MangaAuthState
+import com.cybercat.pocketbooksender.data.manga.MangaAuthenticationExpiredException
 import com.cybercat.pocketbooksender.data.manga.MangaChapter
 import com.cybercat.pocketbooksender.data.manga.MangaChapterDownload
 import com.cybercat.pocketbooksender.data.manga.MangaChapterDownloadTarget
@@ -15,6 +17,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaDownloadRequestKind
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesDetails
+import com.cybercat.pocketbooksender.localization.AppStrings
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.util.formatBytes
 import com.cybercat.pocketbooksender.util.launchTemporaryStatus
@@ -220,7 +223,11 @@ class MangaViewModel @Inject constructor(
                     state.copy(
                         isLoading = false,
                         browserVisible = false,
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotSearch,
+                        isAuthorized = state.isAuthorized && !error.isMangaAuthenticationExpired(),
+                        errorMessage = mangaErrorMessage(
+                            error = error,
+                            fallback = localizationManager.currentStrings.value.mangaErrorCannotSearch
+                        ),
                         statusMessage = null,
                     )
                 }
@@ -265,7 +272,11 @@ class MangaViewModel @Inject constructor(
                     state.copy(
                         isLoading = false,
                         browserVisible = false,
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotOpenSeries,
+                        isAuthorized = state.isAuthorized && !error.isMangaAuthenticationExpired(),
+                        errorMessage = mangaErrorMessage(
+                            error = error,
+                            fallback = localizationManager.currentStrings.value.mangaErrorCannotOpenSeries
+                        ),
                         statusMessage = null,
                     )
                 }
@@ -384,7 +395,11 @@ class MangaViewModel @Inject constructor(
                     state.copy(
                         isCheckingSubscriptions = false,
                         statusMessage = null,
-                        errorMessage = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotCheckSubscriptions,
+                        isAuthorized = state.isAuthorized && !error.isMangaAuthenticationExpired(),
+                        errorMessage = mangaErrorMessage(
+                            error = error,
+                            fallback = localizationManager.currentStrings.value.mangaErrorCannotCheckSubscriptions
+                        ),
                     )
                 }
             }
@@ -559,7 +574,9 @@ class MangaViewModel @Inject constructor(
                         subscriptionUpdatesVisible =
                             active?.kind == MangaDownloadRequestKind.SubscriptionUpdates &&
                                 active.subscriptionUpdates.isNotEmpty(),
-                        errorMessage = event.message,
+                        isAuthorized = state.isAuthorized &&
+                            event.message != MANGA_AUTHENTICATION_EXPIRED_MESSAGE,
+                        errorMessage = mangaErrorMessage(event.message),
                     )
                 }
             }
@@ -747,7 +764,7 @@ class MangaViewModel @Inject constructor(
         if (failedMessages.isEmpty()) return null
         val strings = localizationManager.currentStrings.value
         val visible = failedMessages.take(3).joinToString("\n") { message ->
-            message.replace(MangaNetworkUnavailableMessage, strings.get("manga_error_network_unavailable"))
+            mangaErrorMessage(message, strings)
         }
         val hiddenCount = failedMessages.size - 3
         return if (hiddenCount > 0) {
@@ -759,6 +776,28 @@ class MangaViewModel @Inject constructor(
 
     private fun String.catalogMatchKey(): String =
         lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), "")
+
+    private fun Throwable.isMangaAuthenticationExpired(): Boolean =
+        this is MangaAuthenticationExpiredException ||
+            message == MANGA_AUTHENTICATION_EXPIRED_MESSAGE
+
+    private fun mangaErrorMessage(error: Throwable, fallback: String): String =
+        if (error.isMangaAuthenticationExpired()) {
+            localizationManager.currentStrings.value.mangaErrorLoginExpired
+        } else {
+            error.message ?: fallback
+        }
+
+    private fun mangaErrorMessage(
+        message: String,
+        strings: AppStrings = localizationManager.currentStrings.value
+    ): String =
+        message
+            .replace(
+                MangaNetworkUnavailableMessage,
+                strings.get("manga_error_network_unavailable")
+            )
+            .replace(MANGA_AUTHENTICATION_EXPIRED_MESSAGE, strings.mangaErrorLoginExpired)
 
     private companion object {
         const val StatusMessageMillis = 5000L

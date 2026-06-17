@@ -14,21 +14,20 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
-
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 private const val NetworkUnavailableMessage = "MANGA_NETWORK_UNAVAILABLE"
 
@@ -39,10 +38,11 @@ class MangaRepository @Inject constructor(
     private val bookmarkDao: MangaSeriesBookmarkDao,
     private val adapterSet: Set<@JvmSuppressWildcards HtmlMangaSourceAdapter>,
     private val archiveHelper: MangaArchiveHelper,
-    private val networkStateChecker: NetworkStateChecker,
+    private val networkStateChecker: NetworkStateChecker
 ) {
     private val adapters: List<HtmlMangaSourceAdapter> = adapterSet.sortedBy { it.title }
-    private val searchCache = ConcurrentHashMap<String, TimedCacheEntry<List<MangaSeriesSearchResult>>>()
+    private val searchCache =
+        ConcurrentHashMap<String, TimedCacheEntry<List<MangaSeriesSearchResult>>>()
     private val seriesCache = ConcurrentHashMap<String, TimedCacheEntry<MangaSeriesPage>>()
 
     val sources: List<MangaSourceSummary> =
@@ -53,7 +53,7 @@ class MangaRepository @Inject constructor(
                 homeUrl = adapter.homeUrl,
                 browserUserAgent = adapter.browserUserAgent,
                 loginUrl = adapter.loginUrl,
-                nativeLoginConfig = adapter.nativeLoginConfig,
+                nativeLoginConfig = adapter.nativeLoginConfig
             )
         }
 
@@ -83,8 +83,7 @@ class MangaRepository @Inject constructor(
         bookmarkDao.savedSeriesCount() > 0
     }
 
-    suspend fun authState(sourceId: String): MangaAuthState =
-        adapter(sourceId).authState()
+    suspend fun authState(sourceId: String): MangaAuthState = adapter(sourceId).authState()
 
     fun homeUrl(sourceId: String): String =
         adapters.firstOrNull { adapter -> adapter.id == sourceId }?.homeUrl
@@ -99,13 +98,9 @@ class MangaRepository @Inject constructor(
         username: String,
         password: String,
         doNotRemember: Boolean
-    ): ByteArray? =
-        adapter(sourceId).buildLoginPostBody(username, password, doNotRemember)
+    ): ByteArray? = adapter(sourceId).buildLoginPostBody(username, password, doNotRemember)
 
-    suspend fun searchSeries(
-        sourceId: String,
-        query: String,
-    ): List<MangaSeriesSearchResult> {
+    suspend fun searchSeries(sourceId: String, query: String): List<MangaSeriesSearchResult> {
         val key = "$sourceId:${query.trim().lowercase()}"
         searchCache[key]?.takeIf { entry -> entry.isFresh(SearchCacheTtlMillis) }?.let { entry ->
             return entry.value
@@ -116,27 +111,24 @@ class MangaRepository @Inject constructor(
         return results
     }
 
-    suspend fun openSeries(
-        sourceId: String,
-        seriesId: String,
-    ): MangaSeriesPage {
+    suspend fun openSeries(sourceId: String, seriesId: String): MangaSeriesPage {
         val key = "$sourceId:${seriesId.normalizeCacheKey()}"
         seriesCache[key]?.takeIf { entry -> entry.isFresh(SeriesCacheTtlMillis) }?.let { entry ->
             saveSeriesSnapshot(entry.value.details)
             return entry.value
         }
 
-        val page = adapter(sourceId).getSeriesPage(seriesId)
+        val page = runCatching {
+            adapter(sourceId).getSeriesPage(seriesId)
+        }.getOrElse { error ->
+            recoverMovedSavedSeries(sourceId, seriesId, error) ?: throw error
+        }
         seriesCache[key] = TimedCacheEntry(page)
         saveSeriesSnapshot(page.details)
         return page
     }
 
-    fun parseWebPage(
-        sourceId: String,
-        url: String,
-        html: String,
-    ): MangaParsedPage {
+    fun parseWebPage(sourceId: String, url: String, html: String): MangaParsedPage {
         val adapter = adapter(sourceId)
         if (!adapter.ownsUrl(url)) return MangaParsedPage.Unsupported
 
@@ -145,7 +137,9 @@ class MangaRepository @Inject constructor(
             return MangaParsedPage.Series(seriesPage)
         }
 
-        val searchResults = runCatching { adapter.parseSearchResults(url, html) }.getOrDefault(emptyList())
+        val searchResults = runCatching {
+            adapter.parseSearchResults(url, html)
+        }.getOrDefault(emptyList())
         if (searchResults.isNotEmpty()) {
             return MangaParsedPage.SearchResults(searchResults)
         }
@@ -165,66 +159,76 @@ class MangaRepository @Inject constructor(
             title = series.title,
             coverUrl = series.coverUrl,
             description = series.description,
-            openedAtMillis = System.currentTimeMillis(),
+            openedAtMillis = System.currentTimeMillis()
         )
     }
 
-    suspend fun setFavorite(
-        series: MangaSeriesDetails,
-        favorite: Boolean,
-    ) = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
-        val updated = bookmarkDao.setFavorite(
-            sourceId = series.sourceId,
-            seriesId = series.seriesId,
-            title = series.title,
-            coverUrl = series.coverUrl,
-            description = series.description,
-            favorite = favorite,
-            updatedAtMillis = now,
-        )
-        if (updated == 0) {
-            bookmarkDao.upsert(series.toBookmarkEntity(favorite = favorite, subscribed = false, now = now))
+    suspend fun setFavorite(series: MangaSeriesDetails, favorite: Boolean) =
+        withContext(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val updated = bookmarkDao.setFavorite(
+                sourceId = series.sourceId,
+                seriesId = series.seriesId,
+                title = series.title,
+                coverUrl = series.coverUrl,
+                description = series.description,
+                favorite = favorite,
+                updatedAtMillis = now
+            )
+            if (updated == 0) {
+                bookmarkDao.upsert(
+                    series.toBookmarkEntity(favorite = favorite, subscribed = false, now = now)
+                )
+            }
         }
-    }
 
-    suspend fun setSubscribed(
-        series: MangaSeriesDetails,
-        subscribed: Boolean,
-    ) = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
-        val updated = bookmarkDao.setSubscribed(
-            sourceId = series.sourceId,
-            seriesId = series.seriesId,
-            title = series.title,
-            coverUrl = series.coverUrl,
-            description = series.description,
-            subscribed = subscribed,
-            updatedAtMillis = now,
-        )
-        if (updated == 0) {
-            bookmarkDao.upsert(series.toBookmarkEntity(favorite = false, subscribed = subscribed, now = now))
+    suspend fun setSubscribed(series: MangaSeriesDetails, subscribed: Boolean) =
+        withContext(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val updated = bookmarkDao.setSubscribed(
+                sourceId = series.sourceId,
+                seriesId = series.seriesId,
+                title = series.title,
+                coverUrl = series.coverUrl,
+                description = series.description,
+                subscribed = subscribed,
+                updatedAtMillis = now
+            )
+            if (updated == 0) {
+                bookmarkDao.upsert(
+                    series.toBookmarkEntity(favorite = false, subscribed = subscribed, now = now)
+                )
+            }
         }
-    }
 
-    suspend fun checkSubscriptions(): List<MangaSubscriptionCheckResult> = withContext(Dispatchers.IO) {
-        val downloadedStableKeys = historyDao.downloadedStableKeys().toSet()
-        val checkedAtMillis = System.currentTimeMillis()
-        bookmarkDao.subscribedSeries().mapNotNull { saved ->
-            runCatching {
-                val page = openSeries(saved.sourceId, saved.seriesId)
-                bookmarkDao.markChecked(saved.sourceId, saved.seriesId, checkedAtMillis)
-                val newChapters = page.chapters.filter { chapter ->
-                    chapter.stableKey !in downloadedStableKeys
+    suspend fun checkSubscriptions(): List<MangaSubscriptionCheckResult> =
+        withContext(Dispatchers.IO) {
+            val downloadedStableKeys = historyDao.downloadedStableKeys().toSet()
+            val checkedAtMillis = System.currentTimeMillis()
+            bookmarkDao.subscribedSeries().mapNotNull { saved ->
+                runCatching {
+                    val page = openSeries(saved.sourceId, saved.seriesId)
+                    bookmarkDao.markChecked(
+                        page.details.sourceId,
+                        page.details.seriesId,
+                        checkedAtMillis
+                    )
+                    val newChapters = page.chapters.filter { chapter ->
+                        chapter.stableKey !in downloadedStableKeys
+                    }
+                    MangaSubscriptionCheckResult(page = page, newChapters = newChapters)
+                }.getOrElse { error ->
+                    if (error is MangaAuthenticationExpiredException) {
+                        throw error
+                    }
+                    null
                 }
-                MangaSubscriptionCheckResult(page = page, newChapters = newChapters)
-            }.getOrNull()
+            }
         }
-    }
 
     suspend fun downloadMultipleSeriesChapters(
         targets: List<MangaChapterDownloadTarget>,
-        onProgress: suspend (MangaDownloadProgress) -> Unit = {},
+        onProgress: suspend (MangaDownloadProgress) -> Unit = {}
     ): MangaDownloadResult = withContext(Dispatchers.IO) {
         if (targets.isEmpty()) {
             throw IllegalArgumentException("No manga chapters selected")
@@ -250,7 +254,7 @@ class MangaRepository @Inject constructor(
                             totalChapters = targets.size,
                             completedChapters = completedChapters,
                             pageSemaphore = pageSemaphore,
-                            onProgress = onProgress,
+                            onProgress = onProgress
                         )
                     }
                 }
@@ -267,7 +271,7 @@ class MangaRepository @Inject constructor(
 
         MangaDownloadResult(
             downloaded = downloaded,
-            failedMessages = errors,
+            failedMessages = errors
         )
     }
 
@@ -275,7 +279,7 @@ class MangaRepository @Inject constructor(
         sourceId: String,
         series: MangaSeriesDetails,
         chapters: List<MangaChapter>,
-        onProgress: suspend (MangaDownloadProgress) -> Unit = {},
+        onProgress: suspend (MangaDownloadProgress) -> Unit = {}
     ): MangaDownloadResult {
         require(sourceId == series.sourceId) {
             "Manga series source does not match selected source"
@@ -293,123 +297,121 @@ class MangaRepository @Inject constructor(
         totalChapters: Int,
         completedChapters: AtomicInteger,
         pageSemaphore: Semaphore,
-        onProgress: suspend (MangaDownloadProgress) -> Unit,
-    ): ChapterDownloadOutcome {
-        return runCatching {
-            onProgress(
-                MangaDownloadProgress(
-                    chapterTitle = chapter.title,
-                    totalChapters = totalChapters,
-                    completedChapters = completedChapters.get(),
-                    totalPages = 0,
-                    completedPages = 0,
-                    detail = "Preparing",
-                ),
+        onProgress: suspend (MangaDownloadProgress) -> Unit
+    ): ChapterDownloadOutcome = runCatching {
+        onProgress(
+            MangaDownloadProgress(
+                chapterTitle = chapter.title,
+                totalChapters = totalChapters,
+                completedChapters = completedChapters.get(),
+                totalPages = 0,
+                completedPages = 0,
+                detail = "Preparing"
             )
+        )
 
-            val baseFileName = "${FilenameSanitizer.fileTitle(series.title, "Manga")}_" +
-                FilenameSanitizer.fileTitle(chapter.title, "Chapter")
-            val directArchive = downloadChapterArchive(
-                adapter = adapter,
-                chapter = chapter,
-                outputDir = outputDir,
-                baseFileName = baseFileName,
-                onProgress = { detail, bytesRead, totalBytes ->
-                    onProgress(
-                        MangaDownloadProgress(
-                            chapterTitle = chapter.title,
-                            totalChapters = totalChapters,
-                            completedChapters = completedChapters.get(),
-                            totalPages = 0,
-                            completedPages = 0,
-                            detail = detail,
-                            archiveBytesRead = bytesRead,
-                            archiveTotalBytes = totalBytes,
-                        ),
+        val baseFileName = "${FilenameSanitizer.fileTitle(series.title, "Manga")}_" +
+            FilenameSanitizer.fileTitle(chapter.title, "Chapter")
+        val directArchive = downloadChapterArchive(
+            adapter = adapter,
+            chapter = chapter,
+            outputDir = outputDir,
+            baseFileName = baseFileName,
+            onProgress = { detail, bytesRead, totalBytes ->
+                onProgress(
+                    MangaDownloadProgress(
+                        chapterTitle = chapter.title,
+                        totalChapters = totalChapters,
+                        completedChapters = completedChapters.get(),
+                        totalPages = 0,
+                        completedPages = 0,
+                        detail = detail,
+                        archiveBytesRead = bytesRead,
+                        archiveTotalBytes = totalBytes
                     )
-                },
-            )
-
-            var fallbackPageCount = 0
-            val outputFile = directArchive ?: downloadChapterFromPages(
-                adapter = adapter,
-                chapter = chapter,
-                outputDir = outputDir,
-                baseFileName = baseFileName,
-                pageSemaphore = pageSemaphore,
-                onPageProgress = { totalPages, completedPages, detail ->
-                    fallbackPageCount = totalPages
-                    onProgress(
-                        MangaDownloadProgress(
-                            chapterTitle = chapter.title,
-                            totalChapters = totalChapters,
-                            completedChapters = completedChapters.get(),
-                            totalPages = totalPages,
-                            completedPages = completedPages,
-                            detail = detail,
-                        ),
-                    )
-                },
-            )
-
-            val pageCount = fallbackPageCount
-            val progressDetail = null
-            val completedPages = if (directArchive == null) {
-                fallbackPageCount
-            } else {
-                0
-            }
-            val completed = completedChapters.incrementAndGet()
-            onProgress(
-                MangaDownloadProgress(
-                    chapterTitle = chapter.title,
-                    totalChapters = totalChapters,
-                    completedChapters = completed.coerceAtMost(totalChapters),
-                    totalPages = pageCount,
-                    completedPages = completedPages,
-                    detail = progressDetail,
                 )
-            )
-
-            ChapterDownloadOutcome(
-                downloaded = MangaDownloadedChapter(
-                    series = series,
-                    chapter = chapter,
-                    file = outputFile,
-                ),
-                historyItem = MangaChapterHistoryEntity(
-                    sourceId = sourceId,
-                    seriesId = series.seriesId,
-                    chapterId = chapter.chapterId,
-                    stableKey = chapter.stableKey,
-                    seriesTitle = series.title,
-                    chapterTitle = chapter.title,
-                    fileName = outputFile.name,
-                    fileUri = Uri.fromFile(outputFile).toString(),
-                    downloadedAtMillis = System.currentTimeMillis(),
-                ),
-                errorMessage = null,
-            )
-        }.getOrElse { error ->
-            if (error is kotlinx.coroutines.CancellationException) throw error
-            val message = if (error is MangaNetworkUnavailableException) {
-                "${chapter.title}: $NetworkUnavailableMessage"
-            } else {
-                "${chapter.title}: ${error.message ?: error::class.java.simpleName}"
             }
-            ChapterDownloadOutcome(
-                downloaded = null,
-                historyItem = null,
-                errorMessage = message,
-            )
+        )
+
+        var fallbackPageCount = 0
+        val outputFile = directArchive ?: downloadChapterFromPages(
+            adapter = adapter,
+            chapter = chapter,
+            outputDir = outputDir,
+            baseFileName = baseFileName,
+            pageSemaphore = pageSemaphore,
+            onPageProgress = { totalPages, completedPages, detail ->
+                fallbackPageCount = totalPages
+                onProgress(
+                    MangaDownloadProgress(
+                        chapterTitle = chapter.title,
+                        totalChapters = totalChapters,
+                        completedChapters = completedChapters.get(),
+                        totalPages = totalPages,
+                        completedPages = completedPages,
+                        detail = detail
+                    )
+                )
+            }
+        )
+
+        val pageCount = fallbackPageCount
+        val progressDetail = null
+        val completedPages = if (directArchive == null) {
+            fallbackPageCount
+        } else {
+            0
         }
+        val completed = completedChapters.incrementAndGet()
+        onProgress(
+            MangaDownloadProgress(
+                chapterTitle = chapter.title,
+                totalChapters = totalChapters,
+                completedChapters = completed.coerceAtMost(totalChapters),
+                totalPages = pageCount,
+                completedPages = completedPages,
+                detail = progressDetail
+            )
+        )
+
+        ChapterDownloadOutcome(
+            downloaded = MangaDownloadedChapter(
+                series = series,
+                chapter = chapter,
+                file = outputFile
+            ),
+            historyItem = MangaChapterHistoryEntity(
+                sourceId = sourceId,
+                seriesId = series.seriesId,
+                chapterId = chapter.chapterId,
+                stableKey = chapter.stableKey,
+                seriesTitle = series.title,
+                chapterTitle = chapter.title,
+                fileName = outputFile.name,
+                fileUri = Uri.fromFile(outputFile).toString(),
+                downloadedAtMillis = System.currentTimeMillis()
+            ),
+            errorMessage = null
+        )
+    }.getOrElse { error ->
+        if (error is kotlinx.coroutines.CancellationException) throw error
+        val message = if (error is MangaNetworkUnavailableException) {
+            "${chapter.title}: $NetworkUnavailableMessage"
+        } else {
+            "${chapter.title}: ${error.message ?: error::class.java.simpleName}"
+        }
+        ChapterDownloadOutcome(
+            downloaded = null,
+            historyItem = null,
+            errorMessage = message
+        )
     }
 
     private suspend fun downloadPages(
         adapter: MangaSourceAdapter,
         pages: List<MangaPage>,
         pageSemaphore: Semaphore,
-        onPageProgress: suspend (Int, String?) -> Unit,
+        onPageProgress: suspend (Int, String?) -> Unit
     ): List<DownloadedMangaPage> = coroutineScope {
         val completedPages = AtomicInteger(0)
         pages.sortedBy { page -> page.index }
@@ -421,13 +423,13 @@ class MangaRepository @Inject constructor(
                             page = page,
                             completedPages = completedPages,
                             totalPages = pages.size,
-                            onPageProgress = onPageProgress,
+                            onPageProgress = onPageProgress
                         )
                         onPageProgress(completedPages.incrementAndGet(), null)
                         DownloadedMangaPage(
                             index = page.index,
                             bytes = downloaded.bytes,
-                            fileExtension = downloaded.fileExtension,
+                            fileExtension = downloaded.fileExtension
                         )
                     }
                 }
@@ -441,7 +443,7 @@ class MangaRepository @Inject constructor(
         page: MangaPage,
         completedPages: AtomicInteger,
         totalPages: Int,
-        onPageProgress: suspend (Int, String?) -> Unit,
+        onPageProgress: suspend (Int, String?) -> Unit
     ): MangaDownloadedPage {
         var lastError: IOException? = null
         repeat(PageDownloadAttempts) { attempt ->
@@ -464,7 +466,7 @@ class MangaRepository @Inject constructor(
                 ensureNetworkAvailable()
                 onPageProgress(
                     completedPages.get(),
-                    "Retry page ${page.index + 1}/$totalPages ($nextAttempt/$PageDownloadAttempts)",
+                    "Retry page ${page.index + 1}/$totalPages ($nextAttempt/$PageDownloadAttempts)"
                 )
                 delay(PageRetryDelayMillis * nextAttempt)
             }
@@ -478,7 +480,7 @@ class MangaRepository @Inject constructor(
         outputDir: File,
         baseFileName: String,
         pageSemaphore: Semaphore,
-        onPageProgress: suspend (Int, Int, String?) -> Unit,
+        onPageProgress: suspend (Int, Int, String?) -> Unit
     ): File {
         ensureNetworkAvailable()
         val pages = adapter.getChapterPages(chapter.chapterId)
@@ -486,7 +488,7 @@ class MangaRepository @Inject constructor(
         val downloadedPages = downloadPages(
             adapter = adapter,
             pages = pages,
-            pageSemaphore = pageSemaphore,
+            pageSemaphore = pageSemaphore
         ) { completedPages, detail ->
             onPageProgress(pages.size, completedPages, detail)
         }
@@ -501,7 +503,7 @@ class MangaRepository @Inject constructor(
         chapter: MangaChapter,
         outputDir: File,
         baseFileName: String,
-        onProgress: suspend (detail: String, bytesRead: Long, totalBytes: Long?) -> Unit,
+        onProgress: suspend (detail: String, bytesRead: Long, totalBytes: Long?) -> Unit
     ): File? {
         if (chapter.downloadUrl.isNullOrBlank()) return null
 
@@ -515,7 +517,7 @@ class MangaRepository @Inject constructor(
                 outputFile = tempFile,
                 onProgress = { bytesRead, totalBytes ->
                     onProgress("Downloading archive", bytesRead, totalBytes)
-                },
+                }
             ) ?: run {
                 tempFile.delete()
                 return null
@@ -523,11 +525,13 @@ class MangaRepository @Inject constructor(
             return archiveHelper.moveTempToUnique(
                 tempFile = tempFile,
                 directory = outputDir,
-                fileName = "$baseFileName.${archive.fileExtension}",
+                fileName = "$baseFileName.${archive.fileExtension}"
             )
         } catch (error: IOException) {
             tempFile.delete()
-            if (error is MangaNetworkUnavailableException || !networkStateChecker.hasActiveInternetConnection()) {
+            if (error is MangaNetworkUnavailableException ||
+                !networkStateChecker.hasActiveInternetConnection()
+            ) {
                 throw MangaNetworkUnavailableException()
             }
             onProgress("Archive unavailable, downloading pages", 0L, null)
@@ -535,13 +539,68 @@ class MangaRepository @Inject constructor(
         }
     }
 
-
     private fun ensureNetworkAvailable() {
         if (!networkStateChecker.hasActiveInternetConnection()) {
             throw MangaNetworkUnavailableException()
         }
     }
 
+    private suspend fun recoverMovedSavedSeries(
+        sourceId: String,
+        seriesId: String,
+        error: Throwable
+    ): MangaSeriesPage? {
+        if (!error.isHttpNotFound()) return null
+
+        val saved = bookmarkDao.findSeries(sourceId, seriesId) ?: return null
+        val candidates = runCatching {
+            searchSeries(sourceId, saved.title)
+        }.getOrDefault(emptyList())
+            .rankForSavedTitle(saved.title)
+            .filterNot { result ->
+                result.seriesId.normalizeCacheKey() ==
+                    seriesId.normalizeCacheKey()
+            }
+            .take(MaxMovedSeriesCandidates)
+
+        candidates.forEach { candidate ->
+            val page = runCatching {
+                adapter(sourceId).getSeriesPage(candidate.seriesId)
+            }.getOrNull() ?: return@forEach
+
+            replaceSavedSeriesId(saved, page.details)
+            return page
+        }
+
+        return null
+    }
+
+    private suspend fun replaceSavedSeriesId(
+        saved: MangaSeriesBookmarkEntity,
+        details: MangaSeriesDetails
+    ) {
+        val now = System.currentTimeMillis()
+        val existing = bookmarkDao.findSeries(details.sourceId, details.seriesId)
+        val replacement = MangaSeriesBookmarkEntity(
+            sourceId = details.sourceId,
+            seriesId = details.seriesId,
+            title = details.title,
+            coverUrl = details.coverUrl,
+            description = details.description,
+            favorite = saved.favorite || existing?.favorite == true,
+            subscribed = saved.subscribed || existing?.subscribed == true,
+            addedAtMillis = minOf(
+                saved.addedAtMillis,
+                existing?.addedAtMillis ?: saved.addedAtMillis
+            ),
+            lastOpenedAtMillis = now,
+            lastCheckedAtMillis = existing?.lastCheckedAtMillis ?: saved.lastCheckedAtMillis
+        )
+        bookmarkDao.upsert(replacement)
+        if (saved.seriesId.normalizeCacheKey() != details.seriesId.normalizeCacheKey()) {
+            bookmarkDao.deleteSeries(saved.sourceId, saved.seriesId)
+        }
+    }
 
     private fun adapter(sourceId: String): HtmlMangaSourceAdapter =
         adapters.firstOrNull { adapter -> adapter.id == sourceId }
@@ -555,6 +614,7 @@ class MangaRepository @Inject constructor(
         const val PageDownloadAttempts = 3
         const val PageAttemptTimeoutMillis = 18_000L
         const val PageRetryDelayMillis = 450L
+        const val MaxMovedSeriesCandidates = 5
     }
 }
 
@@ -569,19 +629,16 @@ sealed interface MangaParsedPage {
 
 data class MangaDownloadResult(
     val downloaded: List<MangaDownloadedChapter>,
-    val failedMessages: List<String>,
+    val failedMessages: List<String>
 )
 
 data class MangaDownloadedChapter(
     val series: MangaSeriesDetails,
     val chapter: MangaChapter,
-    val file: File,
+    val file: File
 )
 
-data class MangaChapterDownloadTarget(
-    val series: MangaSeriesDetails,
-    val chapter: MangaChapter,
-)
+data class MangaChapterDownloadTarget(val series: MangaSeriesDetails, val chapter: MangaChapter)
 
 data class MangaDownloadProgress(
     val chapterTitle: String,
@@ -591,13 +648,13 @@ data class MangaDownloadProgress(
     val completedPages: Int,
     val detail: String? = null,
     val archiveBytesRead: Long = 0L,
-    val archiveTotalBytes: Long? = null,
+    val archiveTotalBytes: Long? = null
 )
 
 private data class ChapterDownloadOutcome(
     val downloaded: MangaDownloadedChapter?,
     val historyItem: MangaChapterHistoryEntity?,
-    val errorMessage: String?,
+    val errorMessage: String?
 )
 
 private fun MangaChapterDownloadTarget.resolvedSourceId(): String {
@@ -616,49 +673,78 @@ private fun MangaChapterDownloadTarget.resolvedSourceId(): String {
     return seriesSourceId.ifBlank { chapterSourceId }
 }
 
+private fun MangaChapterHistoryEntity.toDownload(): MangaChapterDownload = MangaChapterDownload(
+    sourceId = sourceId,
+    seriesId = seriesId,
+    stableKey = stableKey,
+    seriesTitle = seriesTitle,
+    chapterTitle = chapterTitle,
+    fileName = fileName,
+    downloadedAtMillis = downloadedAtMillis
+)
 
-private fun MangaChapterHistoryEntity.toDownload(): MangaChapterDownload =
-    MangaChapterDownload(
-        sourceId = sourceId,
-        seriesId = seriesId,
-        stableKey = stableKey,
-        seriesTitle = seriesTitle,
-        chapterTitle = chapterTitle,
-        fileName = fileName,
-        downloadedAtMillis = downloadedAtMillis,
-    )
-
-private fun MangaSeriesBookmarkEntity.toBookmark(): MangaSeriesBookmark =
-    MangaSeriesBookmark(
-        sourceId = sourceId,
-        seriesId = seriesId,
-        title = title,
-        coverUrl = coverUrl,
-        description = description,
-        favorite = favorite,
-        subscribed = subscribed,
-        addedAtMillis = addedAtMillis,
-        lastOpenedAtMillis = lastOpenedAtMillis,
-        lastCheckedAtMillis = lastCheckedAtMillis,
-    )
+private fun MangaSeriesBookmarkEntity.toBookmark(): MangaSeriesBookmark = MangaSeriesBookmark(
+    sourceId = sourceId,
+    seriesId = seriesId,
+    title = title,
+    coverUrl = coverUrl,
+    description = description,
+    favorite = favorite,
+    subscribed = subscribed,
+    addedAtMillis = addedAtMillis,
+    lastOpenedAtMillis = lastOpenedAtMillis,
+    lastCheckedAtMillis = lastCheckedAtMillis
+)
 
 private fun MangaSeriesDetails.toBookmarkEntity(
     favorite: Boolean,
     subscribed: Boolean,
-    now: Long,
-): MangaSeriesBookmarkEntity =
-    MangaSeriesBookmarkEntity(
-        sourceId = sourceId,
-        seriesId = seriesId,
-        title = title,
-        coverUrl = coverUrl,
-        description = description,
-        favorite = favorite,
-        subscribed = subscribed,
-        addedAtMillis = now,
-        lastOpenedAtMillis = now,
-        lastCheckedAtMillis = null,
-    )
+    now: Long
+): MangaSeriesBookmarkEntity = MangaSeriesBookmarkEntity(
+    sourceId = sourceId,
+    seriesId = seriesId,
+    title = title,
+    coverUrl = coverUrl,
+    description = description,
+    favorite = favorite,
+    subscribed = subscribed,
+    addedAtMillis = now,
+    lastOpenedAtMillis = now,
+    lastCheckedAtMillis = null
+)
 
-private fun String.normalizeCacheKey(): String =
-    trim().trimEnd('/').lowercase()
+private fun String.normalizeCacheKey(): String = trim().trimEnd('/').lowercase()
+
+private fun Throwable.isHttpNotFound(): Boolean =
+    message?.contains("HTTP 404", ignoreCase = true) == true
+
+private fun List<MangaSeriesSearchResult>.rankForSavedTitle(
+    savedTitle: String
+): List<MangaSeriesSearchResult> {
+    val savedKey = savedTitle.mangaTitleMatchKey()
+    if (savedKey.isBlank()) return emptyList()
+
+    return map { result ->
+        result to result.title.mangaTitleMatchScore(savedKey)
+    }
+        .filter { (_, score) -> score > 0 }
+        .sortedWith(
+            compareByDescending<Pair<MangaSeriesSearchResult, Int>> { (_, score) -> score }
+                .thenBy { (result, _) -> result.title.length }
+        )
+        .map { (result, _) -> result }
+        .distinctBy { result -> result.seriesId.normalizeCacheKey() }
+}
+
+private fun String.mangaTitleMatchScore(savedKey: String): Int {
+    val resultKey = mangaTitleMatchKey()
+    if (resultKey.isBlank()) return 0
+    return when {
+        resultKey == savedKey -> 4
+        resultKey.contains(savedKey) -> 3
+        savedKey.contains(resultKey) -> 2
+        else -> 0
+    }
+}
+
+private fun String.mangaTitleMatchKey(): String = lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), "")

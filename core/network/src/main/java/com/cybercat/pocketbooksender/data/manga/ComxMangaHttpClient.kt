@@ -23,17 +23,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 @Singleton
-class ComxMangaHttpClient @Inject constructor(
-    private val parser: ComxHtmlParser,
-) {
+class ComxMangaHttpClient @Inject constructor(private val parser: ComxHtmlParser) {
     suspend fun hasAuthenticatedSession(): Boolean = withContext(Dispatchers.IO) {
         cookiesFor(ComxMangaAdapter.HomeUrl)?.hasAuthenticatedCookies() == true
     }
 
-    suspend fun fetchText(
-        url: String,
-        referer: String,
-    ): String = withContext(Dispatchers.IO) {
+    suspend fun fetchText(url: String, referer: String): String = withContext(Dispatchers.IO) {
         fetchText(url, referer, retryGuard = true)
     }
 
@@ -43,7 +38,7 @@ class ComxMangaHttpClient @Inject constructor(
             accept = "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
             referer = page.refererUrl ?: ComxMangaAdapter.HomeUrl,
             connectTimeout = ImageConnectTimeoutMillis,
-            readTimeout = ImageReadTimeoutMillis,
+            readTimeout = ImageReadTimeoutMillis
         )
         try {
             val code = connection.responseCode
@@ -65,16 +60,17 @@ class ComxMangaHttpClient @Inject constructor(
     suspend fun downloadChapterArchive(
         chapter: MangaChapter,
         outputFile: File,
-        onProgress: suspend (bytesRead: Long, totalBytes: Long?) -> Unit,
+        onProgress: suspend (bytesRead: Long, totalBytes: Long?) -> Unit
     ): MangaDownloadedArchive? = withContext(Dispatchers.IO) {
-        val originalDownloadUrl = chapter.downloadUrl?.takeIf { it.isNotBlank() } ?: return@withContext null
+        val originalDownloadUrl =
+            chapter.downloadUrl?.takeIf { it.isNotBlank() } ?: return@withContext null
         val downloadUrl = requestAuthorizedArchiveUrl(chapter, originalDownloadUrl)
         val connection = openConnection(
             url = downloadUrl,
-            accept = "application/vnd.comicbook-rar,application/vnd.comicbook+zip,application/x-rar-compressed,application/zip,application/octet-stream,*/*",
+            accept = ARCHIVE_ACCEPT_HEADER,
             referer = chapter.seriesId,
             connectTimeout = ArchiveConnectTimeoutMillis,
-            readTimeout = ArchiveReadTimeoutMillis,
+            readTimeout = ArchiveReadTimeoutMillis
         )
         try {
             connection.setRequestProperty("Sec-Fetch-Dest", "document")
@@ -86,7 +82,9 @@ class ComxMangaHttpClient @Inject constructor(
             val code = connection.responseCode
             captureCookies(connection, downloadUrl)
             if (code !in 200..299) {
-                throw IOException("Archive HTTP $code${connection.readErrorSnippet().messageSuffix()}")
+                throw IOException(
+                    "Archive HTTP $code${connection.readErrorSnippet().messageSuffix()}"
+                )
             }
 
             outputFile.parentFile?.mkdirs()
@@ -116,7 +114,9 @@ class ComxMangaHttpClient @Inject constructor(
             }
 
             if (outputFile.length() < MinArchiveBytes) {
-                throw IOException("Archive response is too small${outputFile.readSmallText().messageSuffix()}")
+                throw IOException(
+                    "Archive response is too small${outputFile.readSmallText().messageSuffix()}"
+                )
             }
 
             val extension = archiveExtensionFromMagic(outputFile)
@@ -124,7 +124,9 @@ class ComxMangaHttpClient @Inject constructor(
                 ?: archiveExtensionFromContentType(connection.contentType)
                 ?: archiveExtensionFromUrl(downloadUrl)
                 ?: archiveExtensionFromUrl(originalDownloadUrl)
-                ?: throw IOException("Archive format is unknown${outputFile.readSmallText().messageSuffix()}")
+                ?: throw IOException(
+                    "Archive format is unknown${outputFile.readSmallText().messageSuffix()}"
+                )
 
             MangaDownloadedArchive(fileExtension = extension)
         } finally {
@@ -132,36 +134,64 @@ class ComxMangaHttpClient @Inject constructor(
         }
     }
 
-    private fun fetchText(
-        url: String,
-        referer: String,
-        retryGuard: Boolean,
-    ): String {
-        val connection = openConnection(
-            url = url,
-            accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            referer = referer,
-        )
-        try {
-            val code = connection.responseCode
-            captureCookies(connection, url)
-            val html = connection.readTextBody()
-            if (code !in 200..299) {
-                throw IOException("HTTP $code")
-            }
+    private fun fetchText(url: String, referer: String, retryGuard: Boolean): String {
+        var currentUrl = url
+        repeat(MaxTextRedirects + 1) { redirectIndex ->
+            val hadAuthenticatedCookies = hasAuthenticatedCookiesFor(currentUrl)
+            val connection = openConnection(
+                url = currentUrl,
+                accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                referer = referer,
+                followRedirects = false
+            )
+            try {
+                val code = connection.responseCode
+                captureCookies(connection, currentUrl)
 
-            if (parser.isGuardChallenge(html)) {
-                if (retryGuard && solveGuardChallenge(html, url)) {
-                    return fetchText(url, referer, retryGuard = false)
+                if (code in HttpRedirectCodes) {
+                    val location = connection.getHeaderField("Location")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: throw IOException("HTTP $code")
+                    currentUrl = location.resolveAgainst(currentUrl)
+                    if (redirectIndex >= MaxTextRedirects) {
+                        throw IOException("Too many HTTP redirects")
+                    }
+                    return@repeat
                 }
-                throw IOException("Com-X session is not ready. Open Login, let the site load, then retry.")
-            }
 
-            parser.ensureReadableHtml(html)
-            return html
-        } finally {
-            connection.disconnect()
+                val html = connection.readTextBody()
+                if (
+                    code.indicatesExpiredAuthenticatedSession(
+                        url = currentUrl,
+                        hadAuthenticatedCookies = hadAuthenticatedCookies,
+                        html = html
+                    )
+                ) {
+                    clearAuthenticatedCookies()
+                    throw MangaAuthenticationExpiredException()
+                }
+
+                if (code !in 200..299) {
+                    throw IOException("HTTP $code")
+                }
+
+                if (parser.isGuardChallenge(html)) {
+                    if (retryGuard && solveGuardChallenge(html, currentUrl)) {
+                        return fetchText(url, referer, retryGuard = false)
+                    }
+                    throw IOException(
+                        "Com-X session is not ready. Open Login, let the site load, then retry."
+                    )
+                }
+
+                parser.ensureReadableHtml(html)
+                return html
+            } finally {
+                connection.disconnect()
+            }
         }
+
+        throw IOException("Too many HTTP redirects")
     }
 
     private fun openConnection(
@@ -170,24 +200,21 @@ class ComxMangaHttpClient @Inject constructor(
         referer: String,
         connectTimeout: Int = ConnectTimeoutMillis,
         readTimeout: Int = ReadTimeoutMillis,
-    ): HttpURLConnection =
-        (URL(url).openConnection() as HttpURLConnection).apply {
-            this.connectTimeout = connectTimeout
-            this.readTimeout = readTimeout
-            instanceFollowRedirects = true
-            setRequestProperty("Accept", accept)
-            setRequestProperty("Accept-Language", "ru,en;q=0.8")
-            setRequestProperty("Referer", referer)
-            setRequestProperty("User-Agent", ComxMangaAdapter.UserAgent)
-            cookiesFor(url)?.let { cookie ->
-                setRequestProperty("Cookie", cookie)
-            }
+        followRedirects: Boolean = true
+    ): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
+        this.connectTimeout = connectTimeout
+        this.readTimeout = readTimeout
+        instanceFollowRedirects = followRedirects
+        setRequestProperty("Accept", accept)
+        setRequestProperty("Accept-Language", "ru,en;q=0.8")
+        setRequestProperty("Referer", referer)
+        setRequestProperty("User-Agent", ComxMangaAdapter.UserAgent)
+        cookiesFor(url)?.let { cookie ->
+            setRequestProperty("Cookie", cookie)
         }
+    }
 
-    private fun requestAuthorizedArchiveUrl(
-        chapter: MangaChapter,
-        fallbackUrl: String,
-    ): String {
+    private fun requestAuthorizedArchiveUrl(chapter: MangaChapter, fallbackUrl: String): String {
         val newsId = chapter.seriesId.extractNewsId()
             ?: chapter.chapterId.extractReaderNewsId()
             ?: fallbackUrl.extractDownloadNewsId()
@@ -195,11 +222,13 @@ class ComxMangaHttpClient @Inject constructor(
         val chapterId = chapter.chapterId.extractReaderChapterId()
             ?: fallbackUrl.extractDownloadChapterId()
             ?: return fallbackUrl
-        val ajaxUrl = "${ComxMangaAdapter.HomeUrl}engine/ajax/controller.php?mod=api&action=chapters/download"
+        val ajaxUrl = ComxMangaAdapter.HomeUrl +
+            "engine/ajax/controller.php?mod=api&action=chapters/download"
         val body = listOf(
             "news_id" to newsId.toString(),
-            "chapter_id" to chapterId.toString(),
+            "chapter_id" to chapterId.toString()
         ).toFormEncodedUtf8Body()
+        val hadAuthenticatedCookies = hasAuthenticatedCookiesFor(ajaxUrl)
 
         val connection = (URL(ajaxUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -227,13 +256,27 @@ class ComxMangaHttpClient @Inject constructor(
             val code = connection.responseCode
             captureCookies(connection, ajaxUrl)
             val response = connection.readTextBody()
+            if (
+                code.indicatesExpiredAuthenticatedSession(
+                    url = ajaxUrl,
+                    hadAuthenticatedCookies = hadAuthenticatedCookies,
+                    html = response
+                )
+            ) {
+                clearAuthenticatedCookies()
+                throw MangaAuthenticationExpiredException()
+            }
             if (code !in 200..299) {
-                throw IOException("Archive auth HTTP $code${response.errorSnippet().messageSuffix()}")
+                throw IOException(
+                    "Archive auth HTTP $code${response.errorSnippet().messageSuffix()}"
+                )
             }
 
             val json = runCatching { Json.parseToJsonElement(response).jsonObject }
                 .getOrElse {
-                    throw IOException("Archive auth response is invalid${response.errorSnippet().messageSuffix()}")
+                    throw IOException(
+                        "Archive auth response is invalid${response.errorSnippet().messageSuffix()}"
+                    )
                 }
 
             if (!json.booleanValue("success")) {
@@ -272,7 +315,7 @@ class ComxMangaHttpClient @Inject constructor(
             "tz" to "-180",
             "dpr" to "3",
             "cdp" to "0",
-            "cdpf" to "",
+            "cdpf" to ""
         ).toFormEncodedUtf8Body()
 
         val connection = (URL(target).openConnection() as HttpURLConnection).apply {
@@ -319,10 +362,17 @@ class ComxMangaHttpClient @Inject constructor(
         CookieManager.getInstance().flush()
     }
 
+    private fun clearAuthenticatedCookies() {
+        AuthCookieExpireHeaders.forEach { cookie ->
+            CookieManager.getInstance().setCookie(ComxMangaAdapter.HomeUrl, cookie)
+        }
+        CookieManager.getInstance().flush()
+    }
+
     private fun cookiesFor(url: String): String? {
         val cookies = listOfNotNull(
             CookieManager.getInstance().getCookie(url),
-            CookieManager.getInstance().getCookie(ComxMangaAdapter.HomeUrl),
+            CookieManager.getInstance().getCookie(ComxMangaAdapter.HomeUrl)
         )
             .flatMap { cookieHeader -> cookieHeader.split(';') }
             .map { cookie -> cookie.trim() }
@@ -342,22 +392,54 @@ class ComxMangaHttpClient @Inject constructor(
             DlePasswordCookieName in cookieNames
     }
 
+    private fun Int.indicatesExpiredAuthenticatedSession(
+        url: String,
+        hadAuthenticatedCookies: Boolean,
+        html: String
+    ): Boolean {
+        if (!hadAuthenticatedCookies) return false
+        if (
+            this == HttpURLConnection.HTTP_UNAUTHORIZED ||
+            this == HttpURLConnection.HTTP_FORBIDDEN
+        ) {
+            return true
+        }
+        return this == HttpURLConnection.HTTP_NOT_FOUND &&
+            (url.isComxAuthSensitiveEndpoint() || html.looksLikeComxErrorPage())
+    }
+
+    private fun hasAuthenticatedCookiesFor(url: String): Boolean =
+        cookiesFor(url)?.hasAuthenticatedCookies() == true
+
+    private fun String.isComxAuthSensitiveEndpoint(): Boolean {
+        val path = runCatching { URI(this).path.orEmpty() }.getOrDefault(this)
+        return path.startsWith("/search/") ||
+            contains("engine/ajax/controller.php", ignoreCase = true)
+    }
+
+    private fun String.looksLikeComxErrorPage(): Boolean {
+        val normalized = cleanWhitespace()
+        return normalized.contains("HTTP 404", ignoreCase = true) ||
+            normalized.contains("Ошибка 404", ignoreCase = true) ||
+            normalized.contains("страница не найдена", ignoreCase = true) ||
+            normalized.contains("page not found", ignoreCase = true)
+    }
+
     private fun HttpURLConnection.readTextBody(): String {
         val stream = if (responseCode in 200..399) {
             inputStream
         } else {
-            errorStream ?: inputStream
-        }
+            errorStream
+        } ?: return ""
         return stream.bufferedReader().use { reader -> reader.readText() }
     }
 
-    private fun HttpURLConnection.readErrorSnippet(): String =
-        runCatching {
-            (errorStream ?: inputStream)
-                .bufferedReader()
-                .use { reader -> reader.readText() }
-                .errorSnippet()
-        }.getOrDefault("")
+    private fun HttpURLConnection.readErrorSnippet(): String = runCatching {
+        (errorStream ?: inputStream)
+            .bufferedReader()
+            .use { reader -> reader.readText() }
+            .errorSnippet()
+    }.getOrDefault("")
 
     private fun File.readSmallText(): String =
         takeIf { it.exists() && it.length() in 1..MaxSmallTextBytes }
@@ -407,29 +489,25 @@ class ComxMangaHttpClient @Inject constructor(
         return bytes
     }
 
-    private fun String.extractNewsId(): Long? =
-        Regex("""/(\d+)-""").find(this)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toLongOrNull()
+    private fun String.extractNewsId(): Long? = Regex("""/(\d+)-""").find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toLongOrNull()
 
-    private fun String.extractReaderNewsId(): Long? =
-        Regex("""/reader/(\d+)/\d+""").find(this)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toLongOrNull()
+    private fun String.extractReaderNewsId(): Long? = Regex("""/reader/(\d+)/\d+""").find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toLongOrNull()
 
-    private fun String.extractReaderChapterId(): Long? =
-        Regex("""/reader/\d+/(\d+)""").find(this)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toLongOrNull()
+    private fun String.extractReaderChapterId(): Long? = Regex("""/reader/\d+/(\d+)""").find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toLongOrNull()
 
-    private fun String.extractDownloadNewsId(): Long? =
-        Regex("""/download/(\d+)-\d+""").find(this)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toLongOrNull()
+    private fun String.extractDownloadNewsId(): Long? = Regex("""/download/(\d+)-\d+""").find(this)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toLongOrNull()
 
     private fun String.extractDownloadChapterId(): Long? =
         Regex("""/download/\d+-(\d+)""").find(this)
@@ -437,13 +515,11 @@ class ComxMangaHttpClient @Inject constructor(
             ?.getOrNull(1)
             ?.toLongOrNull()
 
-    private fun String.cleanWhitespace(): String =
-        replace('\u00A0', ' ')
-            .replace(Regex("""\s+"""), " ")
-            .trim()
+    private fun String.cleanWhitespace(): String = replace('\u00A0', ' ')
+        .replace(Regex("""\s+"""), " ")
+        .trim()
 
-    private fun String.errorSnippet(): String =
-        cleanWhitespace().take(MaxErrorSnippetLength)
+    private fun String.errorSnippet(): String = cleanWhitespace().take(MaxErrorSnippetLength)
 
     private fun String.resolveAgainst(baseUrl: String): String {
         val raw = replace("\\/", "/").trim()
@@ -458,19 +534,20 @@ class ComxMangaHttpClient @Inject constructor(
         return ""
     }
 
-    private fun JsonObject.booleanValue(key: String): Boolean =
-        when (val value = get(key)) {
-            is JsonPrimitive -> value.booleanOrNull ?: value.contentOrNull.equals("true", ignoreCase = true)
-            else -> false
-        }
+    private fun JsonObject.booleanValue(key: String): Boolean = when (val value = get(key)) {
+        is JsonPrimitive ->
+            value.booleanOrNull
+                ?: value.contentOrNull.equals("true", ignoreCase = true)
 
-    private fun JsonElement?.asCleanString(): String =
-        when (this) {
-            is JsonPrimitive -> contentOrNull?.cleanWhitespace().orEmpty()
-            is JsonObject -> firstString("url", "src", "href")
-            is JsonArray -> firstOrNull().asCleanString()
-            else -> ""
-        }
+        else -> false
+    }
+
+    private fun JsonElement?.asCleanString(): String = when (this) {
+        is JsonPrimitive -> contentOrNull?.cleanWhitespace().orEmpty()
+        is JsonObject -> firstString("url", "src", "href")
+        is JsonArray -> firstOrNull().asCleanString()
+        else -> ""
+    }
 
     private fun extensionFromContentType(contentType: String?): String? {
         val normalized = contentType.orEmpty().substringBefore(';').trim().lowercase()
@@ -521,6 +598,7 @@ class ComxMangaHttpClient @Inject constructor(
                 header[0] == 0x50.toByte() &&
                 header[1] == 0x4B.toByte() &&
                 header[2] in ZipMagicThirdBytes -> "cbz"
+
             read >= 7 &&
                 header[0] == 0x52.toByte() &&
                 header[1] == 0x61.toByte() &&
@@ -528,6 +606,7 @@ class ComxMangaHttpClient @Inject constructor(
                 header[3] == 0x21.toByte() &&
                 header[4] == 0x1A.toByte() &&
                 header[5] == 0x07.toByte() -> "cbr"
+
             else -> null
         }
     }
@@ -544,6 +623,7 @@ class ComxMangaHttpClient @Inject constructor(
     private companion object {
         private const val ConnectTimeoutMillis = 15_000
         private const val ReadTimeoutMillis = 30_000
+        private const val MaxTextRedirects = 5
         private const val GuardConnectTimeoutMillis = 15_000
         private const val GuardReadTimeoutMillis = 30_000
         private const val ImageConnectTimeoutMillis = 8_000
@@ -561,14 +641,30 @@ class ComxMangaHttpClient @Inject constructor(
         private const val MinArchiveBytes = 512L
         private const val MaxSmallTextBytes = 4096L
         private const val MaxErrorSnippetLength = 180
+        private const val ARCHIVE_ACCEPT_HEADER =
+            "application/vnd.comicbook-rar,application/vnd.comicbook+zip," +
+                "application/x-rar-compressed,application/zip,application/octet-stream,*/*"
 
         private val ZipMagicThirdBytes = setOf(
             0x03.toByte(),
             0x05.toByte(),
-            0x07.toByte(),
+            0x07.toByte()
+        )
+        private val HttpRedirectCodes = setOf(
+            HttpURLConnection.HTTP_MOVED_PERM,
+            HttpURLConnection.HTTP_MOVED_TEMP,
+            HttpURLConnection.HTTP_SEE_OTHER,
+            307,
+            308
         )
         private val GuardTokenRegex = Regex("""token:\s*["']([^"']+)["']""")
         private const val DleUserIdCookieName = "dle_user_id"
         private const val DlePasswordCookieName = "dle_password"
+        private val AuthCookieExpireHeaders = listOf(
+            "$DleUserIdCookieName=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/",
+            "$DlePasswordCookieName=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/",
+            "$DleUserIdCookieName=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Domain=.com-x.life; Path=/",
+            "$DlePasswordCookieName=; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Domain=.com-x.life; Path=/"
+        )
     }
 }

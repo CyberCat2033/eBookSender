@@ -13,22 +13,41 @@ interface MangaSeriesBookmarkDao {
         SELECT * FROM manga_series_bookmarks
         WHERE favorite = 1 OR subscribed = 1
         ORDER BY lastOpenedAtMillis DESC, title COLLATE NOCASE
-        """,
+        """
     )
     fun observeSavedSeries(): Flow<List<MangaSeriesBookmarkEntity>>
 
-    @Query("SELECT * FROM manga_series_bookmarks WHERE subscribed = 1 ORDER BY title COLLATE NOCASE")
+    @Query(
+        "SELECT * FROM manga_series_bookmarks WHERE subscribed = 1 ORDER BY title COLLATE NOCASE"
+    )
     suspend fun subscribedSeries(): List<MangaSeriesBookmarkEntity>
+
+    @Query(
+        """
+        SELECT * FROM manga_series_bookmarks
+        WHERE sourceId = :sourceId AND seriesId = :seriesId
+        LIMIT 1
+        """
+    )
+    suspend fun findSeries(sourceId: String, seriesId: String): MangaSeriesBookmarkEntity?
 
     @Upsert
     suspend fun upsert(series: MangaSeriesBookmarkEntity)
 
     @Query(
         """
+        DELETE FROM manga_series_bookmarks
+        WHERE sourceId = :sourceId AND seriesId = :seriesId
+        """
+    )
+    suspend fun deleteSeries(sourceId: String, seriesId: String)
+
+    @Query(
+        """
         UPDATE manga_series_bookmarks
         SET favorite = 0
         WHERE favorite = 1 AND subscribed = 1
-        """,
+        """
     )
     suspend fun normalizeMutualExclusion()
 
@@ -38,7 +57,7 @@ interface MangaSeriesBookmarkDao {
         SET favorite = 0,
             subscribed = 0
         WHERE favorite = 1 OR subscribed = 1
-        """,
+        """
     )
     suspend fun clearSavedSeries(): Int
 
@@ -46,7 +65,7 @@ interface MangaSeriesBookmarkDao {
         """
         SELECT COUNT(*) FROM manga_series_bookmarks
         WHERE favorite = 1 OR subscribed = 1
-        """,
+        """
     )
     suspend fun savedSeriesCount(): Int
 
@@ -80,7 +99,7 @@ interface MangaSeriesBookmarkDao {
             coverUrl = excluded.coverUrl,
             description = excluded.description,
             lastOpenedAtMillis = excluded.lastOpenedAtMillis
-        """,
+        """
     )
     suspend fun upsertSnapshot(
         sourceId: String,
@@ -88,7 +107,7 @@ interface MangaSeriesBookmarkDao {
         title: String,
         coverUrl: String?,
         description: String?,
-        openedAtMillis: Long,
+        openedAtMillis: Long
     )
 
     @Query(
@@ -101,7 +120,7 @@ interface MangaSeriesBookmarkDao {
             description = :description,
             lastOpenedAtMillis = :updatedAtMillis
         WHERE sourceId = :sourceId AND seriesId = :seriesId
-        """,
+        """
     )
     suspend fun setFavorite(
         sourceId: String,
@@ -110,7 +129,7 @@ interface MangaSeriesBookmarkDao {
         coverUrl: String?,
         description: String?,
         favorite: Boolean,
-        updatedAtMillis: Long,
+        updatedAtMillis: Long
     ): Int
 
     @Query(
@@ -123,7 +142,7 @@ interface MangaSeriesBookmarkDao {
             description = :description,
             lastOpenedAtMillis = :updatedAtMillis
         WHERE sourceId = :sourceId AND seriesId = :seriesId
-        """,
+        """
     )
     suspend fun setSubscribed(
         sourceId: String,
@@ -132,7 +151,7 @@ interface MangaSeriesBookmarkDao {
         coverUrl: String?,
         description: String?,
         subscribed: Boolean,
-        updatedAtMillis: Long,
+        updatedAtMillis: Long
     ): Int
 
     @Query(
@@ -140,11 +159,7 @@ interface MangaSeriesBookmarkDao {
         UPDATE manga_series_bookmarks
         SET lastCheckedAtMillis = :checkedAtMillis
         WHERE sourceId = :sourceId AND seriesId = :seriesId
-        """,
+        """
     )
-    suspend fun markChecked(
-        sourceId: String,
-        seriesId: String,
-        checkedAtMillis: Long,
-    )
+    suspend fun markChecked(sourceId: String, seriesId: String, checkedAtMillis: Long)
 }

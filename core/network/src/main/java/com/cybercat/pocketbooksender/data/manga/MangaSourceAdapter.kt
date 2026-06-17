@@ -1,6 +1,11 @@
 package com.cybercat.pocketbooksender.data.manga
 
 import java.io.File
+import java.io.IOException
+
+const val MANGA_AUTHENTICATION_EXPIRED_MESSAGE = "MANGA_AUTHENTICATION_EXPIRED"
+
+class MangaAuthenticationExpiredException : IOException(MANGA_AUTHENTICATION_EXPIRED_MESSAGE)
 
 interface MangaSourceAdapter {
     val id: String
