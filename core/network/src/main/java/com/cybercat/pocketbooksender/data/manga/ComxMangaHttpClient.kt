@@ -10,7 +10,11 @@ import java.net.URL
 import java.net.URLDecoder
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -40,6 +44,11 @@ class ComxMangaHttpClient @Inject constructor(private val parser: ComxHtmlParser
             connectTimeout = ImageConnectTimeoutMillis,
             readTimeout = ImageReadTimeoutMillis
         )
+        val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
+            if (cause is CancellationException) {
+                connection.disconnect()
+            }
+        }
         try {
             val code = connection.responseCode
             captureCookies(connection, page.imageUrl)
@@ -52,7 +61,18 @@ class ComxMangaHttpClient @Inject constructor(private val parser: ComxHtmlParser
                 ?: parser.imageExtensionFromUrl(page.imageUrl)
                 ?: "jpg"
             MangaDownloadedPage(bytes = bytes, fileExtension = extension)
+        } catch (error: Throwable) {
+            if (
+                error !is CancellationException &&
+                currentCoroutineContext()[Job]?.isCancelled == true
+            ) {
+                throw CancellationException("Manga page download canceled").also { cancellation ->
+                    cancellation.initCause(error)
+                }
+            }
+            throw error
         } finally {
+            cancellationHandle?.dispose()
             connection.disconnect()
         }
     }
@@ -72,6 +92,11 @@ class ComxMangaHttpClient @Inject constructor(private val parser: ComxHtmlParser
             connectTimeout = ArchiveConnectTimeoutMillis,
             readTimeout = ArchiveReadTimeoutMillis
         )
+        val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
+            if (cause is CancellationException) {
+                connection.disconnect()
+            }
+        }
         try {
             connection.setRequestProperty("Sec-Fetch-Dest", "document")
             connection.setRequestProperty("Sec-Fetch-Mode", "navigate")
@@ -97,6 +122,7 @@ class ComxMangaHttpClient @Inject constructor(private val parser: ComxHtmlParser
                     var lastReportedBytes = -ArchiveProgressReportBytes
                     onProgress(0L, totalBytes)
                     while (true) {
+                        currentCoroutineContext().ensureActive()
                         val read = input.read(buffer)
                         if (read < 0) break
                         output.write(buffer, 0, read)
@@ -129,7 +155,20 @@ class ComxMangaHttpClient @Inject constructor(private val parser: ComxHtmlParser
                 )
 
             MangaDownloadedArchive(fileExtension = extension)
+        } catch (error: Throwable) {
+            if (
+                error !is CancellationException &&
+                currentCoroutineContext()[Job]?.isCancelled == true
+            ) {
+                throw CancellationException(
+                    "Manga archive download canceled"
+                ).also { cancellation ->
+                    cancellation.initCause(error)
+                }
+            }
+            throw error
         } finally {
+            cancellationHandle?.dispose()
             connection.disconnect()
         }
     }

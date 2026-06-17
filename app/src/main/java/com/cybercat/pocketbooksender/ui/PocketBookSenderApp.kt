@@ -403,6 +403,7 @@ private fun AppNavHost(
                 onNextPage = opdsViewModel::goNextOpdsPage,
                 onSearch = opdsViewModel::searchOpds,
                 onDownload = opdsViewModel::downloadOpdsAcquisition,
+                onCancelDownload = opdsViewModel::cancelOpdsDownload,
                 onAuthUsernameChanged = opdsViewModel::onAuthUsernameChanged,
                 onAuthPasswordChanged = opdsViewModel::onAuthPasswordChanged,
                 onDismissAuthDialog = opdsViewModel::dismissCredentialsDialog,
@@ -438,6 +439,7 @@ private fun AppNavHost(
                         onDownloadSubscriptionUpdates = mangaViewModel::downloadSubscriptionUpdates,
                         onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
                         onRefreshAuthState = mangaViewModel::refreshMangaAuthState,
+                        onCancelDownload = mangaViewModel::cancelMangaDownload,
                         onNativeLoginSubmit = mangaViewModel::performNativeLogin,
                         onLoginPostExecuted = mangaViewModel::clearPendingLoginPost
                     )
@@ -503,6 +505,7 @@ private fun AppNavHost(
                         )
                     }
                 },
+                isMangaDownloading = mangaState.isDownloading,
                 isMangaSelectionActive = mangaState.selectedChapterIds.isNotEmpty(),
                 mangaSelectedChapterCount = mangaState.selectedChapterIds.size,
                 onClearMangaSelection = {

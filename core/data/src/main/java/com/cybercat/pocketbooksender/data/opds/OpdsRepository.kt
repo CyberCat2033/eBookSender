@@ -17,7 +17,11 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -159,14 +163,45 @@ class OpdsRepository @Inject constructor(
             )
             val outputDir = File(context.cacheDir, "opds").apply { mkdirs() }
             val outputFile = uniqueFile(outputDir, fileName)
-
-            connection.inputStream.use { input ->
-                outputFile.outputStream().use { output ->
-                    input.copyTo(output)
+            val tempFile = uniqueFile(outputDir, "${outputFile.name}.download")
+            val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
+                if (cause is CancellationException) {
+                    connection.disconnect()
                 }
             }
 
-            outputFile
+            try {
+                connection.inputStream.use { input ->
+                    tempFile.outputStream().use { output ->
+                        val buffer = ByteArray(DEFAULT_DOWNLOAD_BUFFER_SIZE)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                }
+
+                if (!tempFile.renameTo(outputFile)) {
+                    tempFile.copyTo(outputFile, overwrite = false)
+                    tempFile.delete()
+                }
+                outputFile
+            } catch (error: Throwable) {
+                tempFile.delete()
+                if (
+                    error !is CancellationException &&
+                    currentCoroutineContext()[Job]?.isCancelled == true
+                ) {
+                    throw CancellationException("OPDS download canceled").also { cancellation ->
+                        cancellation.initCause(error)
+                    }
+                }
+                throw error
+            } finally {
+                cancellationHandle?.dispose()
+            }
         } finally {
             connection.disconnect()
         }
@@ -342,6 +377,7 @@ class OpdsRepository @Inject constructor(
 
     private companion object {
         const val CATALOG_CACHE_TTL_MILLIS = 5 * 60 * 1000L
+        const val DEFAULT_DOWNLOAD_BUFFER_SIZE = 64 * 1024
         const val SEARCH_TERMS_PLACEHOLDER = "{searchTerms"
         const val LEGACY_PROJECT_GUTENBERG_SOURCE_ID = "project-gutenberg"
         const val OPDS_CATALOG_ACCEPT =

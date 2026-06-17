@@ -58,6 +58,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -133,8 +134,12 @@ import org.json.JSONArray
 internal fun MangaDownloadProgressOverlay(
     progressInfo: MangaDownloadUiProgress?,
     selectedCount: Int,
+    enableHaptics: Boolean,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     val strings = LocalStrings.current
     val titleText = progressInfo?.title ?: strings.mangaDownloadPreparing
     val detailText = progressInfo?.detail ?: when (selectedCount) {
@@ -169,6 +174,7 @@ internal fun MangaDownloadProgressOverlay(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -197,6 +203,26 @@ internal fun MangaDownloadProgressOverlay(
                         text = detailText,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                OutlinedButton(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            HapticFeedbackConstants.REJECT
+                        )
+                        onCancel()
+                    },
+                    modifier = Modifier.widthIn(max = 180.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = contentColor)
+                ) {
+                    Icon(Icons.Outlined.Close, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = strings.get("manga_download_cancel"),
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }

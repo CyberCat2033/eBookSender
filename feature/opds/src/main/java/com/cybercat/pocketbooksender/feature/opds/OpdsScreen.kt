@@ -3,6 +3,7 @@ package com.cybercat.pocketbooksender.feature.opds
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -10,7 +11,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -103,6 +106,7 @@ fun OpdsScreen(
     onNextPage: () -> Unit,
     onSearch: () -> Unit,
     onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
+    onCancelDownload: () -> Unit,
     onAuthUsernameChanged: (String) -> Unit,
     onAuthPasswordChanged: (String) -> Unit,
     onDismissAuthDialog: () -> Unit,
@@ -115,6 +119,7 @@ fun OpdsScreen(
     mangaTopBarActions: @Composable () -> Unit,
     mangaTopBarNavigationIcon: @Composable () -> Unit,
     mangaFloatingActionButton: @Composable () -> Unit,
+    isMangaDownloading: Boolean,
     isMangaSelectionActive: Boolean,
     mangaSelectedChapterCount: Int,
     onClearMangaSelection: () -> Unit
@@ -129,7 +134,9 @@ fun OpdsScreen(
     var newSourceUsername by remember { mutableStateOf("") }
     var newSourcePassword by remember { mutableStateOf("") }
     val webMode = state.webMode
-    val canHandleOpdsBack = webMode == WebContentMode.Opds && state.canGoBack && !state.isLoading
+    val canHandleOpdsBack =
+        webMode == WebContentMode.Opds && state.canGoBack && !state.isLoading &&
+            !state.isDownloading
     val opdsStartLink = remember(webMode, state.catalog, state.currentUrl, state.sources) {
         if (webMode != WebContentMode.Opds) {
             null
@@ -246,7 +253,7 @@ fun OpdsScreen(
                                     )
                                     onOpenLink(startLink)
                                 },
-                                enabled = !state.isLoading
+                                enabled = !state.isLoading && !state.isDownloading
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Home,
@@ -261,7 +268,8 @@ fun OpdsScreen(
                                 newSourceUsername = ""
                                 newSourcePassword = ""
                                 showAddSourceDialog = true
-                            }
+                            },
+                            enabled = !state.isDownloading
                         ) {
                             Icon(
                                 Icons.Outlined.Add,
@@ -293,6 +301,7 @@ fun OpdsScreen(
             ) {
                 WebModeSelector(
                     selectedMode = webMode,
+                    enabled = !state.isDownloading && !isMangaDownloading,
                     enableHaptics = enableHaptics,
                     onModeSelected = onWebModeSelected,
                     modifier = Modifier.padding(bottom = 10.dp)
@@ -357,16 +366,35 @@ fun OpdsScreen(
                     }
 
                     if (webMode == WebContentMode.Opds) {
-                        OpdsPaginationBar(
-                            paging = state.paging,
-                            enabled = !state.isLoading,
-                            enableHaptics = enableHaptics,
-                            onPreviousPage = onPreviousPage,
-                            onNextPage = onNextPage,
+                        if (!state.isDownloading) {
+                            OpdsPaginationBar(
+                                paging = state.paging,
+                                enabled = !state.isLoading,
+                                enableHaptics = enableHaptics,
+                                onPreviousPage = onPreviousPage,
+                                onNextPage = onNextPage,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 12.dp)
+                            )
+                        }
+                        Column(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(bottom = 12.dp)
-                        )
+                                .padding(12.dp)
+                        ) {
+                            AnimatedVisibility(
+                                visible = state.isDownloading,
+                                enter = fadeIn() + slideInVertically { height -> height / 2 },
+                                exit = fadeOut() + slideOutVertically { height -> height / 2 }
+                            ) {
+                                OpdsDownloadProgressOverlay(
+                                    progressInfo = state.downloadProgress,
+                                    enableHaptics = enableHaptics,
+                                    onCancel = onCancelDownload
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -484,7 +512,7 @@ private fun OpdsCatalogContent(
                 SearchPanel(
                     query = state.searchInput,
                     isSearchAvailable = hasSearch,
-                    enabled = !state.isLoading,
+                    enabled = !state.isLoading && !state.isDownloading,
                     enableHaptics = enableHaptics,
                     onSearchChanged = onSearchChanged,
                     onSearch = onSearch
@@ -495,7 +523,7 @@ private fun OpdsCatalogContent(
                 item {
                     FeedLinksRow(
                         links = feedLinks,
-                        enabled = !state.isLoading,
+                        enabled = !state.isLoading && !state.isDownloading,
                         enableHaptics = enableHaptics,
                         onOpenLink = onOpenLink
                     )
@@ -534,7 +562,7 @@ private fun OpdsCatalogContent(
                 item {
                     FeedLinksRow(
                         links = feedLinks,
-                        enabled = !state.isLoading,
+                        enabled = !state.isLoading && !state.isDownloading,
                         enableHaptics = enableHaptics,
                         onOpenLink = onOpenLink,
                         modifier = Modifier.padding(top = 10.dp)
@@ -544,7 +572,15 @@ private fun OpdsCatalogContent(
         }
 
         item {
-            Spacer(Modifier.height(if (state.paging.shouldShow) 80.dp else 8.dp))
+            Spacer(
+                Modifier.height(
+                    when {
+                        state.isDownloading -> 112.dp
+                        state.paging.shouldShow -> 80.dp
+                        else -> 8.dp
+                    }
+                )
+            )
         }
     }
 }
@@ -572,6 +608,7 @@ private fun OpdsUiState.opdsContentMotionKey(feedLinkCount: Int): OpdsContentMot
 @Composable
 private fun WebModeSelector(
     selectedMode: WebContentMode,
+    enabled: Boolean,
     enableHaptics: Boolean,
     onModeSelected: (WebContentMode) -> Unit,
     modifier: Modifier = Modifier
@@ -598,6 +635,7 @@ private fun WebModeSelector(
                     )
                     onModeSelected(mode)
                 },
+                enabled = enabled,
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
                 icon = {
                     Icon(

@@ -12,6 +12,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.cybercat.pocketbooksender.MainActivity
 import com.cybercat.pocketbooksender.R
+import com.cybercat.pocketbooksender.data.manga.MangaDownloadCancelledException
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadCoordinator
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadEvent
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadProgress
@@ -32,6 +33,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -47,6 +49,8 @@ class MangaDownloadForegroundService : Service() {
     @Inject lateinit var localizationManager: LocalizationManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var activeRequestId: String? = null
+    private var activeDownloadJob: Job? = null
     private val downloadWakeLock by lazy {
         ScopedWakeLock(
             context = this,
@@ -59,6 +63,11 @@ class MangaDownloadForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureNotificationChannel()
+
+        if (intent?.action == ACTION_CANCEL_DOWNLOAD) {
+            cancelActiveDownload(intent.getStringExtra(EXTRA_REQUEST_ID), startId)
+            return START_NOT_STICKY
+        }
 
         val request = downloadCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
         if (request == null) {
@@ -85,10 +94,13 @@ class MangaDownloadForegroundService : Service() {
         )
 
         downloadWakeLock.acquire()
-        serviceScope.launch {
+        activeRequestId = request.id
+        activeDownloadJob = serviceScope.launch {
             try {
                 runDownload(request)
             } finally {
+                activeRequestId = null
+                activeDownloadJob = null
                 downloadWakeLock.release()
                 stopSelf(startId)
             }
@@ -99,8 +111,21 @@ class MangaDownloadForegroundService : Service() {
 
     override fun onDestroy() {
         downloadWakeLock.release()
+        activeDownloadJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    private fun cancelActiveDownload(requestId: String?, startId: Int) {
+        val activeId = activeRequestId
+        val activeJob = activeDownloadJob
+        if (activeJob == null || activeId == null) {
+            stopSelf(startId)
+            return
+        }
+        if (requestId == null || requestId == activeId) {
+            activeJob.cancel()
+        }
     }
 
     private suspend fun runDownload(request: MangaDownloadRequest) {
@@ -150,6 +175,27 @@ class MangaDownloadForegroundService : Service() {
                 downloaded = result.downloaded.size,
                 failed = result.failedMessages.size
             )
+        } catch (error: MangaDownloadCancelledException) {
+            val result = error.result
+            if (result.downloaded.isNotEmpty()) {
+                addDownloadedMangaFiles(result.downloaded)
+            }
+            downloadCoordinator.emit(
+                MangaDownloadEvent.Canceled(
+                    requestId = request.id,
+                    kind = request.kind,
+                    downloadedChapterIds = result.downloaded.mapTo(mutableSetOf()) { downloaded ->
+                        downloaded.chapter.chapterId
+                    },
+                    downloadedSubscriptionKeys = result.downloaded.mapTo(
+                        mutableSetOf()
+                    ) { downloaded ->
+                        downloaded.chapter.mangaStableSelectionKey()
+                    },
+                    addedToQueueCount = result.downloaded.size
+                )
+            )
+            showFinishedNotification(downloaded = result.downloaded.size, failed = 0)
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
             downloadCoordinator.emit(
@@ -270,6 +316,8 @@ class MangaDownloadForegroundService : Service() {
         private const val CHANNEL_ID = "manga_downloads"
         private const val NOTIFICATION_ID = 2201
         private const val COMPLETION_NOTIFICATION_ID_START = 2300
+        private const val ACTION_CANCEL_DOWNLOAD =
+            "com.cybercat.pocketbooksender.manga.CANCEL_DOWNLOAD"
         private const val EXTRA_REQUEST_ID = "request_id"
         private const val DOWNLOAD_WAKE_LOCK_TIMEOUT_MILLIS = 90 * 60 * 1000L
         private val completionNotificationIds = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
@@ -279,6 +327,11 @@ class MangaDownloadForegroundService : Service() {
 
         fun createIntent(context: Context, requestId: String): Intent =
             Intent(context, MangaDownloadForegroundService::class.java)
+                .putExtra(EXTRA_REQUEST_ID, requestId)
+
+        fun createCancelIntent(context: Context, requestId: String): Intent =
+            Intent(context, MangaDownloadForegroundService::class.java)
+                .setAction(ACTION_CANCEL_DOWNLOAD)
                 .putExtra(EXTRA_REQUEST_ID, requestId)
     }
 }

@@ -208,6 +208,8 @@ class MangaViewModel @Inject constructor(
 
     fun downloadSelectedMangaChapters() = downloadController.downloadSelectedMangaChapters()
 
+    fun cancelMangaDownload() = downloadController.cancelActiveDownload()
+
     fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) =
         discoveryController.refreshAuthState(closeBrowserOnAuthenticated)
 

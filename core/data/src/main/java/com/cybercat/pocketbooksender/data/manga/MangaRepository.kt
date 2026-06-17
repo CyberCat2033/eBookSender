@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -196,17 +197,27 @@ class MangaRepository @Inject constructor(
         targets: List<MangaChapterDownloadTarget>,
         onProgress: suspend (MangaDownloadProgress) -> Unit = {}
     ): MangaDownloadResult = withContext(Dispatchers.IO) {
-        val batch = chapterDownloader.download(
-            targets = targets,
-            onProgress = onProgress
-        )
-        if (batch.historyItems.isNotEmpty()) {
-            historyDao.upsertAll(batch.historyItems)
+        try {
+            val batch = chapterDownloader.download(
+                targets = targets,
+                onProgress = onProgress
+            )
+            batch.toResult()
+        } catch (error: MangaChapterDownloadCancelledException) {
+            val partialResult = withContext(NonCancellable) {
+                error.partialBatch.toResult()
+            }
+            throw MangaDownloadCancelledException(partialResult)
         }
+    }
 
-        MangaDownloadResult(
-            downloaded = batch.downloaded,
-            failedMessages = batch.failedMessages
+    private suspend fun MangaChapterDownloadBatch.toResult(): MangaDownloadResult {
+        if (historyItems.isNotEmpty()) {
+            historyDao.upsertAll(historyItems)
+        }
+        return MangaDownloadResult(
+            downloaded = downloaded,
+            failedMessages = failedMessages
         )
     }
 

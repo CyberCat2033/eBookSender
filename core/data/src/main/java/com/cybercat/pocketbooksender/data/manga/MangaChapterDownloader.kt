@@ -8,6 +8,7 @@ import com.cybercat.pocketbooksender.domain.FilenameSanitizer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,34 +45,39 @@ class MangaChapterDownloader @Inject constructor(
         val completedChapters = AtomicInteger(0)
         val chapterSemaphore = Semaphore(MAX_PARALLEL_CHAPTERS)
         val pageSemaphore = Semaphore(MAX_PARALLEL_PAGES)
+        val completedOutcomes = Collections.synchronizedList(
+            mutableListOf<ChapterDownloadOutcome>()
+        )
 
-        val outcomes = coroutineScope {
-            targets.map { target ->
-                async {
-                    chapterSemaphore.withPermit {
-                        val sourceId = target.resolvedSourceId()
-                        val adapter = sourceRegistry.adapter(sourceId)
-                        downloadChapter(
-                            sourceId = sourceId,
-                            series = target.series,
-                            chapter = target.chapter,
-                            adapter = adapter,
-                            outputDir = outputDir,
-                            totalChapters = targets.size,
-                            completedChapters = completedChapters,
-                            pageSemaphore = pageSemaphore,
-                            onProgress = onProgress
-                        )
+        val outcomes = try {
+            coroutineScope {
+                targets.map { target ->
+                    async {
+                        chapterSemaphore.withPermit {
+                            val sourceId = target.resolvedSourceId()
+                            val adapter = sourceRegistry.adapter(sourceId)
+                            downloadChapter(
+                                sourceId = sourceId,
+                                series = target.series,
+                                chapter = target.chapter,
+                                adapter = adapter,
+                                outputDir = outputDir,
+                                totalChapters = targets.size,
+                                completedChapters = completedChapters,
+                                pageSemaphore = pageSemaphore,
+                                onProgress = onProgress
+                            ).also { outcome ->
+                                completedOutcomes.add(outcome)
+                            }
+                        }
                     }
-                }
-            }.awaitAll()
+                }.awaitAll()
+            }
+        } catch (error: CancellationException) {
+            throw MangaChapterDownloadCancelledException(completedOutcomes.toBatch())
         }
 
-        MangaChapterDownloadBatch(
-            downloaded = outcomes.mapNotNull { outcome -> outcome.downloaded },
-            historyItems = outcomes.mapNotNull { outcome -> outcome.historyItem },
-            failedMessages = outcomes.mapNotNull { outcome -> outcome.errorMessage }
-        )
+        outcomes.toBatch()
     }
 
     private suspend fun downloadChapter(
@@ -313,6 +319,9 @@ class MangaChapterDownloader @Inject constructor(
                 directory = outputDir,
                 fileName = "$baseFileName.${archive.fileExtension}"
             )
+        } catch (error: CancellationException) {
+            tempFile.delete()
+            throw error
         } catch (error: IOException) {
             tempFile.delete()
             if (error is MangaNetworkUnavailableException ||
@@ -346,6 +355,9 @@ internal data class MangaChapterDownloadBatch(
     val failedMessages: List<String>
 )
 
+internal class MangaChapterDownloadCancelledException(val partialBatch: MangaChapterDownloadBatch) :
+    CancellationException("Manga chapter download canceled")
+
 private data class ChapterDownloadOutcome(
     val downloaded: MangaDownloadedChapter?,
     val historyItem: MangaChapterHistoryEntity?,
@@ -353,6 +365,13 @@ private data class ChapterDownloadOutcome(
 )
 
 private class MangaNetworkUnavailableException : IOException(NETWORK_UNAVAILABLE_MESSAGE)
+
+private fun Collection<ChapterDownloadOutcome>.toBatch(): MangaChapterDownloadBatch =
+    MangaChapterDownloadBatch(
+        downloaded = mapNotNull { outcome -> outcome.downloaded },
+        historyItems = mapNotNull { outcome -> outcome.historyItem },
+        failedMessages = mapNotNull { outcome -> outcome.errorMessage }
+    )
 
 private fun MangaChapterDownloadTarget.resolvedSourceId(): String {
     val seriesSourceId = series.sourceId.trim()

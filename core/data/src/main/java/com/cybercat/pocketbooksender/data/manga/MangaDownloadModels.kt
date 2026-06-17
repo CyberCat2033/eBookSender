@@ -1,11 +1,15 @@
 package com.cybercat.pocketbooksender.data.manga
 
 import java.io.File
+import kotlinx.coroutines.CancellationException
 
 data class MangaDownloadResult(
     val downloaded: List<MangaDownloadedChapter>,
     val failedMessages: List<String>
 )
+
+class MangaDownloadCancelledException(val result: MangaDownloadResult) :
+    CancellationException("Manga download canceled")
 
 data class MangaDownloadedChapter(
     val series: MangaSeriesDetails,

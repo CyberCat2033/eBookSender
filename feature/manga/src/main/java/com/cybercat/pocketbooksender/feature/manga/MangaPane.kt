@@ -38,13 +38,11 @@ import com.cybercat.pocketbooksender.data.manga.MangaChapter
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.localization.LocalStrings
-import com.cybercat.pocketbooksender.util.performHapticIfAllowed
-import com.cybercat.pocketbooksender.util.rememberDragSelectionState
-import com.cybercat.pocketbooksender.util.pointerInputDragSelection
-import com.cybercat.pocketbooksender.ui.StatusMessageHost
 import com.cybercat.pocketbooksender.ui.LoadingCard
-
-
+import com.cybercat.pocketbooksender.ui.StatusMessageHost
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+import com.cybercat.pocketbooksender.util.pointerInputDragSelection
+import com.cybercat.pocketbooksender.util.rememberDragSelectionState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -74,9 +72,15 @@ fun MangaPane(
     onDownloadSubscriptionUpdates: () -> Unit,
     onCloseSubscriptionUpdates: () -> Unit,
     onRefreshAuthState: () -> Unit,
-    onNativeLoginSubmit: (targetUrl: String, username: String, password: String, doNotRemember: Boolean) -> Unit,
+    onCancelDownload: () -> Unit,
+    onNativeLoginSubmit: (
+        targetUrl: String,
+        username: String,
+        password: String,
+        doNotRemember: Boolean
+    ) -> Unit,
     onLoginPostExecuted: () -> Unit,
-    enableHaptics: Boolean,
+    enableHaptics: Boolean
 ) {
     val view = LocalView.current
     val context = LocalContext.current
@@ -84,12 +88,14 @@ fun MangaPane(
     val selectedChapterIdsState = rememberUpdatedState(state.selectedChapterIds)
     val onToggleChapterState = rememberUpdatedState(onToggleChapter)
     val selectedSeriesId = state.selectedSeries?.seriesId
-    var handledSeriesScrollRequest by rememberSaveable { mutableStateOf(state.selectedSeriesScrollRequest) }
+    var handledSeriesScrollRequest by rememberSaveable {
+        mutableStateOf(state.selectedSeriesScrollRequest)
+    }
     val chapterTargets = remember(state.chapters) {
         state.chapters.mapIndexed { index, chapter ->
             chapterItemKey(chapter) to ChapterPointerTarget(
                 index = index,
-                chapterId = chapter.chapterId,
+                chapterId = chapter.chapterId
             )
         }.toMap()
     }
@@ -146,14 +152,14 @@ fun MangaPane(
                     state.chapters,
                     state.isDownloading
                 ),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item(key = "manga-top") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     MangaSourceSelector(
                         state = state,
                         enableHaptics = enableHaptics,
-                        onSelectSource = onSelectSource,
+                        onSelectSource = onSelectSource
                     )
 
                     MangaSearchPanel(
@@ -161,7 +167,7 @@ fun MangaPane(
                         onSearchChanged = onSearchChanged,
                         onSearch = onSearch,
                         onOpenBrowser = onOpenBrowser,
-                        enableHaptics = enableHaptics,
+                        enableHaptics = enableHaptics
                     )
 
                     if (state.savedSeries.isNotEmpty()) {
@@ -171,7 +177,7 @@ fun MangaPane(
                             enabled = !state.isLoading && !state.isDownloading,
                             enableHaptics = enableHaptics,
                             onOpenSeries = onOpenSeries,
-                            onCheckSubscriptions = onCheckSubscriptions,
+                            onCheckSubscriptions = onCheckSubscriptions
                         )
                     }
                 }
@@ -215,7 +221,7 @@ fun MangaPane(
                         isDownloading = state.isDownloading,
                         enableHaptics = enableHaptics,
                         onSetFavorite = onSetMangaSeriesFavorite,
-                        onSetSubscribed = onSetMangaSeriesSubscribed,
+                        onSetSubscribed = onSetMangaSeriesSubscribed
                     )
                 }
 
@@ -232,9 +238,13 @@ fun MangaPane(
                         enableHaptics = enableHaptics,
                         modifier = Modifier.animateItem(),
                         onToggle = { id, selected ->
-                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.LONG_PRESS)
+                            view.performHapticIfAllowed(
+                                context,
+                                enableHaptics,
+                                HapticFeedbackConstants.LONG_PRESS
+                            )
                             onToggleChapter(id, selected)
-                        },
+                        }
                     )
                 }
             }
@@ -253,7 +263,7 @@ fun MangaPane(
                         enabled = !state.isLoading && !state.isDownloading,
                         enableHaptics = enableHaptics,
                         modifier = Modifier.animateItem(),
-                        onOpenSeries = onOpenSeries,
+                        onOpenSeries = onOpenSeries
                     )
                 }
             }
@@ -269,11 +279,13 @@ fun MangaPane(
                 .align(Alignment.BottomCenter)
                 .padding(12.dp),
             enter = fadeIn() + slideInVertically { height -> height / 2 },
-            exit = fadeOut() + slideOutVertically { height -> height / 2 },
+            exit = fadeOut() + slideOutVertically { height -> height / 2 }
         ) {
             MangaDownloadProgressOverlay(
                 progressInfo = state.downloadProgress,
                 selectedCount = state.selectedChapterIds.size,
+                enableHaptics = enableHaptics,
+                onCancel = onCancelDownload
             )
         }
     }
@@ -287,12 +299,15 @@ fun MangaPane(
             onClearAll = onClearSubscriptionUpdateChapters,
             onDownload = onDownloadSubscriptionUpdates,
             onClose = onCloseSubscriptionUpdates,
-            enableHaptics = enableHaptics,
+            enableHaptics = enableHaptics
         )
     }
 
     if (state.browserVisible) {
-        val selectedSource = state.sources.firstOrNull { source -> source.id == state.selectedSourceId }
+        val selectedSource = state.sources.firstOrNull { source ->
+            source.id ==
+                state.selectedSourceId
+        }
         MangaBrowserCard(
             url = state.browserUrl,
             currentUrl = state.currentWebUrl,
@@ -305,7 +320,7 @@ fun MangaPane(
             onClose = onCloseBrowser,
             onWebPageLoaded = onWebPageLoaded,
             onNativeLoginSubmit = onNativeLoginSubmit,
-            onLoginPostExecuted = onLoginPostExecuted,
+            onLoginPostExecuted = onLoginPostExecuted
         )
     }
 }

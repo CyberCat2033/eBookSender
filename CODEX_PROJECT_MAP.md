@@ -59,7 +59,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/PocketBookDatabaseReader.kt` - PocketBook `explorer-3.db` snapshot reader; downloads the SQLite database files, opens the local copy read-only, and maps cursor rows to catalog file records.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogTreeBuilder.kt` - pure catalog tree builder for database records; filters supported file types, deduplicates PocketBook book records, maps metadata to `CatalogFile`, and groups Books/Documents/Manga with natural sorting.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogFolderScanner.kt` - FTP folder fallback scanner for catalog loading when the PocketBook SQLite database is unavailable or empty.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/DownloadOpdsEntriesUseCase.kt` - OPDS multi-entry download interactor; selects supported acquisitions, coordinates parallel publication downloads, preserves cancellation, and returns downloaded files plus per-entry failure counts to the OPDS ViewModel.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/DownloadOpdsEntriesUseCase.kt` - OPDS multi-entry download interactor; selects supported acquisitions, coordinates parallel publication downloads, reports each completed file through a callback so cancellation keeps already downloaded files, and returns downloaded files plus per-entry failure counts to the OPDS ViewModel.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/SearchOpdsCatalogUseCase.kt` - OPDS search interactor; builds search URLs, handles catalog/author-index fallback loading, merges search catalogs, preserves cancellation/auth failures, and returns a search result catalog to the OPDS ViewModel.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/MatchOpdsAuthSourceUseCase.kt` - OPDS auth-source resolver; returns the saved `OpdsSource` whose host matches the URL that raised `OpdsAuthenticationRequiredException`, so the ViewModel can open the credentials dialog for the correct source.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsCredentialsProviderImpl.kt` - Room-backed OPDS credentials provider that matches saved source credentials by request host.
@@ -68,14 +68,14 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service; coordinates service lifecycle, wake lock, transfer requests, completion rescan, and OPDS/manga app-cache cleanup after successful uploads.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferNotificationManager.kt` - notification channel, progress notification, and minimized-app completion notification helper for foreground FTP uploads.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/DownloadCacheManager.kt` - shared app-local OPDS/manga download-cache cleanup helper used by transfer completion and queue removal.
-- `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded and adds completed chapters to the upload queue.
+- `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded, supports user cancellation, and adds fully completed chapters to the upload queue.
 - `app/src/main/java/com/cybercat/pocketbooksender/power/ScopedWakeLock.kt` - small non-reference-counted wake-lock helper for strictly scoped foreground transfer/download CPU wake windows.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; coordinates queue state, persistence, metadata loading, upload path replanning, and delegates app-local file/cache access.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/CoverCacheManager.kt` - app-local JPEG preview cache for queued upload cover bitmaps; handles cover load/save/cleanup for `UploadQueueManagerImpl`.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/LocalFileResolver.kt` - Android `ContentResolver` boundary for queued upload source display names, file sizes, persistable read permissions, and source readability checks.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/QueueStorageRepository.kt` - app-local upload queue JSON/file persistence boundary using `UploadItemEntity` and kotlinx.serialization.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadCoordinator.kt` - app/feature boundary for foreground manga download requests and progress/completion events.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaChapterDownloader.kt` - manga chapter download pipeline; owns archive/page fallback, retry/timeouts, concurrency limits, network availability checks, CBZ creation, and download history item construction.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaChapterDownloader.kt` - manga chapter download pipeline; owns archive/page fallback, retry/timeouts, concurrency limits, network availability checks, CBZ creation, download history item construction, and partial completed-batch reporting on cancellation.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadModels.kt` - shared manga download request/result/progress models used by the downloader, foreground service, coordinator, and feature UI.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSourceRegistry.kt` - sorted source adapter registry that exposes `MangaSourceSummary` data and resolves source adapters by id for repository/downloader callers.
 - `app/src/main/java/com/cybercat/pocketbooksender/di/MangaSourceModule.kt` - collects every installed manga source adapter into a Hilt set of `HtmlMangaSourceAdapter` using multibindings.
@@ -169,7 +169,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - Manga motion: `feature/manga/.../MangaPane.kt`, `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`, and `MangaSubscriptionUpdatesDialog.kt`.
   - Chapter and search-result lists use `Modifier.animateItem()`.
   - Opening a selected series scrolls the list with `animateScrollToItem`.
-  - Active manga download overlay enters/exits with fade plus vertical slide from the bottom.
+  - Active manga download overlay enters/exits with fade plus vertical slide from the bottom and includes a localized Material 3 cancel action.
   - Manga download progress uses low-stiffness no-bounce spring `animateFloatAsState`.
   - Subscription update groups rotate chevrons with a medium spring and expand/collapse chapter lists with spring expand/shrink plus fade.
   - Chapter drag selection and subscription updates dialog chapter selection use the shared quick-long-press gesture, edge autoscroll, and haptic ticks via `pointerInputDragSelection`.
@@ -177,6 +177,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Add-source and credentials dialogs reuse `AnimatedAlertDialog`.
   - Switching between OPDS and Manga in the Web tab uses horizontal slide plus fade through `AnimatedContent`.
   - OPDS catalog loads and feed navigation fade/slide the incoming list content while preserving the single `LazyListState`.
+  - Active OPDS download overlay enters/exits with fade plus vertical slide from the bottom and includes a localized Material 3 cancel action; completed files are queued before cancellation clears the active state.
   - OPDS entry rows use `Modifier.animateItem()` for list placement changes.
   - OPDS feed navigation uses `OpdsNavigation.kt` helpers; hierarchy back and page navigation are separate. `OpdsPagingState` drives the bottom page bar, including local previous-page history when a catalog page does not expose `previous`/`prev`.
 - Settings motion: `feature/settings/.../SettingsScreen.kt`, `SettingsComponents.kt`, and `SettingsDialogs.kt`.

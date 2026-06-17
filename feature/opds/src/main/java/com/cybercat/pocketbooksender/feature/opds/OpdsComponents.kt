@@ -2,6 +2,9 @@ package com.cybercat.pocketbooksender.feature.opds
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -27,20 +31,24 @@ import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -93,7 +101,7 @@ internal fun SourcePicker(
                 )
                 expanded = true
             },
-            enabled = state.sources.isNotEmpty() && !state.isLoading,
+            enabled = state.sources.isNotEmpty() && !state.isLoading && !state.isDownloading,
             modifier = Modifier.fillMaxWidth()
         ) {
             Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
@@ -380,6 +388,111 @@ internal fun OpdsPaginationBar(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun OpdsDownloadProgressOverlay(
+    progressInfo: OpdsDownloadUiProgress?,
+    enableHaptics: Boolean,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    val totalCount = progressInfo?.totalCount?.coerceAtLeast(1) ?: 1
+    val completedCount = progressInfo?.completedCount?.coerceIn(0, totalCount) ?: 0
+    val progress = completedCount.toFloat() / totalCount.toFloat()
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "OpdsDownloadProgress"
+    )
+    val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .widthIn(max = 560.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = contentColor,
+        tonalElevation = 8.dp,
+        shadowElevation = 8.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (completedCount == 0) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = contentColor,
+                        strokeWidth = 3.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = contentColor
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = strings.get("opds_download_progress_title"),
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = strings.get(
+                            "opds_download_progress_detail",
+                            completedCount,
+                            totalCount
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                OutlinedButton(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            HapticFeedbackConstants.REJECT
+                        )
+                        onCancel()
+                    },
+                    modifier = Modifier.widthIn(max = 180.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = contentColor)
+                ) {
+                    Icon(Icons.Outlined.Close, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = strings.get("opds_download_cancel"),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            LinearProgressIndicator(
+                progress = { animatedProgress },
+                modifier = Modifier.fillMaxWidth(),
+                color = contentColor,
+                trackColor = contentColor.copy(alpha = 0.24f)
+            )
         }
     }
 }

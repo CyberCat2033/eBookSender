@@ -219,6 +219,11 @@ internal class MangaDownloadController(
         downloadLauncher.startMangaDownload(requestId)
     }
 
+    fun cancelActiveDownload() {
+        val active = activeDownload ?: return
+        downloadLauncher.cancelMangaDownload(active.requestId)
+    }
+
     fun handleMangaDownloadEvent(event: MangaDownloadEvent) {
         when (event) {
             is MangaDownloadEvent.Started -> Unit
@@ -257,6 +262,20 @@ internal class MangaDownloadController(
                 }
             }
 
+            is MangaDownloadEvent.Canceled -> {
+                val active = activeDownload?.takeIf { it.requestId == event.requestId } ?: return
+                activeDownload = null
+                when (active.kind) {
+                    MangaDownloadRequestKind.SelectedChapters -> cancelSelectedChapterDownload(
+                        event
+                    )
+
+                    MangaDownloadRequestKind.SubscriptionUpdates ->
+                        cancelSubscriptionUpdateDownload(active, event)
+                }
+                showStatus(mangaDownloadCanceledMessage(event.addedToQueueCount))
+            }
+
             is MangaDownloadEvent.Failed -> {
                 if (activeDownload?.requestId != event.requestId) return
                 val active = activeDownload
@@ -280,6 +299,17 @@ internal class MangaDownloadController(
         }
     }
 
+    private fun cancelSelectedChapterDownload(event: MangaDownloadEvent.Canceled) {
+        mangaState.update { state ->
+            state.copy(
+                isDownloading = false,
+                downloadProgress = null,
+                selectedChapterIds = state.selectedChapterIds - event.downloadedChapterIds,
+                errorMessage = null
+            )
+        }
+    }
+
     private fun completeSelectedChapterDownload(event: MangaDownloadEvent.Completed) {
         mangaState.update { state ->
             state.copy(
@@ -290,6 +320,29 @@ internal class MangaDownloadController(
                     event.failedMessages,
                     localizationManager.currentStrings.value
                 )
+            )
+        }
+    }
+
+    private fun cancelSubscriptionUpdateDownload(
+        active: ActiveMangaDownload,
+        event: MangaDownloadEvent.Canceled
+    ) {
+        val remainingUpdates = MangaSubscriptionUpdateReducer.remainingAfterDownload(
+            updates = active.subscriptionUpdates,
+            selectedKeys = active.selectedSubscriptionKeys,
+            downloadedKeys = event.downloadedSubscriptionKeys
+        )
+        val remainingKeys = MangaSubscriptionUpdateReducer.allChapterKeys(remainingUpdates)
+
+        mangaState.update { state ->
+            state.copy(
+                isDownloading = false,
+                downloadProgress = null,
+                subscriptionUpdates = remainingUpdates,
+                subscriptionUpdatesVisible = remainingUpdates.isNotEmpty(),
+                selectedSubscriptionUpdateChapterKeys = remainingKeys,
+                errorMessage = null
             )
         }
     }
@@ -321,6 +374,15 @@ internal class MangaDownloadController(
                     localizationManager.currentStrings.value
                 )
             )
+        }
+    }
+
+    private fun mangaDownloadCanceledMessage(addedToQueueCount: Int): String {
+        val strings = localizationManager.currentStrings.value
+        return if (addedToQueueCount > 0) {
+            strings.get("manga_status_download_canceled_with_files", addedToQueueCount)
+        } else {
+            strings.get("manga_status_download_canceled")
         }
     }
 }
