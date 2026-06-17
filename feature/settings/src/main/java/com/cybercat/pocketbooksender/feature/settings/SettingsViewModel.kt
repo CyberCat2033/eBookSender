@@ -228,6 +228,19 @@ class SettingsViewModel @Inject constructor(
                     false
                 }
 
+                is DeviceFolderRenameUseCase.Result.NotSupported -> {
+                    val settings = settingsRepository.settings.first()
+                    if (settings.warnOnDisconnectedRename) {
+                        _pendingRename.value = PendingRename(folderType, oldName, newName)
+                    } else {
+                        applyFolderName(folderType, newName)
+                    }
+                    showTemporaryStatus(
+                        localizationManager.currentStrings.value.get("settings_rename_not_supported")
+                    )
+                    settings.warnOnDisconnectedRename.not()
+                }
+
                 is DeviceFolderRenameUseCase.Result.Error -> {
                     showTemporaryStatus(
                         localizationManager.currentStrings.value.get(
@@ -240,6 +253,17 @@ class SettingsViewModel @Inject constructor(
             }
         } finally {
             _activeFolderRename.value = null
+        }
+    }
+
+    private suspend fun applyFolderName(
+        folderType: FolderType,
+        value: String
+    ) {
+        when (folderType) {
+            FolderType.Books -> settingsRepository.setBooksFolderName(value)
+            FolderType.Documents -> settingsRepository.setDocumentsFolderName(value)
+            FolderType.Manga -> settingsRepository.setMangaFolderName(value)
         }
     }
 

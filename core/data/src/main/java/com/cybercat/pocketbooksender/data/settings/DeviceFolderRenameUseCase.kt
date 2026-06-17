@@ -14,6 +14,7 @@ class DeviceFolderRenameUseCase @Inject constructor(
     sealed class Result {
         object Success : Result()
         object AlreadyExists : Result()
+        object NotSupported : Result()
         data class Error(val message: String) : Result()
     }
 
@@ -29,11 +30,22 @@ class DeviceFolderRenameUseCase @Inject constructor(
         } else {
             val error = result.exceptionOrNull()
             val errorMsg = error?.message.orEmpty()
-            if (errorMsg.contains("550") || errorMsg.contains("exist", ignoreCase = true)) {
+            if (isNotSupportedRenameError(errorMsg)) {
+                Result.NotSupported
+            } else if (errorMsg.contains("550") || errorMsg.contains("exist", ignoreCase = true)) {
                 Result.AlreadyExists
             } else {
                 Result.Error(error?.localizedMessage ?: "unknown error")
             }
         }
+    }
+
+    private fun isNotSupportedRenameError(errorMsg: String): Boolean {
+        val msg = errorMsg.lowercase()
+        return msg.contains("502") ||
+            msg.contains("500") ||
+            msg.contains("not implemented") ||
+            msg.contains("not supported") ||
+            msg.contains("command not implemented")
     }
 }
