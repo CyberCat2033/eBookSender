@@ -76,6 +76,7 @@ These instructions define the required working rules for Codex in this repositor
 - For new large features, create a dedicated branch named `feature/<short-name>`. After implementing the changes and having the user verify them (specifically on the release version installed on a phone), merge the branch into `main`/`master` if everything is in order.
 - For small tasks, minor refactoring, and code cleanup, work on a dedicated `refactoring` branch (or `refactor/<short-name>`) to avoid polluting the git history.
 - If only a few minor changes (e.g., 1-2 cosmetic edits, tiny bug fix) have accumulated, wait for more changes before committing (always check for accumulated changes after finishing a task).
+- Commit every completed code change that modifies more than five lines, unless the user explicitly asks not to commit.
 - If a change is significant, commit it with a descriptive and clear commit message (avoid short 1-2 word messages).
 - Keep commits logically grouped. Stage and commit only the files that belong to the current task.
 
