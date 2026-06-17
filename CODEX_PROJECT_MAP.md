@@ -67,7 +67,9 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogTreeBuilder.kt` - pure catalog tree builder for database records; filters supported file types, deduplicates PocketBook book records, maps metadata to `CatalogFile`, and groups Books/Documents/Manga with natural sorting.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogFolderScanner.kt` - generic FTP folder catalog source and PocketBook fallback when the SQLite database is unavailable or empty.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/DownloadOpdsEntriesUseCase.kt` - OPDS multi-entry download interactor; selects supported acquisitions, coordinates parallel publication downloads, reports each completed file through a callback so cancellation keeps already downloaded files, and returns downloaded files plus per-entry failure counts to the OPDS download controller.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/SearchOpdsCatalogUseCase.kt` - OPDS search interactor; builds search URLs, handles catalog/author-index fallback loading, merges search catalogs, preserves cancellation/auth failures, and returns a search result catalog to the OPDS ViewModel.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/SearchOpdsCatalogUseCase.kt` - OPDS search interactor; orchestrates search URL building, OpenSearch template loading, author-index fallback loading, and merged result delivery for the OPDS ViewModel.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsSearchSupport.kt` - pure OPDS search helpers for template expansion, Flibusta author-search URL derivation, author-entry filtering, and merged search-catalog assembly.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsDownloadFileSupport.kt` - pure OPDS download helpers for URL normalization, download file-name resolution, MIME-based extension mapping, and collision-safe cache file naming.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/MatchOpdsAuthSourceUseCase.kt` - OPDS auth-source resolver; returns the saved `OpdsSource` whose host matches the URL that raised `OpdsAuthenticationRequiredException`, so the ViewModel can open the credentials dialog for the correct source.
 - `feature/opds/src/main/java/com/cybercat/pocketbooksender/feature/opds/OpdsAuthController.kt` - feature-layer OPDS credentials dialog controller; saves credentials and retries the protected catalog URL after successful update.
 - `feature/opds/src/main/java/com/cybercat/pocketbooksender/feature/opds/OpdsDownloadController.kt` - feature-layer OPDS download state controller; owns active download job, progress updates, cancellation, queue insertion, and auth/error routing for single and multi-entry downloads.
@@ -87,6 +89,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaChapterDownloader.kt` - manga chapter download pipeline; owns archive/page fallback, retry/timeouts, concurrency limits, network availability checks, CBZ creation, download history item construction, and partial completed-batch reporting on cancellation.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadModels.kt` - shared manga download request/result/progress models used by the downloader, foreground service, coordinator, and feature UI.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSourceRegistry.kt` - sorted source adapter registry that exposes `MangaSourceSummary` data and resolves source adapters by id for repository/downloader callers.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSeriesRecoveryHeuristics.kt` - pure manga-series recovery helpers for ranking moved-series search candidates and normalizing saved-series identity keys.
 - `app/src/main/java/com/cybercat/pocketbooksender/di/MangaSourceModule.kt` - collects every installed manga source adapter into a Hilt set of `HtmlMangaSourceAdapter` using multibindings.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/NetworkStateChecker.kt` - Android connectivity helper used to avoid manga retry loops while no active internet-capable network is available.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/LocalDeviceNetworkProvider.kt` - Android network route helper for optional VPN bypass on local FTP and device library-refresh requests, including a bind probe before using a direct Wi-Fi/Ethernet route.
@@ -105,6 +108,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxReaderPageParser.kt` - Com-X reader-page parser for chapter image extraction from `window.__DATA__`, image tags, `srcset`, and script URLs.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxParsingHelpers.kt` - shared Com-X parser helpers for URL ownership/normalization, title cleanup, JSON field/window-data extraction, and image URL handling.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/FtpErrorMapper.kt` - mapper class translating FTP connection errors and URL parsing failures to localized user-facing strings.
+- `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/BitmapCache.kt` - shared preview bitmap cache with disk persistence and expiring in-memory entries for remote covers and extracted previews.
 - `core/domain/src/main/java/com/cybercat/pocketbooksender/domain/MangaTitleParser.kt` - pure domain parser that derives manga series/volume hints from local file names before metadata extraction.
 
 ## Search and edit workflow
@@ -180,7 +184,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Queue rows use `Modifier.animateItem` with `QueueFadeInSpec`, `QueueFadeOutSpec`, and `QueuePlacementSpec`.
   - `AnimatedRemovalItem` handles single-item removal and clear-queue removal with horizontal slide-out, vertical shrink, fade, and staggered clear delays.
   - Active transfer overlay enters/exits with fade plus vertical slide from the bottom.
-  - Active upload progress values are held separately from the persisted upload queue so high-frequency progress ticks do not rewrite the whole queue list or JSON snapshot.
+  - Foreground FTP uploads run sequentially; transfer runtime state keeps the active item id plus current progress separate from the persisted upload queue so progress ticks do not rewrite the whole queue list or JSON snapshot.
   - Connection panel animates icon tint over 220 ms, disconnect button alpha over 160 ms, and FTP input visibility with spring expand/shrink plus fade.
   - Upload item details use spring expand/shrink plus fade; uploaded section uses progressive tween expand/shrink plus fade based on the number of items; chevrons rotate with a medium spring.
   - Upload progress height uses `animateDpAsState`; item and overall progress bars use low-stiffness no-bounce spring `animateFloatAsState`.
