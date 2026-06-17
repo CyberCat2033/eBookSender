@@ -521,17 +521,32 @@ private fun opdsDownloadProgressDetail(
     totalCount: Int
 ): String {
     val currentPercent = progressInfo?.currentFilePercent
+    val currentItem = progressInfo?.let {
+        activeItemLabel(it.currentItemTitle, it.currentItemAuthors)
+    }
     return when {
         totalCount <= 1 && currentPercent != null -> {
-            strings.get("opds_download_progress_single_percent", currentPercent)
+            currentItem?.let {
+                strings.get("opds_download_progress_single_percent_with_file", it, currentPercent)
+            } ?: strings.get("opds_download_progress_single_percent", currentPercent)
         }
 
         totalCount <= 1 -> {
-            strings.get("opds_download_progress_single_unknown")
+            currentItem?.let {
+                strings.get("opds_download_progress_single_unknown_with_file", it)
+            } ?: strings.get("opds_download_progress_single_unknown")
         }
 
         currentPercent != null -> {
-            strings.get(
+            currentItem?.let {
+                strings.get(
+                    "opds_download_progress_detail_with_file_and_metadata",
+                    completedCount,
+                    totalCount,
+                    it,
+                    currentPercent
+                )
+            } ?: strings.get(
                 "opds_download_progress_detail_with_file",
                 completedCount,
                 totalCount,
@@ -540,13 +555,26 @@ private fun opdsDownloadProgressDetail(
         }
 
         else -> {
-            strings.get(
+            currentItem?.let {
+                strings.get(
+                    "opds_download_progress_detail_current_unknown_with_file",
+                    completedCount,
+                    totalCount,
+                    it
+                )
+            } ?: strings.get(
                 "opds_download_progress_detail_current_unknown",
                 completedCount,
                 totalCount
             )
         }
     }
+}
+
+private fun activeItemLabel(title: String?, authors: List<String>): String? {
+    val safeTitle = title?.takeIf { it.isNotBlank() } ?: return null
+    val safeAuthors = authors.filter { it.isNotBlank() }.joinToString(", ")
+    return if (safeAuthors.isBlank()) safeTitle else "$safeTitle — $safeAuthors"
 }
 
 @Composable

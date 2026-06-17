@@ -38,7 +38,12 @@ data class OpdsSearchDescription(val templates: List<OpdsSearchTemplate>) {
 
 data class OpdsSearchTemplate(val template: String, val type: String?)
 
-data class OpdsDownloadProgress(val bytesRead: Long, val totalBytes: Long?)
+data class OpdsDownloadProgress(
+    val bytesRead: Long,
+    val totalBytes: Long?,
+    val currentItemTitle: String? = null,
+    val currentItemAuthors: List<String> = emptyList()
+)
 
 class OpdsAuthenticationRequiredException(
     val url: String,

@@ -76,6 +76,8 @@ data class OpdsDownloadUiProgress(
     val totalCount: Int,
     val bytesRead: Long = 0L,
     val totalBytes: Long? = null,
+    val currentItemTitle: String? = null,
+    val currentItemAuthors: List<String> = emptyList(),
     val isCanceling: Boolean = false
 ) {
     val currentFileProgress: Float?

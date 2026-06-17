@@ -170,6 +170,8 @@ class OpdsRepository @Inject constructor(
                     val totalBytes = connection.contentLengthLong.takeIf { it > 0L }
                     val progressReporter = OpdsDownloadProgressReporter(
                         totalBytes = totalBytes,
+                        currentItemTitle = entry.title.ifBlank { acquisition.title.orEmpty() },
+                        currentItemAuthors = entry.authors,
                         onProgress = onProgress
                     )
                     var bytesRead = 0L
@@ -386,6 +388,8 @@ class OpdsRepository @Inject constructor(
 
     private class OpdsDownloadProgressReporter(
         private val totalBytes: Long?,
+        private val currentItemTitle: String?,
+        private val currentItemAuthors: List<String>,
         private val onProgress: (OpdsDownloadProgress) -> Unit
     ) {
         private var lastReportedBytes = -1L
@@ -412,7 +416,9 @@ class OpdsRepository @Inject constructor(
             onProgress(
                 OpdsDownloadProgress(
                     bytesRead = safeBytesRead,
-                    totalBytes = totalBytes
+                    totalBytes = totalBytes,
+                    currentItemTitle = currentItemTitle,
+                    currentItemAuthors = currentItemAuthors
                 )
             )
         }

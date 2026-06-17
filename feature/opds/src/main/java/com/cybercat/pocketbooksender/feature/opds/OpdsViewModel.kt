@@ -405,7 +405,9 @@ class OpdsViewModel @Inject constructor(
                     isDownloading = true,
                     downloadProgress = OpdsDownloadUiProgress(
                         completedCount = 0,
-                        totalCount = 1
+                        totalCount = 1,
+                        currentItemTitle = entry.title.ifBlank { acquisition.title.orEmpty() },
+                        currentItemAuthors = entry.authors
                     ),
                     errorMessage = null,
                     statusMessage = null
@@ -601,7 +603,12 @@ class OpdsViewModel @Inject constructor(
             state.copy(
                 downloadProgress = currentProgress.copy(
                     bytesRead = progress.bytesRead,
-                    totalBytes = progress.totalBytes
+                    totalBytes = progress.totalBytes,
+                    currentItemTitle = progress.currentItemTitle
+                        ?: currentProgress.currentItemTitle,
+                    currentItemAuthors = progress.currentItemAuthors.ifEmpty {
+                        currentProgress.currentItemAuthors
+                    }
                 )
             )
         }
