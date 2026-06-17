@@ -3,7 +3,7 @@ package com.cybercat.pocketbooksender.data.opds
 data class OpdsCatalog(
     val title: String,
     val entries: List<OpdsEntry>,
-    val links: List<OpdsLink> = emptyList(),
+    val links: List<OpdsLink> = emptyList()
 )
 
 data class OpdsEntry(
@@ -13,33 +13,22 @@ data class OpdsEntry(
     val summary: String?,
     val coverHref: String?,
     val navigation: List<OpdsLink>,
-    val acquisitions: List<OpdsAcquisition>,
+    val acquisitions: List<OpdsAcquisition>
 )
 
-data class OpdsAcquisition(
-    val href: String,
-    val type: String?,
-    val title: String?,
-)
+data class OpdsAcquisition(val href: String, val type: String?, val title: String?)
 
-data class OpdsLink(
-    val href: String,
-    val rel: String?,
-    val type: String?,
-    val title: String?,
-)
+data class OpdsLink(val href: String, val rel: String?, val type: String?, val title: String?)
 
 data class OpdsSource(
     val id: String,
     val title: String,
     val url: String,
     val username: String? = null,
-    val password: String? = null,
+    val password: String? = null
 )
 
-data class OpdsSearchDescription(
-    val templates: List<OpdsSearchTemplate>,
-) {
+data class OpdsSearchDescription(val templates: List<OpdsSearchTemplate>) {
     val bestTemplate: String? =
         templates.firstOrNull { template ->
             template.type.orEmpty().contains("profile=opds-catalog") ||
@@ -47,12 +36,11 @@ data class OpdsSearchDescription(
         }?.template ?: templates.firstOrNull()?.template
 }
 
-data class OpdsSearchTemplate(
-    val template: String,
-    val type: String?,
-)
+data class OpdsSearchTemplate(val template: String, val type: String?)
+
+data class OpdsDownloadProgress(val bytesRead: Long, val totalBytes: Long?)
 
 class OpdsAuthenticationRequiredException(
     val url: String,
-    message: String = "Authentication required for $url",
+    message: String = "Authentication required for $url"
 ) : Exception(message)

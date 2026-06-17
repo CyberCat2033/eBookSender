@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsSource
+import com.cybercat.pocketbooksender.localization.AppStrings
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
@@ -404,9 +405,9 @@ internal fun OpdsDownloadProgressOverlay(
     val strings = LocalStrings.current
     val totalCount = progressInfo?.totalCount?.coerceAtLeast(1) ?: 1
     val completedCount = progressInfo?.completedCount?.coerceIn(0, totalCount) ?: 0
-    val progress = completedCount.toFloat() / totalCount.toFloat()
+    val progress = progressInfo?.overallProgress
     val animatedProgress by animateFloatAsState(
-        targetValue = progress,
+        targetValue = progress ?: 0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessLow
@@ -414,6 +415,7 @@ internal fun OpdsDownloadProgressOverlay(
         label = "OpdsDownloadProgress"
     )
     val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+    val isCanceling = progressInfo?.isCanceling == true
 
     Surface(
         modifier = modifier
@@ -434,7 +436,7 @@ internal fun OpdsDownloadProgressOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (completedCount == 0) {
+                if (completedCount == 0 || isCanceling) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
                         color = contentColor,
@@ -450,16 +452,21 @@ internal fun OpdsDownloadProgressOverlay(
                 }
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = strings.get("opds_download_progress_title"),
+                        text = if (isCanceling) {
+                            strings.get("opds_download_canceling_title")
+                        } else {
+                            strings.get("opds_download_progress_title")
+                        },
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = strings.get(
-                            "opds_download_progress_detail",
-                            completedCount,
-                            totalCount
+                        text = opdsDownloadProgressDetail(
+                            strings = strings,
+                            progressInfo = progressInfo,
+                            completedCount = completedCount,
+                            totalCount = totalCount
                         ),
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
@@ -475,20 +482,68 @@ internal fun OpdsDownloadProgressOverlay(
                         )
                         onCancel()
                     },
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp),
+                    enabled = !isCanceling
                 ) {
                     Icon(
                         Icons.Outlined.Close,
                         contentDescription = strings.get("opds_download_cancel"),
-                        tint = contentColor
+                        tint = if (isCanceling) {
+                            contentColor.copy(alpha = 0.38f)
+                        } else {
+                            contentColor
+                        }
                     )
                 }
             }
-            LinearProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier.fillMaxWidth(),
-                color = contentColor,
-                trackColor = contentColor.copy(alpha = 0.24f)
+            if (progress == null) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = contentColor,
+                    trackColor = contentColor.copy(alpha = 0.24f)
+                )
+            } else {
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = contentColor,
+                    trackColor = contentColor.copy(alpha = 0.24f)
+                )
+            }
+        }
+    }
+}
+
+private fun opdsDownloadProgressDetail(
+    strings: AppStrings,
+    progressInfo: OpdsDownloadUiProgress?,
+    completedCount: Int,
+    totalCount: Int
+): String {
+    val currentPercent = progressInfo?.currentFilePercent
+    return when {
+        totalCount <= 1 && currentPercent != null -> {
+            strings.get("opds_download_progress_single_percent", currentPercent)
+        }
+
+        totalCount <= 1 -> {
+            strings.get("opds_download_progress_single_unknown")
+        }
+
+        currentPercent != null -> {
+            strings.get(
+                "opds_download_progress_detail_with_file",
+                completedCount,
+                totalCount,
+                currentPercent
+            )
+        }
+
+        else -> {
+            strings.get(
+                "opds_download_progress_detail_current_unknown",
+                completedCount,
+                totalCount
             )
         }
     }

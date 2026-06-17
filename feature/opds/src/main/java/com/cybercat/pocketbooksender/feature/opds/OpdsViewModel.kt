@@ -8,6 +8,7 @@ import com.cybercat.pocketbooksender.data.opds.MatchOpdsAuthSourceUseCase
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
 import com.cybercat.pocketbooksender.data.opds.OpdsAuthenticationRequiredException
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
+import com.cybercat.pocketbooksender.data.opds.OpdsDownloadProgress
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsRepository
@@ -412,7 +413,12 @@ class OpdsViewModel @Inject constructor(
             }
 
             try {
-                val file = opdsRepository.downloadPublication(baseUrl, entry, acquisition)
+                val file = opdsRepository.downloadPublication(
+                    baseUrl = baseUrl,
+                    entry = entry,
+                    acquisition = acquisition,
+                    onProgress = ::onOpdsDownloadProgress
+                )
                 queueManager.addUris(listOf(Uri.fromFile(file)))
                 mutableOpdsState.update { state ->
                     state.copy(
@@ -516,10 +522,13 @@ class OpdsViewModel @Inject constructor(
                             queueManager.addUris(listOf(Uri.fromFile(file)))
                             addedToQueueCount += 1
                             mutableOpdsState.update { state ->
+                                val currentProgress = state.downloadProgress
                                 state.copy(
-                                    downloadProgress = OpdsDownloadUiProgress(
+                                    downloadProgress = currentProgress?.copy(
                                         completedCount = addedToQueueCount,
-                                        totalCount = downloadableCount
+                                        totalCount = downloadableCount,
+                                        bytesRead = 0L,
+                                        totalBytes = null
                                     )
                                 )
                             }
@@ -576,7 +585,26 @@ class OpdsViewModel @Inject constructor(
     }
 
     fun cancelOpdsDownload() {
-        opdsDownloadJob?.cancel()
+        val job = opdsDownloadJob?.takeIf { it.isActive } ?: return
+        mutableOpdsState.update { state ->
+            state.copy(
+                statusMessage = null,
+                downloadProgress = state.downloadProgress?.copy(isCanceling = true)
+            )
+        }
+        job.cancel()
+    }
+
+    private fun onOpdsDownloadProgress(progress: OpdsDownloadProgress) {
+        mutableOpdsState.update { state ->
+            val currentProgress = state.downloadProgress ?: return@update state
+            state.copy(
+                downloadProgress = currentProgress.copy(
+                    bytesRead = progress.bytesRead,
+                    totalBytes = progress.totalBytes
+                )
+            )
+        }
     }
 
     private fun loadOpdsCatalog(

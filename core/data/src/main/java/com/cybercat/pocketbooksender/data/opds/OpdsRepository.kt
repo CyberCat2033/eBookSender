@@ -19,7 +19,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -147,7 +146,8 @@ class OpdsRepository @Inject constructor(
     suspend fun downloadPublication(
         baseUrl: String,
         entry: OpdsEntry,
-        acquisition: OpdsAcquisition
+        acquisition: OpdsAcquisition,
+        onProgress: (OpdsDownloadProgress) -> Unit = {}
     ): File = withContext(Dispatchers.IO) {
         val resolvedUrl = OpdsUrlResolver.resolveUrl(baseUrl, acquisition.href)
         val connection = httpClient.openConnection(
@@ -164,43 +164,52 @@ class OpdsRepository @Inject constructor(
             val outputDir = File(context.cacheDir, "opds").apply { mkdirs() }
             val outputFile = uniqueFile(outputDir, fileName)
             val tempFile = uniqueFile(outputDir, "${outputFile.name}.download")
-            val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
-                if (cause is CancellationException) {
-                    connection.disconnect()
-                }
-            }
 
             try {
-                connection.inputStream.use { input ->
-                    tempFile.outputStream().use { output ->
-                        val buffer = ByteArray(DEFAULT_DOWNLOAD_BUFFER_SIZE)
-                        while (true) {
-                            currentCoroutineContext().ensureActive()
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            output.write(buffer, 0, read)
+                connection.runDisconnectingOnCancellation { ensureActive ->
+                    val totalBytes = connection.contentLengthLong.takeIf { it > 0L }
+                    val progressReporter = OpdsDownloadProgressReporter(
+                        totalBytes = totalBytes,
+                        onProgress = onProgress
+                    )
+                    var bytesRead = 0L
+                    progressReporter.report(bytesRead, force = true)
+
+                    connection.inputStream.use { input ->
+                        tempFile.outputStream().use { output ->
+                            val buffer = ByteArray(DEFAULT_DOWNLOAD_BUFFER_SIZE)
+                            while (true) {
+                                ensureActive()
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                ensureActive()
+                                output.write(buffer, 0, read)
+                                bytesRead += read
+                                progressReporter.report(bytesRead)
+                            }
+                        }
+                    }
+
+                    progressReporter.report(bytesRead, force = true)
+                    if (!tempFile.renameTo(outputFile)) {
+                        tempFile.copyTo(outputFile, overwrite = false)
+                        tempFile.delete()
+                    }
+                    outputFile
+                }
+            } catch (error: Throwable) {
+                tempFile.delete()
+                outputFile.delete()
+                if (error !is CancellationException) {
+                    try {
+                        currentCoroutineContext().ensureActive()
+                    } catch (cancellation: CancellationException) {
+                        throw CancellationException("OPDS download canceled").also { canceled ->
+                            canceled.initCause(error)
                         }
                     }
                 }
-
-                if (!tempFile.renameTo(outputFile)) {
-                    tempFile.copyTo(outputFile, overwrite = false)
-                    tempFile.delete()
-                }
-                outputFile
-            } catch (error: Throwable) {
-                tempFile.delete()
-                if (
-                    error !is CancellationException &&
-                    currentCoroutineContext()[Job]?.isCancelled == true
-                ) {
-                    throw CancellationException("OPDS download canceled").also { cancellation ->
-                        cancellation.initCause(error)
-                    }
-                }
                 throw error
-            } finally {
-                cancellationHandle?.dispose()
             }
         } finally {
             connection.disconnect()
@@ -375,9 +384,45 @@ class OpdsRepository @Inject constructor(
         }
     }
 
+    private class OpdsDownloadProgressReporter(
+        private val totalBytes: Long?,
+        private val onProgress: (OpdsDownloadProgress) -> Unit
+    ) {
+        private var lastReportedBytes = -1L
+        private var lastReportedPercent = -1
+        private var lastReportedAtMillis = 0L
+
+        fun report(bytesRead: Long, force: Boolean = false) {
+            val safeBytesRead = bytesRead.coerceAtLeast(0L)
+            val percent = totalBytes?.let { total ->
+                ((safeBytesRead.coerceAtMost(total) * 100L) / total).toInt()
+            } ?: -1
+            val now = System.currentTimeMillis()
+            val shouldReport = force ||
+                lastReportedBytes < 0L ||
+                safeBytesRead - lastReportedBytes >= PROGRESS_REPORT_BYTES_INTERVAL ||
+                percent != lastReportedPercent ||
+                now - lastReportedAtMillis >= PROGRESS_REPORT_MIN_INTERVAL_MILLIS
+
+            if (!shouldReport) return
+
+            lastReportedBytes = safeBytesRead
+            lastReportedPercent = percent
+            lastReportedAtMillis = now
+            onProgress(
+                OpdsDownloadProgress(
+                    bytesRead = safeBytesRead,
+                    totalBytes = totalBytes
+                )
+            )
+        }
+    }
+
     private companion object {
         const val CATALOG_CACHE_TTL_MILLIS = 5 * 60 * 1000L
         const val DEFAULT_DOWNLOAD_BUFFER_SIZE = 64 * 1024
+        const val PROGRESS_REPORT_BYTES_INTERVAL = 256 * 1024L
+        const val PROGRESS_REPORT_MIN_INTERVAL_MILLIS = 250L
         const val SEARCH_TERMS_PLACEHOLDER = "{searchTerms"
         const val LEGACY_PROJECT_GUTENBERG_SOURCE_ID = "project-gutenberg"
         const val OPDS_CATALOG_ACCEPT =

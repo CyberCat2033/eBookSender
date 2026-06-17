@@ -177,6 +177,11 @@
   "opds_action_delete_source": "Delete OPDS source",
   "opds_download_progress_title": "Downloading OPDS books",
   "opds_download_progress_detail": "%1$d of %2$d ready",
+  "opds_download_progress_single_percent": "Current file: %1$d%%",
+  "opds_download_progress_single_unknown": "Downloading current file",
+  "opds_download_progress_detail_with_file": "%1$d of %2$d ready, current file %3$d%%",
+  "opds_download_progress_detail_current_unknown": "%1$d of %2$d ready, downloading current file",
+  "opds_download_canceling_title": "Canceling download",
   "opds_download_cancel": "Cancel download",
   
   "manga_search_manga": "Search manga",

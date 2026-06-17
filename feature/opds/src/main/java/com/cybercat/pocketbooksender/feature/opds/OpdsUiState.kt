@@ -71,4 +71,38 @@ enum class WebContentMode {
     Manga
 }
 
-data class OpdsDownloadUiProgress(val completedCount: Int, val totalCount: Int)
+data class OpdsDownloadUiProgress(
+    val completedCount: Int,
+    val totalCount: Int,
+    val bytesRead: Long = 0L,
+    val totalBytes: Long? = null,
+    val isCanceling: Boolean = false
+) {
+    val currentFileProgress: Float?
+        get() = totalBytes
+            ?.takeIf { it > 0L }
+            ?.let { total ->
+                (bytesRead.toDouble() / total.toDouble())
+                    .coerceIn(0.0, 1.0)
+                    .toFloat()
+            }
+
+    val currentFilePercent: Int?
+        get() = currentFileProgress?.let { progress ->
+            (progress * 100).toInt().coerceIn(0, 100)
+        }
+
+    val overallProgress: Float?
+        get() {
+            val safeTotalCount = totalCount.coerceAtLeast(1)
+            currentFileProgress?.let { fileProgress ->
+                return ((completedCount + fileProgress) / safeTotalCount)
+                    .coerceIn(0f, 1f)
+            }
+            return if (safeTotalCount > 1 && completedCount > 0) {
+                (completedCount.toFloat() / safeTotalCount.toFloat()).coerceIn(0f, 1f)
+            } else {
+                null
+            }
+        }
+}

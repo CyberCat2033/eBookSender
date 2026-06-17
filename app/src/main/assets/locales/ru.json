@@ -177,6 +177,11 @@
   "opds_action_delete_source": "Удалить источник OPDS",
   "opds_download_progress_title": "Скачивание книг OPDS",
   "opds_download_progress_detail": "Готово %1$d из %2$d",
+  "opds_download_progress_single_percent": "Текущий файл: %1$d%%",
+  "opds_download_progress_single_unknown": "Скачивание текущего файла",
+  "opds_download_progress_detail_with_file": "Готово %1$d из %2$d, текущий файл %3$d%%",
+  "opds_download_progress_detail_current_unknown": "Готово %1$d из %2$d, скачивание текущего файла",
+  "opds_download_canceling_title": "Отмена загрузки",
   "opds_download_cancel": "Отменить загрузку",
   
   "manga_search_manga": "Поиск манги",

@@ -8,8 +8,8 @@ import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 @Singleton
 class OpdsHttpClient @Inject constructor(private val credentialsProvider: OpdsCredentialsProvider) {
@@ -48,22 +48,20 @@ class OpdsHttpClient @Inject constructor(private val credentialsProvider: OpdsCr
             }
         }
 
-        val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
-            if (cause is CancellationException) {
-                connection.disconnect()
-            }
-        }
         val code = try {
-            connection.responseCode
+            connection.runDisconnectingOnCancellation { ensureActive ->
+                ensureActive()
+                connection.responseCode
+            }
         } catch (error: IOException) {
-            if (currentCoroutineContext()[Job]?.isCancelled == true) {
+            try {
+                currentCoroutineContext().ensureActive()
+            } catch (cancellation: CancellationException) {
                 throw CancellationException("OPDS request canceled").also { cancellation ->
                     cancellation.initCause(error)
                 }
             }
             throw error
-        } finally {
-            cancellationHandle?.dispose()
         }
         if (code in 300..399 && redirectsLeft > 0) {
             val location = connection.getHeaderField("Location")
