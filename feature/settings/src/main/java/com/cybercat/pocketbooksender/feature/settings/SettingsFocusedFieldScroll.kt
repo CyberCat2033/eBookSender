@@ -18,13 +18,12 @@ import com.cybercat.pocketbooksender.ui.theme.EmphasizedEasing
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private const val FOCUSED_FIELD_SCROLL_DURATION_MILLIS = 260
-private const val FOCUSED_FIELD_SCROLL_CORRECTION_DELAY_MILLIS = 90L
-private const val FOCUSED_FIELD_SCROLL_CORRECTION_DURATION_MILLIS = 160
 private const val FOCUSED_FIELD_SCROLL_THRESHOLD_PX = 2
+private const val FOCUSED_FIELD_SCROLL_STABLE_FRAME_COUNT = 2
+private const val FOCUSED_FIELD_SCROLL_MAX_WAIT_FRAME_COUNT = 14
 
 internal val LocalSettingsFocusedFieldScroller =
     staticCompositionLocalOf<(LayoutCoordinates) -> Unit> { {} }
@@ -44,18 +43,12 @@ internal fun SettingsFocusedFieldScrollHost(
             scrollJob[0]?.cancel()
             scrollJob[0] =
                 scope.launch {
-                    withFrameNanos { }
-                    scrollState.animateFocusedFieldToUpperThird(
+                    scrollState.awaitFocusedFieldTargetScroll(
                         viewportCoordinates = viewportCoordinates[0],
-                        fieldCoordinates = fieldCoordinates,
-                        durationMillis = FOCUSED_FIELD_SCROLL_DURATION_MILLIS
-                    )
-                    delay(FOCUSED_FIELD_SCROLL_CORRECTION_DELAY_MILLIS)
-                    scrollState.animateFocusedFieldToUpperThird(
-                        viewportCoordinates = viewportCoordinates[0],
-                        fieldCoordinates = fieldCoordinates,
-                        durationMillis = FOCUSED_FIELD_SCROLL_CORRECTION_DURATION_MILLIS
-                    )
+                        fieldCoordinates = fieldCoordinates
+                    )?.let { targetScroll ->
+                        scrollState.animateFocusedFieldToUpperThird(targetScroll)
+                    }
                 }
         }
     }
@@ -75,28 +68,59 @@ internal fun SettingsFocusedFieldScrollHost(
     }
 }
 
-private suspend fun ScrollState.animateFocusedFieldToUpperThird(
+private suspend fun ScrollState.awaitFocusedFieldTargetScroll(
     viewportCoordinates: LayoutCoordinates?,
-    fieldCoordinates: LayoutCoordinates,
-    durationMillis: Int
-) {
-    val viewport = viewportCoordinates ?: return
-    if (!viewport.isAttached || !fieldCoordinates.isAttached) return
+    fieldCoordinates: LayoutCoordinates
+): Int? {
+    var previousTarget: Int? = null
+    var stableFrameCount = 0
+
+    repeat(FOCUSED_FIELD_SCROLL_MAX_WAIT_FRAME_COUNT) {
+        withFrameNanos { }
+
+        val targetScroll =
+            focusedFieldTargetScroll(
+                viewportCoordinates = viewportCoordinates,
+                fieldCoordinates = fieldCoordinates
+            ) ?: return null
+
+        val previous = previousTarget
+        if (previous != null && abs(targetScroll - previous) <= FOCUSED_FIELD_SCROLL_THRESHOLD_PX) {
+            stableFrameCount++
+            if (stableFrameCount >= FOCUSED_FIELD_SCROLL_STABLE_FRAME_COUNT) {
+                return targetScroll
+            }
+        } else {
+            stableFrameCount = 0
+        }
+        previousTarget = targetScroll
+    }
+
+    return previousTarget
+}
+
+private fun ScrollState.focusedFieldTargetScroll(
+    viewportCoordinates: LayoutCoordinates?,
+    fieldCoordinates: LayoutCoordinates
+): Int? {
+    val viewport = viewportCoordinates ?: return null
+    if (!viewport.isAttached || !fieldCoordinates.isAttached) return null
 
     val fieldTop = viewport.localPositionOf(fieldCoordinates, Offset.Zero).y
     val fieldCenter = fieldTop + fieldCoordinates.size.height / 2f
-    val targetScroll =
-        (value + fieldCenter - viewport.size.height / 3f)
-            .roundToInt()
-            .coerceIn(0, maxValue)
+    return (value + fieldCenter - viewport.size.height / 3f)
+        .roundToInt()
+        .coerceIn(0, maxValue)
+}
 
+private suspend fun ScrollState.animateFocusedFieldToUpperThird(targetScroll: Int) {
     if (abs(targetScroll - value) <= FOCUSED_FIELD_SCROLL_THRESHOLD_PX) return
 
     animateScrollTo(
         value = targetScroll,
         animationSpec =
             tween(
-                durationMillis = durationMillis,
+                durationMillis = FOCUSED_FIELD_SCROLL_DURATION_MILLIS,
                 easing = EmphasizedEasing
             )
     )

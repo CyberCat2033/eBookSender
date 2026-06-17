@@ -185,7 +185,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - Settings motion: `feature/settings/.../SettingsScreen.kt`, `SettingsComponents.kt`, and `SettingsDialogs.kt`.
   - Editable setting trailing action uses `AnimatedContent` with 120 ms fade-in and 90 ms fade-out between save icon and spinner.
   - Settings IME padding is applied inside the scroll chain so focused inputs can move above the keyboard without a fixed spacer over the screen.
-  - Focused settings fields use `SettingsFocusedFieldScrollHost` to animate the shared `ScrollState` so the focused input settles near the upper third of the settings viewport; the focus scroll uses the shared `EmphasizedEasing` curve and a short correction pass for IME and naming-token layout changes.
+  - Focused settings fields use `SettingsFocusedFieldScrollHost` to animate the shared `ScrollState` so the focused input settles near the upper third of the settings viewport; the focus scroll waits briefly for IME and naming-token layout changes to stabilize, then uses the shared `EmphasizedEasing` curve for a single scroll animation.
   - Folder rename warning and language dialogs reuse `AnimatedAlertDialog`.
   - Maintenance section uses `animateContentSize` with a medium-low spring.
   - Maintenance status messages use `AnimatedContent`: expand/fade in when present, shrink/fade out when cleared, and auto-clear after 3 seconds.
