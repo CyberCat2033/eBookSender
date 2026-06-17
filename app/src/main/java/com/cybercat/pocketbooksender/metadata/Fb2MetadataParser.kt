@@ -10,10 +10,14 @@ import java.net.URLDecoder
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import org.xmlpull.v1.XmlPullParser
-import org.xmlpull.v1.XmlPullParserFactory
 
 class Fb2MetadataParser @Inject constructor() {
-    fun extract(uri: Uri, displayName: String, fallbackTitle: String, openStream: (Uri) -> InputStream): BookMetadata {
+    fun extract(
+        uri: Uri,
+        displayName: String,
+        fallbackTitle: String,
+        openStream: (Uri) -> InputStream
+    ): BookMetadata {
         val bytes = if (displayName.isZipWrappedBook()) {
             openStream(uri).use { input ->
                 ZipInputStream(input).use { zip ->
@@ -30,7 +34,7 @@ class Fb2MetadataParser @Inject constructor() {
     }
 
     private fun parseFb2(bytes: ByteArray, fallbackTitle: String): BookMetadata {
-        val parser = newParser(ByteArrayInputStream(bytes))
+        val parser = newMetadataXmlParser(ByteArrayInputStream(bytes))
         var inTitleInfo = false
         var inPublishInfo = false
         var inAuthor = false
@@ -53,32 +57,41 @@ class Fb2MetadataParser @Inject constructor() {
             when (parser.eventType) {
                 XmlPullParser.START_TAG -> when (parser.name) {
                     "title-info" -> inTitleInfo = true
+
                     "publish-info" -> inPublishInfo = true
+
                     "coverpage" -> if (inTitleInfo) inCoverpage = true
+
                     "author" -> if (inTitleInfo) {
                         inAuthor = true
                         authorParts.clear()
                     }
+
                     "book-title" -> if (inTitleInfo) title = parser.nextTextSafe()
+
                     "first-name", "middle-name", "last-name", "nickname" -> {
                         if (inTitleInfo && inAuthor) authorParts += parser.nextTextSafe()
                     }
+
                     "sequence" -> {
                         if (inTitleInfo && series == null) {
                             series = parser.getAttributeValue(null, "name")?.trim()
                             seriesIndex = parser.getAttributeValue(null, "number")?.trim()
                         }
                     }
+
                     "publisher" -> {
                         if (inPublishInfo) {
                             publisher = parser.nextTextSafe().trim()
                         }
                     }
+
                     "year" -> {
                         if (inPublishInfo) {
                             year = parser.nextTextSafe().trim()
                         }
                     }
+
                     "date" -> {
                         val valueAttr = parser.getAttributeValue(null, "value")?.trim()
                         val dateText = parser.nextTextSafe().trim()
@@ -91,6 +104,7 @@ class Fb2MetadataParser @Inject constructor() {
                             }
                         }
                     }
+
                     "image" -> if (inTitleInfo && inCoverpage && coverId == null) {
                         coverId = parser.attributeValueByLocalName("href", XLINK_NAMESPACE)
                             ?.toFb2BinaryId()
@@ -98,6 +112,7 @@ class Fb2MetadataParser @Inject constructor() {
                             previewsById[id]?.let { coverPreview = it }
                         }
                     }
+
                     "binary" -> {
                         val id = parser.getAttributeValue(null, "id")
                         val normalizedId = id?.toFb2BinaryId()
@@ -112,7 +127,9 @@ class Fb2MetadataParser @Inject constructor() {
                                 }
                                 when {
                                     normalizedId == coverId -> coverPreview = bitmap
-                                    namedCoverPreview == null && normalizedId.looksLikeCoverId() -> {
+
+                                    namedCoverPreview == null &&
+                                        normalizedId.looksLikeCoverId() -> {
                                         namedCoverPreview = bitmap
                                     }
                                 }
@@ -123,6 +140,7 @@ class Fb2MetadataParser @Inject constructor() {
                         }
                     }
                 }
+
                 XmlPullParser.END_TAG -> when (parser.name) {
                     "author" -> if (inAuthor) {
                         authorParts.joinToString(" ")
@@ -132,8 +150,11 @@ class Fb2MetadataParser @Inject constructor() {
                             ?.let(authors::add)
                         inAuthor = false
                     }
+
                     "title-info" -> inTitleInfo = false
+
                     "coverpage" -> inCoverpage = false
+
                     "publish-info" -> inPublishInfo = false
                 }
             }
@@ -146,47 +167,14 @@ class Fb2MetadataParser @Inject constructor() {
             series = series,
             seriesIndex = seriesIndex,
             publisher = publisher,
-            year = year,
+            year = year
         )
     }
 
-    private fun newParser(input: InputStream): XmlPullParser =
-        XmlPullParserFactory.newInstance().newPullParser().apply {
-            setInput(input, null)
-        }
-
-    private fun XmlPullParser.nextTextSafe(): String =
-        runCatching { nextText().trim() }.getOrDefault("")
-
-    private fun XmlPullParser.attributeValueByLocalName(
-        localName: String,
-        namespace: String? = null,
-    ): String? {
-        if (namespace != null) {
-            getAttributeValue(namespace, localName)
-                ?.takeIf { it.isNotBlank() }
-                ?.let { return it }
-        }
-
-        getAttributeValue(null, localName)
-            ?.takeIf { it.isNotBlank() }
-            ?.let { return it }
-
-        for (index in 0 until attributeCount) {
-            val attributeName = getAttributeName(index) ?: continue
-            if (attributeName.substringAfter(':') == localName) {
-                return getAttributeValue(index)?.takeIf { it.isNotBlank() }
-            }
-        }
-
-        return null
-    }
-
-    private fun decodeBase64Bitmap(value: String): Bitmap? =
-        runCatching {
-            val bytes = Base64.decode(value.replace(Regex("""\s+"""), ""), Base64.DEFAULT)
-            MetadataPreviewDecoder.decodeBitmap(bytes)
-        }.getOrNull()
+    private fun decodeBase64Bitmap(value: String): Bitmap? = runCatching {
+        val bytes = Base64.decode(value.replace(Regex("""\s+"""), ""), Base64.DEFAULT)
+        MetadataPreviewDecoder.decodeBitmap(bytes)
+    }.getOrNull()
 
     private fun String.toFb2BinaryId(): String {
         val reference = trim()
