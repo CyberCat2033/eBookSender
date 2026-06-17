@@ -87,6 +87,8 @@ internal fun ValidatedSettingsField(
     val strings = LocalStrings.current
     val isChanged = textFieldValue.text != value
     val canCommitChange = isChanged && !isSaving && actionEnabled
+    val scrollFocusedField = LocalSettingsFocusedFieldScroller.current
+    var fieldCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     fun commitChange(clearFocus: Boolean) {
         if (!canCommitChange) return
@@ -106,8 +108,14 @@ internal fun ValidatedSettingsField(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    fieldCoordinates = coordinates
+                }
                 .onFocusChanged { focusState ->
                     onFocusChanged(focusState.isFocused)
+                    if (focusState.isFocused) {
+                        fieldCoordinates?.let(scrollFocusedField)
+                    }
                 },
         label = { Text(label) },
         placeholderText = placeholder,
