@@ -1,6 +1,10 @@
 package com.cybercat.pocketbooksender.feature.opds
 
-import android.view.HapticFeedbackConstants
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -288,87 +292,92 @@ internal fun OpdsPaginationBar(
     onNextPage: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (!paging.shouldShow) return
-
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
     val canGoPrevious = enabled && paging.canGoPrevious
     val canGoNext = enabled && paging.canGoNext
-    Surface(
+
+    AnimatedVisibility(
+        visible = paging.shouldShow,
         modifier = modifier.widthIn(min = 300.dp, max = 380.dp),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.primary
-        ),
-        tonalElevation = 6.dp,
-        shadowElevation = 6.dp
+        enter = fadeIn() + slideInVertically { height -> height / 2 },
+        exit = fadeOut() + slideOutVertically { height -> height / 2 }
     ) {
-        Row(
-            modifier = Modifier
-                .height(56.dp)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.primary
+            ),
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp
         ) {
-            FilledIconButton(
-                onClick = {
-                    view.performHapticIfAllowed(
-                        context,
-                        enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
-                    )
-                    onPreviousPage()
-                },
-                enabled = canGoPrevious,
+            Row(
                 modifier = Modifier
-                    .width(68.dp)
-                    .height(40.dp),
-                shape = CircleShape,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                    .height(56.dp)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = strings.get("opds_page_previous")
-                )
-            }
-            Text(
-                text = paging.displayLabel(strings),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelLarge,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            FilledIconButton(
-                onClick = {
-                    view.performHapticIfAllowed(
-                        context,
-                        enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                FilledIconButton(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            HapticFeedbackConstants.VIRTUAL_KEY
+                        )
+                        onPreviousPage()
+                    },
+                    enabled = canGoPrevious,
+                    modifier = Modifier
+                        .width(68.dp)
+                        .height(40.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     )
-                    onNextPage()
-                },
-                enabled = canGoNext,
-                modifier = Modifier
-                    .width(68.dp)
-                    .height(40.dp),
-                shape = CircleShape,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = strings.get("opds_page_previous")
+                    )
+                }
+                Text(
+                    text = paging.displayLabel(strings),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
-                    contentDescription = strings.get("opds_page_next")
-                )
+                FilledIconButton(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            HapticFeedbackConstants.VIRTUAL_KEY
+                        )
+                        onNextPage()
+                    },
+                    enabled = canGoNext,
+                    modifier = Modifier
+                        .width(68.dp)
+                        .height(40.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                        contentDescription = strings.get("opds_page_next")
+                    )
+                }
             }
         }
     }
