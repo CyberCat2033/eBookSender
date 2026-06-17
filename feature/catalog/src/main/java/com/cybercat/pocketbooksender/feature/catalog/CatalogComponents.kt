@@ -69,12 +69,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
+import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
-import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
-import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -84,16 +82,16 @@ internal fun CatalogMessage(
     title: String,
     text: String,
     isError: Boolean = false,
-    isLoading: Boolean = false,
+    isLoading: Boolean = false
 ) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium
             )
             Text(
                 text = text,
@@ -102,7 +100,7 @@ internal fun CatalogMessage(
                     MaterialTheme.colorScheme.error
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                }
             )
             if (isLoading) {
                 Spacer(Modifier.height(8.dp))
@@ -113,11 +111,7 @@ internal fun CatalogMessage(
 }
 
 @Composable
-internal fun SectionTitle(
-    title: String,
-    count: Int,
-    modifier: Modifier = Modifier,
-) {
+internal fun SectionTitle(title: String, count: Int, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .zIndex(CatalogSectionTitleZIndex)
@@ -125,50 +119,46 @@ internal fun SectionTitle(
             .background(MaterialTheme.colorScheme.background)
             .padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.SemiBold
         )
         Text(
             text = count.toString(),
             style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
 @Composable
-internal fun SelectionSlot(
-    visible: Boolean,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
+internal fun SelectionSlot(visible: Boolean, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     val width by animateDpAsState(
         targetValue = if (visible) SelectionSlotWidth else 0.dp,
         animationSpec = tween(
             durationMillis = SelectionMotionDurationMillis,
-            easing = FastOutSlowInEasing,
+            easing = FastOutSlowInEasing
         ),
-        label = "SelectionSlotWidth",
+        label = "SelectionSlotWidth"
     )
     val checkboxAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = tween(
             durationMillis = SelectionMotionDurationMillis,
-            easing = FastOutSlowInEasing,
+            easing = FastOutSlowInEasing
         ),
-        label = "SelectionCheckboxAlpha",
+        label = "SelectionCheckboxAlpha"
     )
     val checkboxScale by animateFloatAsState(
         targetValue = if (visible) 1f else 0.86f,
         animationSpec = tween(
             durationMillis = SelectionMotionDurationMillis,
-            easing = FastOutSlowInEasing,
+            easing = FastOutSlowInEasing
         ),
-        label = "SelectionCheckboxScale",
+        label = "SelectionCheckboxScale"
     )
 
     Box(
@@ -176,7 +166,7 @@ internal fun SelectionSlot(
             .width(width)
             .height(SelectionControlSize)
             .clipToBounds(),
-        contentAlignment = Alignment.CenterStart,
+        contentAlignment = Alignment.CenterStart
     ) {
         CompactCheckbox(
             checked = checked,
@@ -186,7 +176,7 @@ internal fun SelectionSlot(
                 scaleX = checkboxScale
                 scaleY = checkboxScale
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-            },
+            }
         )
     }
 }
@@ -195,13 +185,13 @@ internal fun SelectionSlot(
 internal fun CompactCheckbox(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
         Checkbox(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            modifier = modifier.size(SelectionControlSize),
+            modifier = modifier.size(SelectionControlSize)
         )
     }
 }
@@ -242,7 +232,7 @@ internal fun CatalogGroupCard(
             context,
             enableHaptics,
             HapticFeedbackConstants.LONG_PRESS,
-            ignoreDnd = true,
+            ignoreDnd = true
         )
         if (!isEditMode) {
             onEnterEditMode()
@@ -262,7 +252,7 @@ internal fun CatalogGroupCard(
                 SelectionSlot(
                     visible = isEditMode,
                     checked = isGroupFullySelected,
-                    onCheckedChange = ::toggleGroup,
+                    onCheckedChange = ::toggleGroup
                 )
                 ExpandableHeader(
                     title = group.name,
@@ -285,8 +275,12 @@ internal fun CatalogGroupCard(
             }
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically(animationSpec = tween(durationMillis = animationDuration)) + fadeIn(animationSpec = tween(durationMillis = animationDuration)),
-                exit = shrinkVertically(animationSpec = tween(durationMillis = animationDuration)) + fadeOut(animationSpec = tween(durationMillis = animationDuration))
+                enter =
+                    expandVertically(animationSpec = tween(durationMillis = animationDuration)) +
+                        fadeIn(animationSpec = tween(durationMillis = animationDuration)),
+                exit =
+                    shrinkVertically(animationSpec = tween(durationMillis = animationDuration)) +
+                        fadeOut(animationSpec = tween(durationMillis = animationDuration))
             ) {
                 FileList(
                     files = group.files,
@@ -295,7 +289,7 @@ internal fun CatalogGroupCard(
                     enableHaptics = enableHaptics,
                     onToggleFileSelection = onToggleFileSelection,
                     selectionClickSuppressed = selectionClickSuppressed,
-                    onFileBoundsChanged = onFileBoundsChanged,
+                    onFileBoundsChanged = onFileBoundsChanged
                 )
             }
         }
@@ -338,7 +332,7 @@ internal fun MangaSeriesCard(
             context,
             enableHaptics,
             HapticFeedbackConstants.LONG_PRESS,
-            ignoreDnd = true,
+            ignoreDnd = true
         )
         if (!isEditMode) {
             onEnterEditMode()
@@ -358,12 +352,15 @@ internal fun MangaSeriesCard(
                 SelectionSlot(
                     visible = isEditMode,
                     checked = isGroupFullySelected,
-                    onCheckedChange = ::toggleGroup,
+                    onCheckedChange = ::toggleGroup
                 )
                 ExpandableHeader(
                     title = group.name,
                     subtitle = group.latestFile?.let { file ->
-                        strings.get("catalog_label_latest", "${file.mangaDisplayTitle()}${file.progressSuffix(strings)}")
+                        strings.get(
+                            "catalog_label_latest",
+                            "${file.mangaDisplayTitle()}${file.progressSuffix(strings)}"
+                        )
                     } ?: strings.catalogNoFiles,
                     subtitleMaxLines = 3,
                     expanded = expanded,
@@ -384,8 +381,12 @@ internal fun MangaSeriesCard(
             }
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically(animationSpec = tween(durationMillis = animationDuration)) + fadeIn(animationSpec = tween(durationMillis = animationDuration)),
-                exit = shrinkVertically(animationSpec = tween(durationMillis = animationDuration)) + fadeOut(animationSpec = tween(durationMillis = animationDuration))
+                enter =
+                    expandVertically(animationSpec = tween(durationMillis = animationDuration)) +
+                        fadeIn(animationSpec = tween(durationMillis = animationDuration)),
+                exit =
+                    shrinkVertically(animationSpec = tween(durationMillis = animationDuration)) +
+                        fadeOut(animationSpec = tween(durationMillis = animationDuration))
             ) {
                 FileList(
                     files = group.files,
@@ -395,7 +396,7 @@ internal fun MangaSeriesCard(
                     enableHaptics = enableHaptics,
                     onToggleFileSelection = onToggleFileSelection,
                     selectionClickSuppressed = selectionClickSuppressed,
-                    onFileBoundsChanged = onFileBoundsChanged,
+                    onFileBoundsChanged = onFileBoundsChanged
                 )
             }
         }
@@ -414,7 +415,7 @@ internal fun ExpandableHeader(
     titleClickEnabled: Boolean = false,
     onTitleClick: () -> Unit = {},
     onTitleLongClick: () -> Unit = {},
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -425,21 +426,21 @@ internal fun ExpandableHeader(
             interactionSource = titleInteractionSource,
             indication = null,
             onClick = onTitleClick,
-            onLongClick = onTitleLongClick,
+            onLongClick = onTitleLongClick
         )
     } else {
         Modifier.pointerInput(onTitleLongClick) {
             detectTapGestures(
                 onLongPress = {
                     onTitleLongClick()
-                },
+                }
             )
         }
     }
 
     Row(
         modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Column(
             Modifier
@@ -450,14 +451,14 @@ internal fun ExpandableHeader(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = subtitleMaxLines,
-                overflow = TextOverflow.Ellipsis,
+                overflow = TextOverflow.Ellipsis
             )
         }
         val rotationState by animateFloatAsState(
@@ -488,7 +489,7 @@ internal fun FileList(
     enableHaptics: Boolean = false,
     onToggleFileSelection: (String) -> Unit = {},
     selectionClickSuppressed: () -> Boolean = { false },
-    onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit = { _, _ -> },
+    onFileBoundsChanged: (String, androidx.compose.ui.geometry.Rect?) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -513,7 +514,7 @@ internal fun FileList(
 
     Column(
         modifier = Modifier.padding(top = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         currentFiles.forEach { file ->
             val isExiting = file.path in deletedPaths
@@ -532,13 +533,13 @@ internal fun FileList(
                     shrinkTowards = Alignment.Top,
                     animationSpec = tween(
                         durationMillis = RemovalMotionDurationMillis,
-                        easing = FastOutSlowInEasing,
-                    ),
+                        easing = FastOutSlowInEasing
+                    )
                 ) + fadeOut(
                     animationSpec = tween(
                         durationMillis = RemovalMotionDurationMillis,
-                        easing = FastOutSlowInEasing,
-                    ),
+                        easing = FastOutSlowInEasing
+                    )
                 ),
                 label = "FileRemoval"
             ) {
@@ -551,7 +552,7 @@ internal fun FileList(
                         .clickable(
                             enabled = isEditMode,
                             interactionSource = fileInteractionSource,
-                            indication = null,
+                            indication = null
                         ) {
                             if (selectionClickSuppressed()) {
                                 return@clickable
@@ -559,13 +560,13 @@ internal fun FileList(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY,
+                                HapticFeedbackConstants.VIRTUAL_KEY
                             )
                             onToggleFileSelection(file.path)
                         }
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     SelectionSlot(
                         visible = isEditMode,
@@ -575,11 +576,11 @@ internal fun FileList(
                                 view.performHapticIfAllowed(
                                     context,
                                     enableHaptics,
-                                    HapticFeedbackConstants.VIRTUAL_KEY,
+                                    HapticFeedbackConstants.VIRTUAL_KEY
                                 )
                                 onToggleFileSelection(file.path)
                             }
-                        },
+                        }
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
@@ -587,13 +588,14 @@ internal fun FileList(
                             text = if (showProgress) file.displayTitle() else file.mangaDisplayTitle(),
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                            overflow = TextOverflow.Ellipsis
                         )
                         if (showProgress) {
                             val currentPage = file.currentPage
                             val totalPages = file.totalPages
                             val progressDetailText = when {
                                 file.completed -> strings.catalogStatusCompleted
+
                                 currentPage != null && currentPage > 0 -> {
                                     if (totalPages != null && totalPages > 0) {
                                         strings.get("catalog_page_ratio", currentPage, totalPages)
@@ -601,6 +603,7 @@ internal fun FileList(
                                         strings.get("catalog_page_current", currentPage)
                                     }
                                 }
+
                                 else -> strings.catalogStatusNotStarted
                             }
 
@@ -632,7 +635,7 @@ internal fun FileList(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -643,7 +646,7 @@ internal fun FileList(
                             Spacer(Modifier.width(12.dp))
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 CircularProgressIndicator(
                                     progress = { percent / 100f },
@@ -654,13 +657,13 @@ internal fun FileList(
                                     } else {
                                         MaterialTheme.colorScheme.secondary
                                     },
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                                 )
                                 Text(
                                     text = "$percent%",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -677,77 +680,3 @@ internal fun FileList(
         }
     }
 }
-
-internal fun DeviceCatalog.groupPaths(): Set<String> = buildSet {
-    books.forEach { group -> add(group.path) }
-    documents.forEach { group -> add(group.path) }
-    manga.forEach { group -> add(group.path) }
-}
-
-internal fun DeviceCatalog.fileSelectionTargets(
-    expandedGroupPaths: Set<String>,
-): List<CatalogPointerTarget> = buildList {
-    fun addFiles(groupPath: String, files: List<CatalogFile>) {
-        if (groupPath !in expandedGroupPaths) return
-        files.forEach { file ->
-            add(
-                CatalogPointerTarget(
-                    index = size,
-                    path = file.path,
-                )
-            )
-        }
-    }
-
-    books.forEach { group -> addFiles(group.path, group.files) }
-    documents.forEach { group -> addFiles(group.path, group.files) }
-    manga.forEach { group -> addFiles(group.path, group.files) }
-}
-
-internal data class CatalogPointerTarget(
-    val index: Int,
-    val path: String,
-)
-
-internal fun List<CatalogFile>.summary(strings: com.cybercat.pocketbooksender.localization.AppStrings): String {
-    val withProgress = count { it.readProgressPercent != null }
-    val completed = count(CatalogFile::completed)
-    val fileCount = size
-    return buildList {
-        add(strings.get("catalog_group_files_count", fileCount))
-        if (withProgress > 0) add(strings.get("catalog_group_progress_count", withProgress))
-        if (completed > 0) add(strings.get("catalog_group_completed_count", completed))
-    }.joinToString(", ")
-}
-
-internal fun CatalogFile.displayTitle(): String =
-    title?.takeIf { it.isNotBlank() } ?: name
-
-internal fun CatalogFile.mangaDisplayTitle(): String =
-    name.bookTitleWithoutExtension().ifBlank { displayTitle() }
-
-internal fun MangaSeriesGroup.subtitle(strings: com.cybercat.pocketbooksender.localization.AppStrings): String =
-    lastReadFile?.let { file ->
-        strings.get("catalog_label_last_read", "${file.mangaDisplayTitle()}${file.progressSuffix(strings)}")
-    } ?: latestFile?.let { file ->
-        strings.get("catalog_label_latest", file.mangaDisplayTitle())
-    } ?: strings.catalogNoFiles
-
-internal fun CatalogFile.progressSuffix(strings: com.cybercat.pocketbooksender.localization.AppStrings): String =
-    progressText(strings)?.let { " | $it" }.orEmpty()
-
-internal fun CatalogFile.progressText(strings: com.cybercat.pocketbooksender.localization.AppStrings): String? {
-    val progress = readProgressPercent
-    return when {
-        completed -> strings.catalogStatusCompleted
-        progress != null -> strings.get("catalog_read_percentage", progress)
-        else -> null
-    }
-}
-
-internal const val SuppressSelectionClickMillis = 250L
-internal const val SelectionMotionDurationMillis = 220
-internal const val RemovalMotionDurationMillis = 260
-internal const val CatalogSectionTitleZIndex = 1f
-internal val SelectionSlotWidth = 36.dp
-internal val SelectionControlSize = 24.dp

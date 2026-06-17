@@ -8,17 +8,13 @@ data class SettingsUiState(
     val pendingRename: PendingRename? = null,
     val showLogoutWarning: Boolean = false,
     val activeFolderRename: FolderType? = null,
-    val availableLocales: List<com.cybercat.pocketbooksender.localization.LocaleInfo> = emptyList(),
+    val availableLocales: List<com.cybercat.pocketbooksender.localization.LocaleInfo> = emptyList()
 )
 
-data class PendingRename(
-    val folderType: FolderType,
-    val oldName: String,
-    val newName: String,
-)
+data class PendingRename(val folderType: FolderType, val oldName: String, val newName: String)
 
 enum class FolderType {
     Books,
     Documents,
-    Manga,
+    Manga
 }

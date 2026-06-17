@@ -1,6 +1,7 @@
 package com.cybercat.pocketbooksender.feature.settings
 
 import android.content.Context
+import android.webkit.CookieManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
@@ -12,9 +13,10 @@ import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
-import android.webkit.CookieManager
+import com.cybercat.pocketbooksender.ui.BitmapCache
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,8 +27,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.cybercat.pocketbooksender.ui.BitmapCache
-import java.io.File
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -37,7 +37,7 @@ class SettingsViewModel @Inject constructor(
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager,
     private val rescanCoordinator: PocketBookRescanCoordinator,
     private val opdsRepository: OpdsRepository,
-    private val mangaRepository: MangaRepository,
+    private val mangaRepository: MangaRepository
 ) : ViewModel() {
     private val _statusMessage = MutableStateFlow<String?>(null)
     private val _pendingRename = MutableStateFlow<PendingRename?>(null)
@@ -48,16 +48,16 @@ class SettingsViewModel @Inject constructor(
     private val persistedSettings: StateFlow<AppSettings> = settingsRepository.settings.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
-        initialValue = AppSettings(),
+        initialValue = AppSettings()
     )
 
     private val effectiveSettings = combine(
         persistedSettings,
-        _appearanceOverride,
+        _appearanceOverride
     ) { settings, override ->
         settings.copy(
             useDynamicColor = override.useDynamicColor ?: settings.useDynamicColor,
-            theme = override.theme ?: settings.theme,
+            theme = override.theme ?: settings.theme
         )
     }
 
@@ -66,8 +66,11 @@ class SettingsViewModel @Inject constructor(
             persistedSettings.collect { settings ->
                 _appearanceOverride.update { override ->
                     override.copy(
-                        useDynamicColor = override.useDynamicColor?.takeUnless { it == settings.useDynamicColor },
-                        theme = override.theme?.takeUnless { it == settings.theme },
+                        useDynamicColor = override.useDynamicColor?.takeUnless {
+                            it ==
+                                settings.useDynamicColor
+                        },
+                        theme = override.theme?.takeUnless { it == settings.theme }
                     )
                 }
             }
@@ -80,17 +83,17 @@ class SettingsViewModel @Inject constructor(
             _statusMessage,
             _pendingRename,
             localizationManager.availableLocales,
-            _activeFolderRename,
+            _activeFolderRename
         ) { settings, status, pending, locales, activeFolderRename ->
             SettingsUiState(
                 settings = settings,
                 settingsStatusMessage = status,
                 pendingRename = pending,
                 activeFolderRename = activeFolderRename,
-                availableLocales = locales,
+                availableLocales = locales
             )
         },
-        _showLogoutWarning,
+        _showLogoutWarning
     ) { state, showLogoutWarning ->
         state.copy(showLogoutWarning = showLogoutWarning)
     }.stateIn(
@@ -189,7 +192,11 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setWarnOnDisconnectedRename(value) }
     }
 
-    private suspend fun renameFolderOnDevice(folderType: FolderType, oldName: String, newName: String): Boolean {
+    private suspend fun renameFolderOnDevice(
+        folderType: FolderType,
+        oldName: String,
+        newName: String
+    ): Boolean {
         val device = connectionManager.connectedDevice.value ?: return false
         if (_activeFolderRename.value != null) return false
 
@@ -197,7 +204,13 @@ class SettingsViewModel @Inject constructor(
         return try {
             val result = ftpGateway.rename(device, oldName, newName)
             if (result.isSuccess) {
-                showTemporaryStatus(localizationManager.currentStrings.value.get("settings_renamed_on_device", oldName, newName))
+                showTemporaryStatus(
+                    localizationManager.currentStrings.value.get(
+                        "settings_renamed_on_device",
+                        oldName,
+                        newName
+                    )
+                )
                 rescanCoordinator.requestRescanAndWait(device)
                 true
             } else {
@@ -205,8 +218,15 @@ class SettingsViewModel @Inject constructor(
                 val errorMsg = error?.message.orEmpty()
                 val statusText = when {
                     errorMsg.contains("550") || errorMsg.contains("exist", ignoreCase = true) ->
-                        localizationManager.currentStrings.value.get("settings_rename_failed_exists", newName)
-                    else -> localizationManager.currentStrings.value.get("settings_rename_failed_error", error?.localizedMessage ?: "unknown error")
+                        localizationManager.currentStrings.value.get(
+                            "settings_rename_failed_exists",
+                            newName
+                        )
+
+                    else -> localizationManager.currentStrings.value.get(
+                        "settings_rename_failed_error",
+                        error?.localizedMessage ?: "unknown error"
+                    )
                 }
                 showTemporaryStatus(statusText)
                 false
@@ -305,7 +325,10 @@ class SettingsViewModel @Inject constructor(
             runCatching { File(context.cacheDir, "pocketbook-catalog").deleteRecursively() }
 
             val sizeInMb = totalBytes.toDouble() / (1024.0 * 1024.0)
-            val message = localizationManager.currentStrings.value.get("settings_cleared_cache", sizeInMb)
+            val message = localizationManager.currentStrings.value.get(
+                "settings_cleared_cache",
+                sizeInMb
+            )
             showTemporaryStatus(message)
         }
     }
@@ -315,7 +338,9 @@ class SettingsViewModel @Inject constructor(
             if (hasLogoutTargets()) {
                 _showLogoutWarning.value = true
             } else {
-                showTemporaryStatus(localizationManager.currentStrings.value.settingsNoActiveAccounts)
+                showTemporaryStatus(
+                    localizationManager.currentStrings.value.settingsNoActiveAccounts
+                )
             }
         }
     }
@@ -325,8 +350,12 @@ class SettingsViewModel @Inject constructor(
             _showLogoutWarning.value = false
             val deviceConnected = connectionManager.connectedDevice.value != null
             val clearedOpds = runCatching { opdsRepository.logoutAll() }.getOrDefault(false)
-            val clearedManga = runCatching { mangaRepository.clearSavedSeries() }.getOrDefault(false)
-            val hasCookies = runCatching { CookieManager.getInstance().hasCookies() }.getOrDefault(false)
+            val clearedManga = runCatching {
+                mangaRepository.clearSavedSeries()
+            }.getOrDefault(false)
+            val hasCookies = runCatching {
+                CookieManager.getInstance().hasCookies()
+            }.getOrDefault(false)
 
             if (hasCookies) {
                 runCatching {
@@ -355,9 +384,15 @@ class SettingsViewModel @Inject constructor(
 
     private suspend fun hasLogoutTargets(): Boolean {
         val deviceConnected = connectionManager.connectedDevice.value != null
-        val hasOpdsCredentials = runCatching { opdsRepository.hasSavedCredentials() }.getOrDefault(false)
-        val hasMangaSavedSeries = runCatching { mangaRepository.hasSavedSeries() }.getOrDefault(false)
-        val hasCookies = runCatching { CookieManager.getInstance().hasCookies() }.getOrDefault(false)
+        val hasOpdsCredentials = runCatching {
+            opdsRepository.hasSavedCredentials()
+        }.getOrDefault(false)
+        val hasMangaSavedSeries = runCatching {
+            mangaRepository.hasSavedSeries()
+        }.getOrDefault(false)
+        val hasCookies = runCatching {
+            CookieManager.getInstance().hasCookies()
+        }.getOrDefault(false)
         return deviceConnected || hasOpdsCredentials || hasMangaSavedSeries || hasCookies
     }
 
@@ -407,5 +442,5 @@ class SettingsViewModel @Inject constructor(
 
 private data class AppearanceOverride(
     val useDynamicColor: Boolean? = null,
-    val theme: AppTheme? = null,
+    val theme: AppTheme? = null
 )
