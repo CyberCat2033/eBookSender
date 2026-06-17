@@ -39,13 +39,16 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/assets/locales/ru.json` - bundled Russian localization.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/theme/Theme.kt` - Material 3 app theme.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/AdaptiveLayout.kt` - shared adaptive width class and screen padding tokens for Compact, Medium, and Expanded layouts.
-- `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/AppTextFields.kt` - shared Material 3 outlined text fields that preserve selection state while exposing simple string state to feature screens; use for app text inputs before reaching for raw `OutlinedTextField`.
+- `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/AppTextFields.kt` - shared Material 3 outlined text fields that preserve selection state, support single-line horizontal scrolling, and expose simple string state to feature screens; use for app text inputs before reaching for raw `OutlinedTextField`.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/AnimatedAlertDialog.kt` - shared animated dialog pattern.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/localization/AppStrings.kt` - string access model.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/localization/LocalizationManager.kt` - runtime localization loading.
 - `app/src/main/java/com/cybercat/pocketbooksender/ui/PocketBookSenderApp.kt` - Compose app shell and navigation integration.
 - `app/src/main/java/com/cybercat/pocketbooksender/PocketBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
-- `app/src/main/java/com/cybercat/pocketbooksender/metadata/LocalMetadataExtractor.kt` - local metadata and preview extraction for queued files, including FB2, EPUB, MOBI/AZW3, PDF, CBZ, and CBR.
+- `app/src/main/java/com/cybercat/pocketbooksender/metadata/LocalMetadataExtractor.kt` - local metadata extractor router and remaining FB2/EPUB/MOBI metadata parsing for queued files.
+- `app/src/main/java/com/cybercat/pocketbooksender/metadata/PdfMetadataParser.kt` - Android `PdfRenderer` first-page preview extraction.
+- `app/src/main/java/com/cybercat/pocketbooksender/metadata/MangaArchiveMetadataParser.kt` - CBZ/CBR preview extraction using ZIP/RAR format detection and bounded image decoding.
+- `app/src/main/java/com/cybercat/pocketbooksender/metadata/MetadataPreviewDecoder.kt` - shared bounded bitmap preview decoder for local metadata parsers.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/MobiMetadataParser.kt` - bounded PalmDB/MOBI/EXTH parser for MOBI/AZW3 title, author, publisher/year/language, and cover image records.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/transfer/ConnectionManager.kt` - shared PocketBook connection state and foreground-only keep-alive monitoring.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogRepository.kt` - PocketBook catalog repository; coordinates catalog state, deletion, database reader, tree builder, and FTP folder fallback scanner.
@@ -85,7 +88,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 ## Reuse rules
 
 - Reuse `AnimatedAlertDialog` for Material 3 dialogs with shared fade/scale behavior.
-- Reuse `AppOutlinedTextField` for Material 3 text input so cursor/selection behavior and single-line placeholders stay consistent across features.
+- Reuse `AppOutlinedTextField` for Material 3 text input so cursor/selection behavior, single-line horizontal scrolling, and placeholders stay consistent across features.
 - Reuse `core:ui` gesture and haptic helpers for drag selection and touch feedback.
 - Reuse domain helpers for classification, filename/path planning, natural sorting, and sanitization.
 - Reuse repositories and transfer abstractions instead of making direct FTP, Room, DataStore, or network calls from UI code.
@@ -156,7 +159,10 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Chapter drag selection and subscription updates dialog chapter selection use the shared quick-long-press gesture, edge autoscroll, and haptic ticks via `pointerInputDragSelection`.
 - OPDS motion: `feature/opds/.../OpdsScreen.kt` and `OpdsComponents.kt`.
   - Add-source and credentials dialogs reuse `AnimatedAlertDialog`.
+  - Switching between OPDS and Manga in the Web tab uses horizontal slide plus fade through `AnimatedContent`.
+  - OPDS catalog loads and feed navigation fade/slide the incoming list content while preserving the single `LazyListState`.
   - OPDS entry rows use `Modifier.animateItem()` for list placement changes.
+  - OPDS feed navigation uses `OpdsNavigation.kt` helpers; hierarchy back and page navigation are separate. `OpdsPagingState` drives the bottom page bar, including local previous-page history when a catalog page does not expose `previous`/`prev`.
 - Settings motion: `feature/settings/.../SettingsScreen.kt`.
   - Editable setting trailing action uses `AnimatedContent` with 120 ms fade-in and 90 ms fade-out between save icon and spinner.
   - Folder rename warning and language dialogs reuse `AnimatedAlertDialog`.
