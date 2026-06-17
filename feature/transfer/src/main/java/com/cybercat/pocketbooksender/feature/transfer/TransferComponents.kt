@@ -4,9 +4,9 @@ import android.content.Context
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -16,13 +16,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -75,151 +75,12 @@ import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
 @Composable
-fun MangaBatchEditorDialog(
-    activeMangaQueue: List<UploadItem>,
-    suggestions: List<String>,
-    enableHaptics: Boolean,
-    onDismiss: () -> Unit,
-    onApply: (String?, String) -> Unit,
-) {
-    val uniqueSeries = remember(activeMangaQueue) {
-        activeMangaQueue.mapNotNull { item -> item.mangaSeries?.takeIf(String::isNotBlank) }
-            .distinctBy { it.lowercase() }
-    }
-
-    var targetSeries by remember { mutableStateOf<String?>(uniqueSeries.firstOrNull()) }
-    var series by remember(targetSeries) { mutableStateOf(targetSeries ?: "") }
-
-    val context = LocalContext.current
-    val view = LocalView.current
-    val strings = LocalStrings.current
-    AnimatedAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(strings.sendRenameMangaTitle) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (uniqueSeries.size > 1) {
-                    Text(
-                        text = strings.mangaUpdatesSelectSeriesToRename,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = targetSeries == null,
-                            onClick = {
-                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                targetSeries = null
-                            },
-                            label = { Text(strings.mangaUpdatesAllSeries) }
-                        )
-                        uniqueSeries.forEach { s ->
-                            FilterChip(
-                                selected = targetSeries == s,
-                                onClick = {
-                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                                    targetSeries = s
-                                },
-                                label = { Text(s) }
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = if (targetSeries == null) {
-                        strings.get("send_batch_rename_desc", activeMangaQueue.size)
-                    } else {
-                        val countForTarget = activeMangaQueue.count { it.mangaSeries?.equals(targetSeries, ignoreCase = true) == true }
-                        strings.get("manga_updates_rename_desc", countForTarget, targetSeries ?: "")
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                MangaSeriesRenamePanel(
-                    selectedSeries = series,
-                    suggestions = suggestions,
-                    onSeriesChanged = { series = it },
-                    onSuggestionSelected = { suggestion ->
-                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                        series = suggestion
-                    },
-                )
-            }
-        },
-        confirmButton = {
-            val dismiss = LocalDismissDialog.current
-            TextButton(
-                onClick = {
-                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
-                    onApply(targetSeries, series.trim())
-                    dismiss()
-                },
-                enabled = series.isNotBlank(),
-            ) {
-                Text(strings.sendRenameMangaApply)
-            }
-        },
-        dismissButton = {
-            val dismiss = LocalDismissDialog.current
-            TextButton(onClick = {
-                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
-                dismiss()
-            }) {
-                Text(strings.sendRenameMangaCancel)
-            }
-        },
-    )
-}
-
-@Composable
-internal fun MangaSeriesRenamePanel(
-    selectedSeries: String,
-    suggestions: List<String>,
-    onSeriesChanged: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    onSuggestionSelected: (String) -> Unit = onSeriesChanged,
-) {
-    val strings = LocalStrings.current
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        AppOutlinedTextField(
-            value = selectedSeries,
-            onValueChange = onSeriesChanged,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text(strings.sendRenameMangaSeries) },
-        )
-
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            suggestions
-                .filter { it.isNotBlank() }
-                .distinctBy { it.lowercase() }
-                .forEach { suggestion ->
-                    FilterChip(
-                        selected = selectedSeries.equals(suggestion, ignoreCase = true),
-                        onClick = { onSuggestionSelected(suggestion) },
-                        label = { Text(suggestion) },
-                    )
-                }
-        }
-    }
-}
-
-@Composable
 fun ConnectionPanel(
     state: TransferUiState,
     onFtpInputChanged: (String) -> Unit,
     onConnect: () -> Unit,
     onQrScanned: (String) -> Unit,
-    onDisconnect: () -> Unit,
+    onDisconnect: () -> Unit
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -231,12 +92,12 @@ fun ConnectionPanel(
             MaterialTheme.colorScheme.onSurfaceVariant
         },
         animationSpec = tween(durationMillis = 220),
-        label = "ConnectionIconTint",
+        label = "ConnectionIconTint"
     )
     val disconnectButtonAlpha by animateFloatAsState(
         targetValue = if (state.isConnected) 1f else 0f,
         animationSpec = tween(durationMillis = 160),
-        label = "DisconnectButtonAlpha",
+        label = "DisconnectButtonAlpha"
     )
     val headerTitle = when {
         state.isConnected -> strings.sendMsgConnected
@@ -247,44 +108,48 @@ fun ConnectionPanel(
 
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Outlined.WifiTethering,
                     contentDescription = null,
                     modifier = Modifier.size(24.dp),
-                    tint = iconTint,
+                    tint = iconTint
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = headerTitle,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleMedium
                     )
                     Text(
                         text = headerSubtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Box(
                     modifier = Modifier.size(48.dp),
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = Alignment.Center
                 ) {
                     IconButton(
                         onClick = {
-                            view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.REJECT)
+                            view.performHapticIfAllowed(
+                                context,
+                                state.settings.enableHaptics,
+                                HapticFeedbackConstants.REJECT
+                            )
                             onDisconnect()
                         },
                         enabled = state.isConnected,
-                        modifier = Modifier.alpha(disconnectButtonAlpha),
+                        modifier = Modifier.alpha(disconnectButtonAlpha)
                     ) {
                         Icon(
                             Icons.Outlined.Close,
-                            contentDescription = if (state.isConnected) strings.sendBtnDisconnect else null,
+                            contentDescription = if (state.isConnected) strings.sendBtnDisconnect else null
                         )
                     }
                 }
@@ -294,16 +159,16 @@ fun ConnectionPanel(
                 visible = !state.isConnected,
                 enter = expandVertically(
                     animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                    expandFrom = Alignment.Top,
+                    expandFrom = Alignment.Top
                 ) + fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
                 exit = shrinkVertically(
                     animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                    shrinkTowards = Alignment.Top,
-                ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)),
+                    shrinkTowards = Alignment.Top
+                ) + fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
             ) {
                 Column(
                     modifier = Modifier.padding(top = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     AppOutlinedTextField(
                         value = state.ftpInput,
@@ -317,14 +182,21 @@ fun ConnectionPanel(
                         trailingIcon = {
                             if (state.ftpInput.isNotEmpty()) {
                                 IconButton(onClick = {
-                                    view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    view.performHapticIfAllowed(
+                                        context,
+                                        state.settings.enableHaptics,
+                                        HapticFeedbackConstants.VIRTUAL_KEY
+                                    )
                                     onFtpInputChanged("")
                                 }) {
-                                    Icon(Icons.Outlined.Close, contentDescription = strings.get("action_clear"))
+                                    Icon(
+                                        Icons.Outlined.Close,
+                                        contentDescription = strings.get("action_clear")
+                                    )
                                 }
                             }
                         },
-                        placeholderText = strings.sendPlaceholderFtp,
+                        placeholderText = strings.sendPlaceholderFtp
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
@@ -332,12 +204,16 @@ fun ConnectionPanel(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                view.performHapticIfAllowed(
+                                    context,
+                                    state.settings.enableHaptics,
+                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                )
                                 startQrScan(context, onQrScanned)
                             },
                             enabled = !state.isConnecting,
                             modifier = Modifier.weight(1f).fillMaxHeight(),
-                            contentPadding = PaddingValues(horizontal = 8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
                         ) {
                             Icon(Icons.Outlined.QrCodeScanner, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
@@ -345,7 +221,11 @@ fun ConnectionPanel(
                         }
                         Button(
                             onClick = {
-                                view.performHapticIfAllowed(context, state.settings.enableHaptics, HapticFeedbackConstants.CONFIRM)
+                                view.performHapticIfAllowed(
+                                    context,
+                                    state.settings.enableHaptics,
+                                    HapticFeedbackConstants.CONFIRM
+                                )
                                 if (state.ftpInput.isBlank()) {
                                     startQrScan(context, onQrScanned)
                                 } else {
@@ -354,11 +234,13 @@ fun ConnectionPanel(
                             },
                             enabled = !state.isConnecting,
                             modifier = Modifier.weight(1f).fillMaxHeight(),
-                            contentPadding = PaddingValues(horizontal = 8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
                         ) {
                             Icon(Icons.Outlined.WifiTethering, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text(if (state.isConnecting) strings.sendStatusChecking else strings.sendBtnConnect)
+                            Text(
+                                if (state.isConnecting) strings.sendStatusChecking else strings.sendBtnConnect
+                            )
                         }
                     }
                 }
@@ -367,10 +249,7 @@ fun ConnectionPanel(
     }
 }
 
-data class QueueRow(
-    val key: String,
-    val item: UploadItem,
-)
+data class QueueRow(val key: String, val item: UploadItem)
 
 fun List<UploadItem>.withStableLazyKeys(): List<QueueRow> {
     val seen = mutableMapOf<String, Int>()
@@ -384,15 +263,12 @@ fun List<UploadItem>.withStableLazyKeys(): List<QueueRow> {
             } else {
                 "$baseKey:duplicate:$duplicateIndex:$index"
             },
-            item = item,
+            item = item
         )
     }
 }
 
-private fun startQrScan(
-    context: Context,
-    onQrScanned: (String) -> Unit,
-) {
+private fun startQrScan(context: Context, onQrScanned: (String) -> Unit) {
     GmsBarcodeScanning.getClient(context)
         .startScan()
         .addOnSuccessListener { barcode ->
@@ -406,23 +282,27 @@ fun ActionRow(
     canUpload: Boolean,
     enableHaptics: Boolean,
     onAddFiles: () -> Unit,
-    onUploadAll: () -> Unit,
+    onUploadAll: () -> Unit
 ) {
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
     Row(
         modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         OutlinedButton(
             onClick = {
-                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                view.performHapticIfAllowed(
+                    context,
+                    enableHaptics,
+                    HapticFeedbackConstants.VIRTUAL_KEY
+                )
                 onAddFiles()
             },
             enabled = canAddFiles,
             modifier = Modifier.weight(1f).fillMaxHeight(),
-            contentPadding = PaddingValues(horizontal = 8.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp)
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
@@ -435,7 +315,7 @@ fun ActionRow(
             },
             enabled = canUpload,
             modifier = Modifier.weight(1f).fillMaxHeight(),
-            contentPadding = PaddingValues(horizontal = 8.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp)
         ) {
             Icon(Icons.Outlined.Upload, contentDescription = null)
             Spacer(Modifier.width(8.dp))
@@ -445,31 +325,27 @@ fun ActionRow(
 }
 
 @Composable
-fun QueueHeader(
-    count: Int,
-    canBatchRenameManga: Boolean,
-    onBatchRenameManga: () -> Unit,
-) {
+fun QueueHeader(count: Int, canBatchRenameManga: Boolean, onBatchRenameManga: () -> Unit) {
     val strings = LocalStrings.current
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = strings.sendHeaderQueue,
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.width(8.dp))
         Surface(
             shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.secondaryContainer,
+            color = MaterialTheme.colorScheme.secondaryContainer
         ) {
             Text(
                 text = count.toString(),
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
             )
         }
         Spacer(Modifier.weight(1f))
@@ -487,20 +363,20 @@ fun EmptyQueue() {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
     ) {
         Column(
             modifier = Modifier.padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = strings.sendMsgNoFiles,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleMedium
             )
             Text(
                 text = strings.sendLabelAddBooksDesc,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -510,7 +386,7 @@ fun EmptyQueue() {
 fun UploadedSection(
     items: List<UploadItem>,
     enableHaptics: Boolean,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -521,18 +397,18 @@ fun UploadedSection(
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         text = strings.sendUploadedHeader,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.SemiBold
                     )
                     Text(
                         text = strings.get("send_uploaded_books_count", items.size),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 val rotationState by animateFloatAsState(
@@ -542,7 +418,11 @@ fun UploadedSection(
                 )
                 IconButton(onClick = {
                     expanded = !expanded
-                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        HapticFeedbackConstants.VIRTUAL_KEY
+                    )
                 }) {
                     Icon(
                         imageVector = Icons.Outlined.ExpandMore,
@@ -559,12 +439,12 @@ fun UploadedSection(
                 visible = expanded,
                 enter = expandVertically(
                     animationSpec = tween(durationMillis = animationDuration),
-                    expandFrom = Alignment.Top,
+                    expandFrom = Alignment.Top
                 ) + fadeIn(tween(durationMillis = animationDuration)),
                 exit = shrinkVertically(
                     animationSpec = tween(durationMillis = animationDuration),
-                    shrinkTowards = Alignment.Top,
-                ) + fadeOut(tween(durationMillis = animationDuration)),
+                    shrinkTowards = Alignment.Top
+                ) + fadeOut(tween(durationMillis = animationDuration))
             ) {
                 Column(
                     modifier = Modifier.padding(top = 10.dp),
@@ -576,14 +456,14 @@ fun UploadedSection(
                                 text = item.title,
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = item.plannedPath,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -597,7 +477,7 @@ fun UploadedSection(
 fun UploadProgressOverlay(
     queue: List<UploadItem>,
     progressById: Map<String, Float>,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val uploadingItems = queue.filter { it.status == UploadStatus.Uploading }
     val uploadedCount = queue.count { it.status == UploadStatus.Uploaded }
@@ -631,7 +511,7 @@ fun UploadProgressOverlay(
         color = MaterialTheme.colorScheme.primaryContainer,
         contentColor = contentColor,
         tonalElevation = 8.dp,
-        shadowElevation = 8.dp,
+        shadowElevation = 8.dp
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -643,13 +523,19 @@ fun UploadProgressOverlay(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (uploadedCount == totalCount) strings.sendUploadComplete else strings.sendSendingStatus,
+                    text = if (uploadedCount ==
+                        totalCount
+                    ) {
+                        strings.sendUploadComplete
+                    } else {
+                        strings.sendSendingStatus
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = contentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
                 Text(
                     text = "${(overallProgress * 100).toInt()}%",
@@ -663,17 +549,22 @@ fun UploadProgressOverlay(
                 progress = { animatedProgress },
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
             )
 
             Text(
                 text = if (failedCount > 0) {
-                    strings.get("send_progress_detail_failed", uploadedCount, totalCount, failedCount)
+                    strings.get(
+                        "send_progress_detail_failed",
+                        uploadedCount,
+                        totalCount,
+                        failedCount
+                    )
                 } else {
                     strings.get("send_progress_detail", uploadedCount, totalCount)
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = contentColor.copy(alpha = 0.8f),
+                color = contentColor.copy(alpha = 0.8f)
             )
             if (currentItem != null) {
                 Text(
@@ -682,7 +573,7 @@ fun UploadProgressOverlay(
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = contentColor.copy(alpha = 0.8f),
+                    color = contentColor.copy(alpha = 0.8f)
                 )
             }
         }
