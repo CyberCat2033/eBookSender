@@ -28,10 +28,11 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 ## Important paths
 
 - `settings.gradle.kts` - authoritative module list.
+- `.editorconfig` - ktlint formatting settings for Kotlin/KTS files, including Android Studio style and Compose `@Composable` naming compatibility.
 - `gradle/libs.versions.toml` - dependency and plugin versions.
 - `build.gradle.kts` - root Gradle plugin declarations.
 - `app/build.gradle.kts` - app configuration and dependencies.
-- `core/model/src/main/java/com/cybercat/pocketbooksender/model/AppSettings.kt` - persisted user settings model, including folder/template preferences, theme/haptics, localization, and local PocketBook VPN-bypass behavior.
+- `core/model/src/main/java/com/cybercat/pocketbooksender/model/AppSettings.kt` - persisted user settings model, shared FTP root-path normalization, folder/template preferences, theme/haptics, localization, and local PocketBook VPN-bypass behavior.
 - `core/common/src/main/java/com/cybercat/pocketbooksender/network/LocalNetworkBypassUnavailableException.kt` - shared warning error for Android/VPN policies that block optional local-route bypass.
 - `core/model/src/main/java/com/cybercat/pocketbooksender/model/UploadItemEntity.kt` - serializable app-local upload queue persistence entity and mappers; runtime-only fields such as upload progress and `Bitmap` previews are not persisted.
 - `app/src/main/AndroidManifest.xml` - Android components, permissions, intent filters, and services.
@@ -52,6 +53,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/MobiMetadataParser.kt` - bounded PalmDB/MOBI/EXTH parser for MOBI/AZW3 title, author, publisher/year/language, and cover image records.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/transfer/ConnectionManager.kt` - shared PocketBook connection state and foreground-only keep-alive monitoring.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogRepository.kt` - PocketBook catalog repository; coordinates catalog state, deletion, database reader, tree builder, and FTP folder fallback scanner.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/ftp/CommonsNetFtpGateway.kt` - Apache Commons Net FTP gateway; opens the configured FTP root path directly after login.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/PocketBookDatabaseReader.kt` - PocketBook `explorer-3.db` snapshot reader; downloads the SQLite database files, opens the local copy read-only, and maps cursor rows to catalog file records.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogTreeBuilder.kt` - pure catalog tree builder for database records; filters supported file types, deduplicates PocketBook book records, maps metadata to `CatalogFile`, and groups Books/Documents/Manga with natural sorting.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogFolderScanner.kt` - FTP folder fallback scanner for catalog loading when the PocketBook SQLite database is unavailable or empty.
@@ -82,6 +84,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - Put cross-feature UI in `core:ui`, cross-feature business logic in `core:domain` or `core:data`, and feature-only Compose/state code in the relevant `feature:*` module.
 - Keep Android platform services and app wiring in `:app` unless a reusable interface belongs in `core:data`.
 - Update localization JSON files whenever visible text changes.
+- Format touched Kotlin/KTS files with `~/.local/bin/ktlint -F <files>` when mechanical formatting is needed. If the CLI is missing, install ktlint 1.8.0 into `~/.local/bin/ktlint` using the command in `AGENTS.md`.
 - Check all call sites when changing shared models, repositories, domain helpers, or UI primitives.
 - At task completion, decide whether `AGENTS.md` or this project map need updates. Update them yourself when guidance, navigation, architecture, shared patterns, important paths, or verification commands changed; if not, mention that no project-guidance update was needed.
 
@@ -179,6 +182,12 @@ GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:compileDebugKotlin
 
 ```sh
 GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:assembleDebug
+```
+
+For Kotlin/KTS formatting of touched files:
+
+```sh
+~/.local/bin/ktlint -F path/to/File.kt
 ```
 
 For installing release builds on a connected device, prefer Gradle's install task:

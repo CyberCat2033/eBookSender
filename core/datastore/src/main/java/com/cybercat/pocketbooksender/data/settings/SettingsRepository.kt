@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
+import com.cybercat.pocketbooksender.model.DEFAULT_FTP_ROOT_PATH
+import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,12 +18,12 @@ import kotlinx.coroutines.flow.map
 private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 @Singleton
-class SettingsRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
-) {
+class SettingsRepository @Inject constructor(@ApplicationContext private val context: Context) {
     val settings: Flow<AppSettings> = context.settingsDataStore.data.map { preferences ->
         AppSettings(
-            rootPath = preferences[ROOT_PATH] ?: "/mnt/ext1",
+            rootPath = normalizeFtpRootPath(
+                preferences[ROOT_PATH] ?: DEFAULT_FTP_ROOT_PATH
+            ),
             booksFolderName = preferences[BOOKS_FOLDER_NAME] ?: "Books",
             documentsFolderName = preferences[DOCUMENTS_FOLDER_NAME] ?: "Documents",
             mangaFolderName = preferences[MANGA_FOLDER_NAME] ?: "Manga",
@@ -33,15 +35,17 @@ class SettingsRepository @Inject constructor(
             useDynamicColor = preferences[USE_DYNAMIC_COLOR] ?: true,
             enableHaptics = preferences[ENABLE_HAPTICS] ?: true,
             bypassVpnForLocalConnections = preferences[BYPASS_VPN_FOR_LOCAL_CONNECTIONS] ?: false,
-            theme = preferences[THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() } ?: AppTheme.System,
+            theme =
+                preferences[THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() }
+                    ?: AppTheme.System,
             warnOnDisconnectedRename = preferences[WARN_ON_DISCONNECTED_RENAME] ?: true,
-            languageCode = preferences[LANGUAGE_CODE] ?: "system",
+            languageCode = preferences[LANGUAGE_CODE] ?: "system"
         )
     }
 
     suspend fun setRootPath(value: String) {
         context.settingsDataStore.edit { preferences ->
-            preferences[ROOT_PATH] = value.ifBlank { "/mnt/ext1" }
+            preferences[ROOT_PATH] = normalizeFtpRootPath(value)
         }
     }
 
@@ -141,7 +145,8 @@ class SettingsRepository @Inject constructor(
         val MANGA_FILE_NAME_TEMPLATE = stringPreferencesKey("manga_file_name_template")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")
-        val BYPASS_VPN_FOR_LOCAL_CONNECTIONS = booleanPreferencesKey("bypass_vpn_for_local_connections")
+        val BYPASS_VPN_FOR_LOCAL_CONNECTIONS =
+            booleanPreferencesKey("bypass_vpn_for_local_connections")
         val THEME = stringPreferencesKey("theme")
         val WARN_ON_DISCONNECTED_RENAME = booleanPreferencesKey("warn_on_disconnected_rename")
         val LANGUAGE_CODE = stringPreferencesKey("language_code")

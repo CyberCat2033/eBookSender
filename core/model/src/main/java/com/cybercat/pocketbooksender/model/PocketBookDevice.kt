@@ -4,7 +4,7 @@ data class PocketBookDevice(
     val host: String,
     val port: Int = 2121,
     val username: String = "anonymous",
-    val rootPath: String = "/mnt/ext1",
+    val rootPath: String = DEFAULT_FTP_ROOT_PATH
 ) {
     val ftpUrl: String
         get() = "ftp://$username@$host:$port/"

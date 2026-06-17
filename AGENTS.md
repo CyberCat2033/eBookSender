@@ -45,6 +45,21 @@ These instructions define the required working rules for Codex in this repositor
 
 - Start by reading the relevant files and existing analogues before editing.
 - Use `rg` and `rg --files` for search.
+- Use `ktlint` for Kotlin/KTS formatting when mechanical formatting is needed. Preferred command for targeted files:
+
+  ```sh
+  ~/.local/bin/ktlint -F path/to/File.kt
+  ```
+
+  If `~/.local/bin/ktlint` is missing, install the pinned CLI binary:
+
+  ```sh
+  mkdir -p ~/.local/bin
+  curl -sSLo ~/.local/bin/ktlint https://github.com/pinterest/ktlint/releases/download/1.8.0/ktlint
+  chmod +x ~/.local/bin/ktlint
+  ```
+
+  The repository `.editorconfig` configures ktlint for Android Studio style and Compose `@Composable` function names. Prefer formatting only files touched by the current task; use `~/.local/bin/ktlint -F "**/*.kt" "**/*.kts"` only for an explicit broad formatting task.
 - For large or ambiguous tasks, create a professional plan first, split the work into clear steps, and wait for user approval before implementation.
 - For small, obvious fixes, proceed directly on the `refactoring` branch while keeping the scope tight.
 - At the end of each task, decide whether `AGENTS.md` or `CODEX_PROJECT_MAP.md` need updates. Update them yourself when the change affects repository workflow, architecture, module layout, important paths, shared patterns, or verification commands; if no update is needed, state that in the final response.

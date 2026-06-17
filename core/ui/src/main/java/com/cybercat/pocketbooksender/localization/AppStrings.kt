@@ -6,9 +6,7 @@ class AppStrings(
     private val translationMap: Map<String, String>,
     private val fallbackMap: Map<String, String>
 ) {
-    fun get(key: String): String {
-        return translationMap[key] ?: fallbackMap[key] ?: key
-    }
+    fun get(key: String): String = translationMap[key] ?: fallbackMap[key] ?: key
 
     fun get(key: String, vararg args: Any): String {
         val pattern = get(key)
@@ -33,7 +31,7 @@ class AppStrings(
     val settingsBooksFolder: String get() = get("settings_books_folder")
     val settingsDocsFolder: String get() = get("settings_docs_folder")
     val settingsMangaFolder: String get() = get("settings_manga_folder")
-    
+
     val settingsNamingSection: String get() = get("settings_naming_section")
     val settingsNamingTokens: String get() = get("settings_naming_tokens")
     val settingsNamingBooksTemplate: String get() = get("settings_naming_books_template")
@@ -42,6 +40,15 @@ class AppStrings(
     val settingsNamingDocsTag: String get() = get("settings_naming_docs_tag")
     val settingsNamingMangaSeries: String get() = get("settings_naming_manga_series")
     val settingsNamingPreview: String get() = get("settings_naming_preview")
+    val settingsNamingExampleTitle: String get() = get("settings_naming_example_title")
+    val settingsNamingExampleAuthor: String get() = get("settings_naming_example_author")
+    val settingsNamingExampleTag: String get() = get("settings_naming_example_tag")
+    val settingsNamingExampleSeries: String get() = get("settings_naming_example_series")
+    val settingsNamingExampleVolume: String get() = get("settings_naming_example_volume")
+    val settingsNamingExampleYear: String get() = get("settings_naming_example_year")
+    val settingsNamingExampleIndex: String get() = get("settings_naming_example_index")
+    val settingsNamingExamplePublisher: String get() = get("settings_naming_example_publisher")
+    val settingsNamingExampleOriginal: String get() = get("settings_naming_example_original")
 
     val settingsInterfaceSection: String get() = get("settings_interface_section")
     val settingsDynamicColor: String get() = get("settings_dynamic_color")
@@ -52,12 +59,12 @@ class AppStrings(
     val settingsBypassVpnDesc: String get() = get("settings_bypass_vpn_desc")
     val settingsWarnDisconnected: String get() = get("settings_warn_disconnected")
     val settingsWarnDisconnectedDesc: String get() = get("settings_warn_disconnected_desc")
-    
+
     val settingsTheme: String get() = get("settings_theme")
     val settingsThemeLight: String get() = get("settings_theme_light")
     val settingsThemeDark: String get() = get("settings_theme_dark")
     val settingsThemeSystem: String get() = get("settings_theme_system")
-    
+
     val settingsMaintenanceSection: String get() = get("settings_maintenance_section")
     val settingsClearCache: String get() = get("settings_clear_cache")
     val settingsLogoutAll: String get() = get("settings_logout_all")
@@ -66,12 +73,12 @@ class AppStrings(
     val settingsLogoutWarningTitle: String get() = get("settings_logout_warning_title")
     val settingsLogoutWarningBody: String get() = get("settings_logout_warning_body")
     val settingsLogoutWarningConfirm: String get() = get("settings_logout_warning_confirm")
-    
+
     val settingsDialogTitle: String get() = get("settings_dialog_title")
     val settingsDialogBody: String get() = get("settings_dialog_body")
     val settingsDialogConfirm: String get() = get("settings_dialog_confirm")
     val settingsDialogCancel: String get() = get("settings_dialog_cancel")
-    
+
     val settingsNothingToClear: String get() = get("settings_nothing_to_clear")
     val settingsClearedCache: String get() = get("settings_cleared_cache")
     val settingsRenamedOnDevice: String get() = get("settings_renamed_on_device")
@@ -105,7 +112,7 @@ class AppStrings(
     val sendRenameMangaApply: String get() = get("send_rename_manga_apply")
     val sendRenameMangaCancel: String get() = get("send_rename_manga_cancel")
     val sendStatusUploading: String get() = get("send_status_uploading")
-    
+
     val sendLabelAddBooksDesc: String get() = get("send_label_add_books_desc")
     val sendBatchRenameDesc: String get() = get("send_batch_rename_desc")
     val sendStatusCheckingFtp: String get() = get("send_status_checking_ftp")
@@ -178,7 +185,7 @@ class AppStrings(
     val opdsPageCurrent: String get() = get("opds_page_current")
     val opdsPageRatio: String get() = get("opds_page_ratio")
     val genericSelectedCount: String get() = get("generic_selected_count")
-    
+
     // Manga Pane
     val mangaLoginTitle: String get() = get("manga_login_title")
     val mangaSourceSelect: String get() = get("manga_source_select")
@@ -227,20 +234,40 @@ class AppStrings(
     val transferErrorQueueEmpty: String get() = get("transfer_error_queue_empty")
     val transferErrorNoPendingFiles: String get() = get("transfer_error_no_pending_files")
     val transferErrorCannotConnect: String get() = get("transfer_error_cannot_connect")
-    val transferErrorReasonHostUnresolved: String get() = get("transfer_error_reason_host_unresolved")
-    val transferErrorReasonConnectionRefused: String get() = get("transfer_error_reason_connection_refused")
-    val transferErrorReasonConnectionTimeout: String get() = get("transfer_error_reason_connection_timeout")
-    val transferErrorReasonVpnBypassBlocked: String get() = get("transfer_error_reason_vpn_bypass_blocked")
+    val transferErrorReasonHostUnresolved: String get() = get(
+        "transfer_error_reason_host_unresolved"
+    )
+    val transferErrorReasonConnectionRefused: String get() = get(
+        "transfer_error_reason_connection_refused"
+    )
+    val transferErrorReasonConnectionTimeout: String get() = get(
+        "transfer_error_reason_connection_timeout"
+    )
+    val transferErrorReasonVpnBypassBlocked: String get() = get(
+        "transfer_error_reason_vpn_bypass_blocked"
+    )
     val transferErrorFtpUploadFailed: String get() = get("transfer_error_ftp_upload_failed")
     val transferErrorCannotOpenFile: String get() = get("transfer_error_cannot_open_file")
-    
+
     // Transfer Notifications
-    val transferNotificationNothingToUpload: String get() = get("transfer_notification_nothing_to_upload")
-    val transferNotificationUploadingBooks: String get() = get("transfer_notification_uploading_books")
-    val transferNotificationUploadingProgress: String get() = get("transfer_notification_uploading_progress")
-    val transferNotificationProgressSummary: String get() = get("transfer_notification_progress_summary")
-    val transferNotificationCompleteSuccess: String get() = get("transfer_notification_complete_success")
-    val transferNotificationCompleteTitle: String get() = get("transfer_notification_complete_title")
+    val transferNotificationNothingToUpload: String get() = get(
+        "transfer_notification_nothing_to_upload"
+    )
+    val transferNotificationUploadingBooks: String get() = get(
+        "transfer_notification_uploading_books"
+    )
+    val transferNotificationUploadingProgress: String get() = get(
+        "transfer_notification_uploading_progress"
+    )
+    val transferNotificationProgressSummary: String get() = get(
+        "transfer_notification_progress_summary"
+    )
+    val transferNotificationCompleteSuccess: String get() = get(
+        "transfer_notification_complete_success"
+    )
+    val transferNotificationCompleteTitle: String get() = get(
+        "transfer_notification_complete_title"
+    )
     val transferNotificationTitle: String get() = get("transfer_notification_title")
 
     // OpdsViewModel Errors & Status
@@ -256,7 +283,9 @@ class AppStrings(
     val opdsStatusAddedToQueue: String get() = get("opds_status_added_to_queue")
     val opdsErrorCannotDownload: String get() = get("opds_error_cannot_download")
     val opdsErrorNoDownloadableEntries: String get() = get("opds_error_no_downloadable_entries")
-    val opdsErrorFailedToDownloadEntries: String get() = get("opds_error_failed_to_download_entries")
+    val opdsErrorFailedToDownloadEntries: String get() = get(
+        "opds_error_failed_to_download_entries"
+    )
     val opdsStatusAddedToQueueMultiple: String get() = get("opds_status_added_to_queue_multiple")
     val opdsErrorCannotOpenCatalog: String get() = get("opds_error_cannot_open_catalog")
 
@@ -266,29 +295,47 @@ class AppStrings(
     val mangaErrorCannotSearch: String get() = get("manga_error_cannot_search")
     val mangaErrorCannotOpenSeries: String get() = get("manga_error_cannot_open_series")
     val mangaErrorCannotUpdateFavorite: String get() = get("manga_error_cannot_update_favorite")
-    val mangaErrorCannotUpdateSubscription: String get() = get("manga_error_cannot_update_subscription")
+    val mangaErrorCannotUpdateSubscription: String get() = get(
+        "manga_error_cannot_update_subscription"
+    )
     val mangaStatusCheckingSubscriptions: String get() = get("manga_status_checking_subscriptions")
     val mangaStatusNoNewChapters: String get() = get("manga_status_no_new_chapters")
     val mangaStatusNewChaptersSelected: String get() = get("manga_status_new_chapters_selected")
-    val mangaStatusNewChaptersMultipleSeries: String get() = get("manga_status_new_chapters_multiple_series")
-    val mangaErrorCannotCheckSubscriptions: String get() = get("manga_error_cannot_check_subscriptions")
+    val mangaStatusNewChaptersMultipleSeries: String get() = get(
+        "manga_status_new_chapters_multiple_series"
+    )
+    val mangaErrorCannotCheckSubscriptions: String get() = get(
+        "manga_error_cannot_check_subscriptions"
+    )
     val mangaErrorOpenSeriesFirst: String get() = get("manga_error_open_series_first")
     val mangaErrorSelectChaptersFirst: String get() = get("manga_error_select_chapters_first")
     val mangaStatusDownloadPreparing: String get() = get("manga_status_download_preparing")
-    val mangaStatusDownloadOneChapterSelected: String get() = get("manga_status_download_one_chapter_selected")
-    val mangaStatusDownloadChaptersSelected: String get() = get("manga_status_download_chapters_selected")
+    val mangaStatusDownloadOneChapterSelected: String get() = get(
+        "manga_status_download_one_chapter_selected"
+    )
+    val mangaStatusDownloadChaptersSelected: String get() = get(
+        "manga_status_download_chapters_selected"
+    )
     val mangaStatusAddedToQueue: String get() = get("manga_status_added_to_queue")
     val mangaErrorCannotDownload: String get() = get("manga_error_cannot_download")
     val mangaStatusLoginSuccess: String get() = get("manga_status_login_success")
     val mangaProgressCompleted: String get() = get("manga_progress_completed")
-    
+
     // Manga Progress Steps
     val mangaProgressStepPreparing: String get() = get("manga_progress_step_preparing")
-    val mangaProgressStepDownloadingArchive: String get() = get("manga_progress_step_downloading_archive")
+    val mangaProgressStepDownloadingArchive: String get() = get(
+        "manga_progress_step_downloading_archive"
+    )
     val mangaProgressStepArchiveSaved: String get() = get("manga_progress_step_archive_saved")
-    val mangaProgressStepSwitchingToPages: String get() = get("manga_progress_step_switching_to_pages")
-    val mangaProgressStepDownloadingPages: String get() = get("manga_progress_step_downloading_pages")
-    val mangaProgressStepDownloadingChapter: String get() = get("manga_progress_step_downloading_chapter")
+    val mangaProgressStepSwitchingToPages: String get() = get(
+        "manga_progress_step_switching_to_pages"
+    )
+    val mangaProgressStepDownloadingPages: String get() = get(
+        "manga_progress_step_downloading_pages"
+    )
+    val mangaProgressStepDownloadingChapter: String get() = get(
+        "manga_progress_step_downloading_chapter"
+    )
     val mangaProgressAllChaptersSaved: String get() = get("manga_progress_all_chapters_saved")
     val mangaProgressChaptersDone: String get() = get("manga_progress_chapters_done")
     val mangaProgressChapterLabel: String get() = get("manga_progress_chapter_label")
@@ -299,11 +346,17 @@ class AppStrings(
     val mangaErrorFailuresSummary: String get() = get("manga_error_failures_summary")
     val mangaDownloadProgressTitle: String get() = get("manga_download_progress_title")
     val mangaNotificationTitle: String get() = get("manga_notification_title")
-    val mangaNotificationNothingToDownload: String get() = get("manga_notification_nothing_to_download")
-    val mangaNotificationDownloadingProgress: String get() = get("manga_notification_downloading_progress")
+    val mangaNotificationNothingToDownload: String get() = get(
+        "manga_notification_nothing_to_download"
+    )
+    val mangaNotificationDownloadingProgress: String get() = get(
+        "manga_notification_downloading_progress"
+    )
     val mangaNotificationCompleteTitle: String get() = get("manga_notification_complete_title")
     val mangaNotificationCompleteSuccess: String get() = get("manga_notification_complete_success")
-    val mangaNotificationCompleteWithFailures: String get() = get("manga_notification_complete_with_failures")
+    val mangaNotificationCompleteWithFailures: String get() = get(
+        "manga_notification_complete_with_failures"
+    )
 
     val opdsStatusCredentialsUpdated: String get() = get("opds_status_credentials_updated")
     val opdsErrorCannotSaveCredentials: String get() = get("opds_error_cannot_save_credentials")
@@ -322,7 +375,9 @@ class AppStrings(
     val mangaUpdatesSelectAll: String get() = get("manga_updates_select_all")
     val mangaUpdatesDeselectAll: String get() = get("manga_updates_deselect_all")
     val mangaUpdatesNoNew: String get() = get("manga_updates_no_new")
-    val mangaUpdatesSelectSeriesToRename: String get() = get("manga_updates_select_series_to_rename")
+    val mangaUpdatesSelectSeriesToRename: String get() = get(
+        "manga_updates_select_series_to_rename"
+    )
     val mangaUpdatesAllSeries: String get() = get("manga_updates_all_series")
     val mangaUpdatesRenameDesc: String get() = get("manga_updates_rename_desc")
 }

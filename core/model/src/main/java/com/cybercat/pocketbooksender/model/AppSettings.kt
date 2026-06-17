@@ -1,7 +1,9 @@
 package com.cybercat.pocketbooksender.model
 
+const val DEFAULT_FTP_ROOT_PATH = "/"
+
 data class AppSettings(
-    val rootPath: String = "/mnt/ext1",
+    val rootPath: String = DEFAULT_FTP_ROOT_PATH,
     val booksFolderName: String = "Books",
     val documentsFolderName: String = "Documents",
     val mangaFolderName: String = "Manga",
@@ -16,18 +18,31 @@ data class AppSettings(
     val bypassVpnForLocalConnections: Boolean = false,
     val theme: AppTheme = AppTheme.System,
     val warnOnDisconnectedRename: Boolean = true,
-    val languageCode: String = "system",
+    val languageCode: String = "system"
 )
+
+fun normalizeFtpRootPath(value: String): String {
+    val normalized = value.trim().replace('\\', '/')
+    if (normalized.isBlank()) return DEFAULT_FTP_ROOT_PATH
+
+    val segments = normalized
+        .split('/')
+        .filter { it.isNotBlank() }
+    if (segments.isEmpty()) return "/"
+    if (segments.any { it == "." || it == ".." }) return DEFAULT_FTP_ROOT_PATH
+
+    return "/" + segments.joinToString("/")
+}
 
 enum class ConflictStrategy {
     Ask,
     Replace,
     Rename,
-    Skip,
+    Skip
 }
 
 enum class AppTheme {
     Light,
     Dark,
-    System,
+    System
 }
