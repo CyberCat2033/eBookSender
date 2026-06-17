@@ -20,6 +20,8 @@ import com.cybercat.pocketbooksender.data.manga.MangaDownloadedChapter
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
 import com.cybercat.pocketbooksender.data.manga.mangaStableSelectionKey
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
+import com.cybercat.pocketbooksender.lifecycle.AppVisibilityTracker
+import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.power.ScopedWakeLock
@@ -37,16 +39,19 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class MangaDownloadForegroundService : Service() {
     @Inject lateinit var mangaRepository: MangaRepository
+
     @Inject lateinit var downloadCoordinator: MangaDownloadCoordinator
+
     @Inject lateinit var queueManager: UploadQueueManager
-    @Inject lateinit var localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
+
+    @Inject lateinit var localizationManager: LocalizationManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val downloadWakeLock by lazy {
         ScopedWakeLock(
             context = this,
             tag = "MangaDownloadForegroundService",
-            timeoutMillis = DownloadWakeLockTimeoutMillis,
+            timeoutMillis = DOWNLOAD_WAKE_LOCK_TIMEOUT_MILLIS
         )
     }
 
@@ -60,10 +65,11 @@ class MangaDownloadForegroundService : Service() {
             startForeground(
                 NOTIFICATION_ID,
                 buildProgressNotification(
-                    text = localizationManager.currentStrings.value.mangaNotificationNothingToDownload,
+                    text = localizationManager.currentStrings.value
+                        .mangaNotificationNothingToDownload,
                     progress = 0,
-                    indeterminate = true,
-                ),
+                    indeterminate = true
+                )
             )
             stopSelf(startId)
             return START_NOT_STICKY
@@ -74,8 +80,8 @@ class MangaDownloadForegroundService : Service() {
             buildProgressNotification(
                 text = localizationManager.currentStrings.value.mangaStatusDownloadPreparing,
                 progress = 0,
-                indeterminate = true,
-            ),
+                indeterminate = true
+            )
         )
 
         downloadWakeLock.acquire()
@@ -102,8 +108,8 @@ class MangaDownloadForegroundService : Service() {
             MangaDownloadEvent.Started(
                 requestId = request.id,
                 kind = request.kind,
-                totalChapters = request.targets.size,
-            ),
+                totalChapters = request.targets.size
+            )
         )
 
         try {
@@ -113,11 +119,11 @@ class MangaDownloadForegroundService : Service() {
                     downloadCoordinator.emit(
                         MangaDownloadEvent.Progress(
                             requestId = request.id,
-                            progress = progress,
-                        ),
+                            progress = progress
+                        )
                     )
                     notifyProgress(progress)
-                },
+                }
             )
 
             if (result.downloaded.isNotEmpty()) {
@@ -131,16 +137,18 @@ class MangaDownloadForegroundService : Service() {
                     downloadedChapterIds = result.downloaded.mapTo(mutableSetOf()) { downloaded ->
                         downloaded.chapter.chapterId
                     },
-                    downloadedSubscriptionKeys = result.downloaded.mapTo(mutableSetOf()) { downloaded ->
+                    downloadedSubscriptionKeys = result.downloaded.mapTo(
+                        mutableSetOf()
+                    ) { downloaded ->
                         downloaded.chapter.mangaStableSelectionKey()
                     },
                     addedToQueueCount = result.downloaded.size,
-                    failedMessages = result.failedMessages,
-                ),
+                    failedMessages = result.failedMessages
+                )
             )
             showFinishedNotification(
                 downloaded = result.downloaded.size,
-                failed = result.failedMessages.size,
+                failed = result.failedMessages.size
             )
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
@@ -148,8 +156,10 @@ class MangaDownloadForegroundService : Service() {
                 MangaDownloadEvent.Failed(
                     requestId = request.id,
                     kind = request.kind,
-                    message = error.message ?: localizationManager.currentStrings.value.mangaErrorCannotDownload,
-                ),
+                    message =
+                        error.message
+                            ?: localizationManager.currentStrings.value.mangaErrorCannotDownload
+                )
             )
             showFinishedNotification(downloaded = 0, failed = request.targets.size)
         }
@@ -168,7 +178,7 @@ class MangaDownloadForegroundService : Service() {
                 title = item.chapter.title,
                 mangaSeries = item.series.title,
                 mangaVolume = item.chapter.title,
-                plannedPath = "",
+                plannedPath = ""
             )
         }
 
@@ -181,7 +191,7 @@ class MangaDownloadForegroundService : Service() {
         val text = localizationManager.currentStrings.value.get(
             "manga_notification_downloading_progress",
             current,
-            total,
+            total
         )
         notificationManager().notify(
             NOTIFICATION_ID,
@@ -191,20 +201,21 @@ class MangaDownloadForegroundService : Service() {
                     ?.let { title -> "$text - $title" }
                     ?: text,
                 progress = progress.notificationPercent(),
-                indeterminate = false,
-            ),
+                indeterminate = false
+            )
         )
     }
 
     private fun showFinishedNotification(downloaded: Int, failed: Int) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (AppVisibilityTracker.isAppVisible) return
+
         val strings = localizationManager.currentStrings.value
         val text = if (failed == 0) {
             strings.get("manga_notification_complete_success", downloaded)
         } else {
             strings.get("manga_notification_complete_with_failures", downloaded, failed)
         }
-
-        stopForeground(STOP_FOREGROUND_REMOVE)
 
         notificationManager().notify(
             nextCompletionNotificationId(),
@@ -215,24 +226,23 @@ class MangaDownloadForegroundService : Service() {
                 .setContentIntent(contentIntent())
                 .setAutoCancel(true)
                 .setOngoing(false)
-                .build(),
+                .build()
         )
     }
 
     private fun buildProgressNotification(
         text: String,
         progress: Int,
-        indeterminate: Boolean,
-    ): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_upload)
-            .setContentTitle(localizationManager.currentStrings.value.mangaNotificationTitle)
-            .setContentText(text)
-            .setContentIntent(contentIntent())
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setProgress(100, progress.coerceIn(0, 100), indeterminate)
-            .build()
+        indeterminate: Boolean
+    ): Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(R.drawable.ic_stat_upload)
+        .setContentTitle(localizationManager.currentStrings.value.mangaNotificationTitle)
+        .setContentText(text)
+        .setContentIntent(contentIntent())
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setProgress(100, progress.coerceIn(0, 100), indeterminate)
+        .build()
 
     private fun contentIntent(): PendingIntent {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -240,7 +250,7 @@ class MangaDownloadForegroundService : Service() {
             this,
             0,
             Intent(this, MainActivity::class.java),
-            flags,
+            flags
         )
     }
 
@@ -248,7 +258,7 @@ class MangaDownloadForegroundService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             localizationManager.currentStrings.value.mangaNotificationTitle,
-            NotificationManager.IMPORTANCE_LOW,
+            NotificationManager.IMPORTANCE_LOW
         )
         notificationManager().createNotificationChannel(channel)
     }
@@ -261,7 +271,7 @@ class MangaDownloadForegroundService : Service() {
         private const val NOTIFICATION_ID = 2201
         private const val COMPLETION_NOTIFICATION_ID_START = 2300
         private const val EXTRA_REQUEST_ID = "request_id"
-        private const val DownloadWakeLockTimeoutMillis = 90 * 60 * 1000L
+        private const val DOWNLOAD_WAKE_LOCK_TIMEOUT_MILLIS = 90 * 60 * 1000L
         private val completionNotificationIds = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
 
         private fun nextCompletionNotificationId(): Int =

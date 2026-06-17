@@ -46,6 +46,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/localization/LocalizationManager.kt` - runtime localization loading.
 - `app/src/main/java/com/cybercat/pocketbooksender/ui/PocketBookSenderApp.kt` - Compose app shell and navigation integration.
 - `app/src/main/java/com/cybercat/pocketbooksender/PocketBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
+- `app/src/main/java/com/cybercat/pocketbooksender/lifecycle/AppVisibilityTracker.kt` - process lifecycle visibility gate used by foreground services to suppress completion notifications while the UI is visible.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/LocalMetadataExtractor.kt` - local metadata extractor router and remaining FB2/EPUB/MOBI metadata parsing for queued files.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/PdfMetadataParser.kt` - Android `PdfRenderer` first-page preview extraction.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/MangaArchiveMetadataParser.kt` - CBZ/CBR preview extraction using ZIP/RAR format detection and bounded image decoding.
@@ -62,7 +63,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsHttpClient.kt` - OPDS `HttpURLConnection` boundary; applies Accept/User-Agent headers, Basic auth from URLs or saved source credentials, manual redirects, timeouts, and HTTP status validation.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsUrlResolver.kt` - shared OPDS relative URL resolver used by catalog links, acquisitions, redirects, and search template resolution.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service; coordinates service lifecycle, wake lock, transfer requests, completion rescan, and OPDS/manga app-cache cleanup after successful uploads.
-- `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferNotificationManager.kt` - notification channel, progress notification, and completion notification helper for foreground FTP uploads.
+- `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferNotificationManager.kt` - notification channel, progress notification, and minimized-app completion notification helper for foreground FTP uploads.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/DownloadCacheManager.kt` - shared app-local OPDS/manga download-cache cleanup helper used by transfer completion and queue removal.
 - `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded and adds completed chapters to the upload queue.
 - `app/src/main/java/com/cybercat/pocketbooksender/power/ScopedWakeLock.kt` - small non-reference-counted wake-lock helper for strictly scoped foreground transfer/download CPU wake windows.

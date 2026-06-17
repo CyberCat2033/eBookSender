@@ -64,7 +64,7 @@ Important packages:
 - Deduplicate queued files by identity/path and skip already uploaded items when the upload button is pressed again.
 - Queue cards animate when uploaded items leave the active list.
 - Upload execution runs through `TransferForegroundService`, so a user-started transfer continues when the app is backgrounded.
-- Transfer progress and completion are shown through Android notifications. Android 13+ notification permission is requested at app start.
+- Transfer progress is shown through the foreground-service notification; completion notifications are posted only when the app is minimized/backgrounded. Android 13+ notification permission is requested at app start.
 - Read PocketBook storage into the `Catalog` tab without downloading book contents:
   - primary source is PocketBook's `system/explorer-3/explorer-3.db` library database, downloaded as a local snapshot together with `-wal` and `-shm`;
   - FTP folder scanning remains as fallback when the database snapshot cannot be loaded;

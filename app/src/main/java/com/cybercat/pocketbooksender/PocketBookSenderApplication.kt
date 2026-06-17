@@ -2,6 +2,7 @@ package com.cybercat.pocketbooksender
 
 import android.app.Application
 import android.net.http.HttpResponseCache
+import com.cybercat.pocketbooksender.lifecycle.AppVisibilityTracker
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 import java.io.IOException
@@ -10,6 +11,7 @@ import java.io.IOException
 class PocketBookSenderApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        AppVisibilityTracker.register()
         installHttpCache()
     }
 

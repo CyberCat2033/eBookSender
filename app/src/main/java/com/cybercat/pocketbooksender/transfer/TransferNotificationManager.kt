@@ -9,6 +9,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.cybercat.pocketbooksender.MainActivity
 import com.cybercat.pocketbooksender.R
+import com.cybercat.pocketbooksender.lifecycle.AppVisibilityTracker
 import com.cybercat.pocketbooksender.localization.LocalizationManager
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -46,6 +47,8 @@ internal class TransferNotificationManager(
     }
 
     fun showFinishedNotification(uploaded: Int, failed: Int) {
+        if (AppVisibilityTracker.isAppVisible) return
+
         val strings = localizationManager.currentStrings.value
         val text = if (failed == 0) {
             strings.get("transfer_notification_complete_success", uploaded)
