@@ -56,6 +56,7 @@ data class TransferUploadItem(
     val title: String,
     val mangaSeries: String?,
     val mangaVolume: String?,
+    val seriesIndex: String?,
     val plannedPath: String
 )
 

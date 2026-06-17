@@ -184,16 +184,17 @@ fun OpdsScreen(
         )
     }
 
+    val authDialog = state.authDialog
     var credentialsDialogVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(state.showAuthDialog) {
-        if (state.showAuthDialog) credentialsDialogVisible = true
+    LaunchedEffect(authDialog.isVisible) {
+        if (authDialog.isVisible) credentialsDialogVisible = true
     }
 
     if (credentialsDialogVisible) {
         OpdsCredentialsDialog(
-            sourceTitle = state.authDialogSourceTitle,
-            username = state.authDialogUsername,
-            password = state.authDialogPassword,
+            sourceTitle = authDialog.sourceTitle,
+            username = authDialog.username,
+            password = authDialog.password,
             onUsernameChanged = onAuthUsernameChanged,
             onPasswordChanged = onAuthPasswordChanged,
             onDismiss = {

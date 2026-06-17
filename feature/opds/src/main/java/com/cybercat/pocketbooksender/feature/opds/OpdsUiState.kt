@@ -19,14 +19,34 @@ data class OpdsUiState(
     val downloadProgress: OpdsDownloadUiProgress? = null,
     val errorMessage: String? = null,
     val statusMessage: String? = null,
-    val showAuthDialog: Boolean = false,
-    val authDialogSourceId: String? = null,
-    val authDialogSourceTitle: String = "",
-    val authDialogUsername: String = "",
-    val authDialogPassword: String = "",
-    val authDialogUrlToRetry: String? = null
+    val authDialog: OpdsAuthDialogState = OpdsAuthDialogState()
 ) {
     val canGoBack: Boolean = history.isNotEmpty()
+}
+
+data class OpdsAuthDialogState(
+    val sourceId: String? = null,
+    val sourceTitle: String = "",
+    val username: String = "",
+    val password: String = "",
+    val urlToRetry: String? = null
+) {
+    val isVisible: Boolean = sourceId != null
+
+    fun withUsername(value: String): OpdsAuthDialogState = copy(username = value)
+
+    fun withPassword(value: String): OpdsAuthDialogState = copy(password = value)
+
+    companion object {
+        fun forSource(source: OpdsSource, urlToRetry: String? = null): OpdsAuthDialogState =
+            OpdsAuthDialogState(
+                sourceId = source.id,
+                sourceTitle = source.title,
+                username = source.username.orEmpty(),
+                password = source.password.orEmpty(),
+                urlToRetry = urlToRetry
+            )
+    }
 }
 
 data class OpdsHistoryEntry(

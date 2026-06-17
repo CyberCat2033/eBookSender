@@ -74,7 +74,7 @@ private fun TransferUploadItem.needsCbzMetadataRewrite(): Boolean =
 private fun TransferUploadItem.toCbzMetadata(): CbzMetadata = CbzMetadata(
     title = plannedPath.fileNameWithoutExtension().ifBlank { title },
     series = mangaSeries,
-    number = mangaVolume
+    number = seriesIndex ?: mangaVolume
 )
 
 private fun String.fileNameWithoutExtension(): String {

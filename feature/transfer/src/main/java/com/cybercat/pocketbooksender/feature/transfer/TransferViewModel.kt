@@ -315,6 +315,7 @@ class TransferViewModel @Inject constructor(
                     title = item.title,
                     mangaSeries = item.mangaSeries,
                     mangaVolume = item.mangaVolume,
+                    seriesIndex = item.seriesIndex,
                     plannedPath = item.plannedPath
                 )
             }

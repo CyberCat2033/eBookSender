@@ -234,7 +234,12 @@ class MangaDownloadForegroundService : Service() {
                 category = BookCategory.Manga,
                 title = item.chapter.title,
                 mangaSeries = item.series.title,
-                mangaVolume = item.chapter.title,
+                mangaVolume = com.cybercat.pocketbooksender.data.manga.mangaChapterQueueVolume(
+                    item.chapter
+                ),
+                seriesIndex = com.cybercat.pocketbooksender.data.manga.mangaChapterQueueSeriesIndex(
+                    item.chapter
+                ),
                 plannedPath = ""
             )
         }

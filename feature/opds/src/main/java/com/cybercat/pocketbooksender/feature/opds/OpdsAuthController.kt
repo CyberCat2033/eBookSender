@@ -20,40 +20,39 @@ internal class OpdsAuthController(
     fun openCredentialsDialog(source: OpdsSource, urlToRetry: String? = null) {
         opdsState.update { state ->
             state.copy(
-                showAuthDialog = true,
-                authDialogSourceId = source.id,
-                authDialogSourceTitle = source.title,
-                authDialogUsername = source.username.orEmpty(),
-                authDialogPassword = source.password.orEmpty(),
-                authDialogUrlToRetry = urlToRetry
+                authDialog = OpdsAuthDialogState.forSource(
+                    source = source,
+                    urlToRetry = urlToRetry
+                )
             )
         }
     }
 
     fun onAuthUsernameChanged(value: String) {
-        opdsState.update { it.copy(authDialogUsername = value) }
+        opdsState.update { state ->
+            state.copy(authDialog = state.authDialog.withUsername(value))
+        }
     }
 
     fun onAuthPasswordChanged(value: String) {
-        opdsState.update { it.copy(authDialogPassword = value) }
+        opdsState.update { state ->
+            state.copy(authDialog = state.authDialog.withPassword(value))
+        }
     }
 
     fun dismissCredentialsDialog() {
         opdsState.update { state ->
-            state.copy(
-                showAuthDialog = false,
-                authDialogSourceId = null,
-                authDialogUrlToRetry = null
-            )
+            state.copy(authDialog = OpdsAuthDialogState())
         }
     }
 
     fun saveCredentials() {
         val snapshot = opdsState.value
-        val sourceId = snapshot.authDialogSourceId ?: return
-        val username = snapshot.authDialogUsername
-        val password = snapshot.authDialogPassword
-        val urlToRetry = snapshot.authDialogUrlToRetry
+        val authDialog = snapshot.authDialog
+        val sourceId = authDialog.sourceId ?: return
+        val username = authDialog.username
+        val password = authDialog.password
+        val urlToRetry = authDialog.urlToRetry
 
         scope.launch {
             val source =
@@ -67,11 +66,7 @@ internal class OpdsAuthController(
                 )
             }.onSuccess {
                 opdsState.update {
-                    it.copy(
-                        showAuthDialog = false,
-                        authDialogSourceId = null,
-                        authDialogUrlToRetry = null
-                    )
+                    it.copy(authDialog = OpdsAuthDialogState())
                 }
                 showStatus(
                     localizationManager.currentStrings.value.opdsStatusCredentialsUpdated
@@ -86,9 +81,7 @@ internal class OpdsAuthController(
                             error.message
                                 ?: localizationManager.currentStrings.value
                                     .opdsErrorCannotSaveCredentials,
-                        showAuthDialog = false,
-                        authDialogSourceId = null,
-                        authDialogUrlToRetry = null
+                        authDialog = OpdsAuthDialogState()
                     )
                 }
             }
