@@ -85,7 +85,9 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaArchiveHelper.kt` - packaging tool for creating CBZ/ZIP files from downloaded manga page images.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaAdapter.kt` - Com-X source adapter; owns the `HtmlMangaSourceAdapter` contract and delegates HTTP/session work plus HTML parsing.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaHttpClient.kt` - Com-X HTTP/session boundary for `HttpURLConnection`, WebView cookies, guard challenge handling, image downloads, and archive authorization/downloads.
-- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHtmlParser.kt` - Com-X HTML/JSON parser; extracts search results, series details, chapters, reader images, JSON-LD, and embedded `window.__DATA__` records.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHtmlParser.kt` - Com-X HTML parser facade; keeps guard detection, series details, chapter lists, reader images, and embedded `window.__DATA__` parsing while delegating search extraction.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxSearchParser.kt` - Com-X search parser for readed blocks, poster links, and JSON-LD search-result fallbacks.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxParsingHelpers.kt` - shared Com-X parser helpers for URL ownership/normalization, title cleanup, JSON field extraction, and image URL handling.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/FtpErrorMapper.kt` - mapper class translating FTP connection errors and URL parsing failures to localized user-facing strings.
 - `core/domain/src/main/java/com/cybercat/pocketbooksender/domain/MangaTitleParser.kt` - pure domain parser that derives manga series/volume hints from local file names before metadata extraction.
 
