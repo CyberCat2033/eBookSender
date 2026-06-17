@@ -83,12 +83,34 @@ class PocketBookDatabaseReader @Inject constructor(
                 "$storageRootPrefix${settings.mangaFolderName}%"
             )
             db.rawQuery(CATALOG_QUERY, args).use { cursor ->
-                buildList {
-                    while (cursor.moveToNext()) {
-                        cursor.toDbCatalogFile(storageRootPrefix)?.let(::add)
-                    }
+                cursor.requireCatalogShape()
+                val parsedFiles = cursor.toDbCatalogFiles(storageRootPrefix)
+                if (parsedFiles.isEmpty() && cursor.count > 0) {
+                    throw UnsupportedCatalogDatabaseException(
+                        "Catalog query returned rows but no parsable file entries"
+                    )
                 }
+                parsedFiles
             }
+        }
+    }
+
+    private fun Cursor.toDbCatalogFiles(storageRootPrefix: String): List<DbCatalogFile> {
+        return buildList {
+            while (moveToNext()) {
+                runCatching { toDbCatalogFile(storageRootPrefix) }
+                    .getOrNull()
+                    ?.let(::add)
+            }
+        }
+    }
+
+    private fun Cursor.requireCatalogShape() {
+        val missingColumns = REQUIRED_CATALOG_COLUMNS.filter { getColumnIndex(it) < 0 }
+        if (missingColumns.isNotEmpty()) {
+            throw UnsupportedCatalogDatabaseException(
+                "Unsupported PocketBook DB catalog schema: missing ${missingColumns.joinToString()}"
+            )
         }
     }
 
@@ -159,7 +181,11 @@ class PocketBookDatabaseReader @Inject constructor(
                 OR d.name LIKE ?
             ORDER BY d.name, f.filename
         """.trimIndent()
+
+        private val REQUIRED_CATALOG_COLUMNS = listOf("folder", "filename")
     }
+
+    private class UnsupportedCatalogDatabaseException(message: String) : IllegalStateException(message)
 }
 
 private fun PocketBookDevice.storageRootPrefix(settings: AppSettings): String {
