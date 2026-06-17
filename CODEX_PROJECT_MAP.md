@@ -39,6 +39,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/assets/locales/en.json` - bundled English localization.
 - `app/src/main/assets/locales/ru.json` - bundled Russian localization.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/theme/Theme.kt` - Material 3 app theme.
+- `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/theme/Motion.kt` - Material 3 animation curve tokens (e.g. `EmphasizedEasing`).
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/AdaptiveLayout.kt` - shared adaptive width class and screen padding tokens for Compact, Medium, and Expanded layouts.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/AppTextFields.kt` - shared Material 3 outlined text fields that preserve selection state, support single-line horizontal scrolling, and expose simple string state to feature screens; use for app text inputs before reaching for raw `OutlinedTextField`.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/AnimatedAlertDialog.kt` - shared animated dialog pattern.
