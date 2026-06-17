@@ -21,9 +21,9 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `:core:ui` - shared Compose UI, Material 3 theme, animated dialogs, status components, remote covers, bitmap cache, localization, gestures, and haptics.
 - `:feature:catalog` - PocketBook catalog screen, state, components (split into `CatalogComponents.kt`, `CatalogConstants.kt`, `CatalogExtensions.kt`), selection, deletion, and catalog ViewModel.
 - `:feature:manga` - manga pane, state, components (split into `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`), selection behavior, and manga ViewModel.
-- `:feature:opds` - Web/OPDS screen, OPDS components, state, navigation, and ViewModel.
+- `:feature:opds` - Web/OPDS screen, OPDS components (split into `OpdsComponents.kt`, `OpdsDialogs.kt`, `OpdsEntryItems.kt`), state, navigation, and ViewModel.
 - `:feature:settings` - settings screen, state, components and dialogs (split into `SettingsScreen.kt`, `SettingsComponents.kt`, `SettingsDialogs.kt`), language and folder/template settings, and ViewModel.
-- `:feature:transfer` - send queue screen, upload item rows, transfer components, state, and ViewModel.
+- `:feature:transfer` - send queue screen, upload item rows, transfer components (split into `TransferComponents.kt`, `TransferDialogs.kt`), state, and ViewModel.
 
 ## Important paths
 
@@ -148,7 +148,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Expand chevrons rotate with a medium spring.
   - File deletion rows shrink upward and fade out with `RemovalMotionDurationMillis = 260`.
   - Long-press drag selection uses edge autoscroll and haptic ticks when selection state changes.
-- Transfer queue motion: `feature/transfer/.../SendScreen.kt`, `TransferComponents.kt`, and `UploadItemRow.kt`.
+- Transfer queue motion: `feature/transfer/.../SendScreen.kt`, `TransferComponents.kt`, `TransferDialogs.kt`, and `UploadItemRow.kt`.
   - Queue rows use `Modifier.animateItem` with `QueueFadeInSpec`, `QueueFadeOutSpec`, and `QueuePlacementSpec`.
   - `AnimatedRemovalItem` handles single-item removal and clear-queue removal with horizontal slide-out, vertical shrink, fade, and staggered clear delays.
   - Active transfer overlay enters/exits with fade plus vertical slide from the bottom.
@@ -163,7 +163,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Manga download progress uses low-stiffness no-bounce spring `animateFloatAsState`.
   - Subscription update groups rotate chevrons with a medium spring and expand/collapse chapter lists with spring expand/shrink plus fade.
   - Chapter drag selection and subscription updates dialog chapter selection use the shared quick-long-press gesture, edge autoscroll, and haptic ticks via `pointerInputDragSelection`.
-- OPDS motion: `feature/opds/.../OpdsScreen.kt` and `OpdsComponents.kt`.
+- OPDS motion: `feature/opds/.../OpdsScreen.kt`, `OpdsComponents.kt`, `OpdsDialogs.kt`, and `OpdsEntryItems.kt`.
   - Add-source and credentials dialogs reuse `AnimatedAlertDialog`.
   - Switching between OPDS and Manga in the Web tab uses horizontal slide plus fade through `AnimatedContent`.
   - OPDS catalog loads and feed navigation fade/slide the incoming list content while preserving the single `LazyListState`.
