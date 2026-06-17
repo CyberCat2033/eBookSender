@@ -19,10 +19,10 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `:core:network` - OPDS parsing/models/download formats and manga source adapters such as Com-X.
 - `:core:data` - repositories and data orchestration for catalog, FTP, OPDS, manga, transfer, connection management, and PocketBook control.
 - `:core:ui` - shared Compose UI, Material 3 theme, animated dialogs, status components, remote covers, bitmap cache, localization, gestures, and haptics.
-- `:feature:catalog` - PocketBook catalog screen, state, components, selection, deletion, and catalog ViewModel.
-- `:feature:manga` - manga pane, state, components, selection behavior, and manga ViewModel.
+- `:feature:catalog` - PocketBook catalog screen, state, components (split into `CatalogComponents.kt`, `CatalogConstants.kt`, `CatalogExtensions.kt`), selection, deletion, and catalog ViewModel.
+- `:feature:manga` - manga pane, state, components (split into `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`), selection behavior, and manga ViewModel.
 - `:feature:opds` - Web/OPDS screen, OPDS components, state, navigation, and ViewModel.
-- `:feature:settings` - settings screen, state, dialogs, language and folder/template settings, and ViewModel.
+- `:feature:settings` - settings screen, state, components and dialogs (split into `SettingsScreen.kt`, `SettingsComponents.kt`, `SettingsDialogs.kt`), language and folder/template settings, and ViewModel.
 - `:feature:transfer` - send queue screen, upload item rows, transfer components, state, and ViewModel.
 
 ## Important paths
@@ -141,7 +141,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - `calculateAutoScrollDelta` drives edge autoscroll during drag selection; Catalog and Manga pair it with `LONG_PRESS` start feedback and `CLOCK_TICK` range-change feedback.
   - `ClickSuppressionState` / `rememberClickSuppressionState` manages temporary click suppression on items to prevent false click triggers when releasing a drag selection gesture.
   - `Modifier.pointerInputDragSelection` is a unified modifier that hooks up drag-selection start, drag, end/cancel, and click suppression.
-- Catalog motion: `feature/catalog/.../CatalogScreen.kt` and `CatalogComponents.kt`.
+- Catalog motion: `feature/catalog/.../CatalogScreen.kt`, `CatalogComponents.kt`, and `CatalogConstants.kt`.
   - Top app bar title/actions use `AnimatedContent`; edit-mode close icon uses fade plus horizontal expand/shrink.
   - `SelectionSlot` animates checkbox slot width, alpha, and scale over `SelectionMotionDurationMillis = 220`.
   - Group expansion uses vertical expand/shrink plus fade; duration is `minOf(750, 250 + fileCount * 35)`.
@@ -156,7 +156,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Connection panel animates icon tint over 220 ms, disconnect button alpha over 160 ms, and FTP input visibility with spring expand/shrink plus fade.
   - Upload item details use spring expand/shrink plus fade; uploaded section uses progressive tween expand/shrink plus fade based on the number of items; chevrons rotate with a medium spring.
   - Upload progress height uses `animateDpAsState`; item and overall progress bars use low-stiffness no-bounce spring `animateFloatAsState`.
-- Manga motion: `feature/manga/.../MangaPane.kt` and `MangaComponents.kt`.
+- Manga motion: `feature/manga/.../MangaPane.kt`, `MangaComponents.kt`, `MangaSearchComponents.kt`, and `MangaBrowserComponents.kt`.
   - Chapter and search-result lists use `Modifier.animateItem()`.
   - Opening a selected series scrolls the list with `animateScrollToItem`.
   - Active manga download overlay enters/exits with fade plus vertical slide from the bottom.
@@ -169,7 +169,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - OPDS catalog loads and feed navigation fade/slide the incoming list content while preserving the single `LazyListState`.
   - OPDS entry rows use `Modifier.animateItem()` for list placement changes.
   - OPDS feed navigation uses `OpdsNavigation.kt` helpers; hierarchy back and page navigation are separate. `OpdsPagingState` drives the bottom page bar, including local previous-page history when a catalog page does not expose `previous`/`prev`.
-- Settings motion: `feature/settings/.../SettingsScreen.kt`.
+- Settings motion: `feature/settings/.../SettingsScreen.kt`, `SettingsComponents.kt`, and `SettingsDialogs.kt`.
   - Editable setting trailing action uses `AnimatedContent` with 120 ms fade-in and 90 ms fade-out between save icon and spinner.
   - Folder rename warning and language dialogs reuse `AnimatedAlertDialog`.
   - Maintenance section uses `animateContentSize` with a medium-low spring.
