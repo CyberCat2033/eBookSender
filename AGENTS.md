@@ -72,6 +72,7 @@ These instructions define the required working rules for Codex in this repositor
 ## Git workflow
 
 - Check `git status --short` before making changes.
+- In this environment, `.git` is read-only inside the sandbox. Run git commands that write to `.git` (for example `git add` and `git commit`) with `sandbox_permissions: "require_escalated"` immediately instead of first trying them inside the sandbox.
 - Never overwrite, reset, or revert user changes unless explicitly requested.
 - For new large features, create a dedicated branch named `feature/<short-name>`. After implementing the changes and having the user verify them (specifically on the release version installed on a phone), merge the branch into `main`/`master` if everything is in order.
 - For small tasks, minor refactoring, and code cleanup, work on a dedicated `refactoring` branch (or `refactor/<short-name>`) to avoid polluting the git history.
