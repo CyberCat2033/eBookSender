@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.opds.DownloadOpdsEntriesUseCase
+import com.cybercat.pocketbooksender.data.opds.MatchOpdsAuthSourceUseCase
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
 import com.cybercat.pocketbooksender.data.opds.OpdsAuthenticationRequiredException
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
@@ -16,7 +17,6 @@ import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import com.cybercat.pocketbooksender.util.launchTemporaryStatus
 import com.cybercat.pocketbooksender.util.onFailureRethrowing
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.net.URL
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,6 +34,7 @@ class OpdsViewModel @Inject constructor(
     private val opdsRepository: OpdsRepository,
     private val downloadOpdsEntriesUseCase: DownloadOpdsEntriesUseCase,
     private val searchOpdsCatalogUseCase: SearchOpdsCatalogUseCase,
+    private val matchOpdsAuthSource: MatchOpdsAuthSourceUseCase,
     private val queueManager: UploadQueueManager,
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
 ) : ViewModel() {
@@ -406,11 +407,7 @@ class OpdsViewModel @Inject constructor(
                 }
             }.onFailureRethrowing { error ->
                 if (error is OpdsAuthenticationRequiredException) {
-                    val currentSources = opdsRepository.sources.first()
-                    val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
-                    val matchingSource = currentSources.firstOrNull { source ->
-                        runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
-                    }
+                    val matchingSource = matchOpdsAuthSource(error)
                     if (matchingSource != null) {
                         mutableOpdsState.update { state ->
                             state.copy(
@@ -477,11 +474,7 @@ class OpdsViewModel @Inject constructor(
                 )
             }.onFailureRethrowing { error ->
                 if (error is OpdsAuthenticationRequiredException) {
-                    val currentSources = opdsRepository.sources.first()
-                    val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
-                    val matchingSource = currentSources.firstOrNull { source ->
-                        runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
-                    }
+                    val matchingSource = matchOpdsAuthSource(error)
                     if (matchingSource != null) {
                         mutableOpdsState.update { state -> state.copy(isDownloading = false) }
                         openCredentialsDialog(matchingSource)
@@ -605,11 +598,7 @@ class OpdsViewModel @Inject constructor(
                 }
             }.onFailureRethrowing { error ->
                 if (error is OpdsAuthenticationRequiredException) {
-                    val currentSources = opdsRepository.sources.first()
-                    val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
-                    val matchingSource = currentSources.firstOrNull { source ->
-                        runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
-                    }
+                    val matchingSource = matchOpdsAuthSource(error)
                     if (matchingSource != null) {
                         // Restore previous catalog so back button and content are preserved
                         mutableOpdsState.update { state ->
