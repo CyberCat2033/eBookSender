@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -492,7 +493,11 @@ internal fun ExpandableHeader(
         }) {
             Icon(
                 imageVector = Icons.Outlined.ExpandMore,
-                contentDescription = if (expanded) strings.catalogActionCollapse else strings.catalogActionExpand,
+                contentDescription = if (expanded) {
+                    strings.catalogActionCollapse
+                } else {
+                    strings.catalogActionExpand
+                },
                 modifier = Modifier.rotate(rotationState)
             )
         }
@@ -605,7 +610,11 @@ internal fun FileList(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (showProgress) file.displayTitle() else file.mangaDisplayTitle(),
+                            text = if (showProgress) {
+                                file.displayTitle()
+                            } else {
+                                file.mangaDisplayTitle()
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -668,16 +677,9 @@ internal fun FileList(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                CircularProgressIndicator(
-                                    progress = { percent / 100f },
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.5.dp,
-                                    color = if (file.completed) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.secondary
-                                    },
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                CatalogProgressIndicator(
+                                    file = file,
+                                    percent = percent
                                 )
                                 Text(
                                     text = "$percent%",
@@ -697,6 +699,37 @@ internal fun FileList(
                     deletedPaths.remove(file.path)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CatalogProgressIndicator(file: CatalogFile, percent: Int) {
+    val completed = file.completed || percent >= 100
+    val indicatorColor = if (completed) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.secondary
+    }
+
+    Box(
+        modifier = Modifier.size(18.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(
+            progress = { percent.coerceIn(0, 100) / 100f },
+            modifier = Modifier.matchParentSize(),
+            strokeWidth = 2.5.dp,
+            color = indicatorColor,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+        if (completed) {
+            Icon(
+                imageVector = Icons.Outlined.Check,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = indicatorColor
+            )
         }
     }
 }
