@@ -7,12 +7,9 @@ import com.cybercat.pocketbooksender.domain.bookExtension
 import com.cybercat.pocketbooksender.util.TimedCacheEntry
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
-import java.io.IOException
 import java.net.HttpURLConnection
-import java.net.URI
 import java.net.URL
 import java.net.URLDecoder
-import java.net.URLEncoder
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -218,40 +215,6 @@ class OpdsRepository @Inject constructor(
         }
     }
 
-    suspend fun buildSearchUrl(baseUrl: String, searchLink: OpdsLink, query: String): String =
-        withContext(Dispatchers.IO) {
-            val resolvedLink = resolveTemplateUrl(baseUrl, searchLink.href)
-            val template = when {
-                searchLink.href.contains(SEARCH_TERMS_PLACEHOLDER) -> resolvedLink
-
-                searchLink.type.orEmpty().contains("opensearchdescription", ignoreCase = true) -> {
-                    loadOpenSearchTemplate(resolvedLink)
-                }
-
-                searchLink.type.orEmpty().contains("application/atom+xml", ignoreCase = true) -> {
-                    resolvedLink
-                }
-
-                else -> {
-                    resolvedLink
-                }
-            }
-
-            expandSearchTemplate(template, query)
-        }
-
-    suspend fun buildSearchUrls(
-        baseUrl: String,
-        searchLink: OpdsLink,
-        query: String
-    ): List<String> = withContext(Dispatchers.IO) {
-        val bookSearchUrl = buildSearchUrl(baseUrl, searchLink, query)
-        (listOf(bookSearchUrl) + bookSearchUrl.flibustaAuthorSearchUrls(query)).distinct()
-    }
-
-    fun resolveUrl(baseUrl: String, href: String): String =
-        OpdsUrlResolver.resolveUrl(baseUrl, href)
-
     private fun OpdsCatalog.resolvedAgainst(baseUrl: String): OpdsCatalog = copy(
         links = links.map { it.resolvedAgainst(baseUrl) },
         entries = entries.map { entry ->
@@ -269,35 +232,6 @@ class OpdsRepository @Inject constructor(
 
     private fun OpdsLink.resolvedAgainst(baseUrl: String): OpdsLink =
         copy(href = OpdsUrlResolver.resolveUrl(baseUrl, href))
-
-    private suspend fun loadOpenSearchTemplate(url: String): String {
-        val connection = httpClient.openConnection(
-            url = url,
-            accept = "application/opensearchdescription+xml, application/xml, text/xml, */*"
-        )
-        try {
-            val template = connection.inputStream.use { input ->
-                parser.parseOpenSearch(input).bestTemplate
-            }
-
-            if (template.isNullOrBlank()) {
-                throw IOException("OpenSearch template was not found")
-            }
-
-            return resolveTemplateUrl(url, template)
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    private fun resolveTemplateUrl(baseUrl: String, href: String): String {
-        val escapedHref = href
-            .replace("{", "%7B")
-            .replace("}", "%7D")
-        return OpdsUrlResolver.resolveUrl(baseUrl, escapedHref)
-            .replace("%7B", "{")
-            .replace("%7D", "}")
-    }
 
     private fun normalizeUrl(url: String): String {
         val trimmed = url.trim()
@@ -429,7 +363,6 @@ class OpdsRepository @Inject constructor(
         const val DEFAULT_DOWNLOAD_BUFFER_SIZE = 64 * 1024
         const val PROGRESS_REPORT_BYTES_INTERVAL = 256 * 1024L
         const val PROGRESS_REPORT_MIN_INTERVAL_MILLIS = 250L
-        const val SEARCH_TERMS_PLACEHOLDER = "{searchTerms"
         const val LEGACY_PROJECT_GUTENBERG_SOURCE_ID = "project-gutenberg"
         const val OPDS_CATALOG_ACCEPT =
             "application/atom+xml;profile=opds-catalog, application/atom+xml, application/xml, text/xml, */*"
@@ -443,39 +376,3 @@ class OpdsRepository @Inject constructor(
         )
     }
 }
-
-private fun expandSearchTemplate(template: String, query: String): String {
-    val encodedQuery = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
-    return template
-        .replace(Regex("\\{searchTerms\\??\\}"), encodedQuery)
-        .replace(Regex("[?&][^?&=]+=\\{[^}]+\\}"), "")
-        .replace(Regex("\\{[^}]+\\}"), "")
-        .replace("?&", "?")
-        .trimEnd('?', '&')
-}
-
-private fun String.flibustaAuthorSearchUrls(query: String): List<String> {
-    val uri = runCatching { URI(this) }.getOrNull() ?: return emptyList()
-    val host = uri.host.orEmpty().lowercase()
-    if ("flibusta" !in host && "flub" !in host) return emptyList()
-
-    val normalizedQuery = query.cleanAuthorSearchQuery()
-    if (normalizedQuery.isBlank()) return emptyList()
-
-    val authorPrefix = normalizedQuery
-        .split(' ')
-        .lastOrNull { token -> token.length >= 2 }
-        ?: return emptyList()
-
-    val baseUrl = "${uri.scheme}://${uri.rawAuthority}"
-    return listOf("$baseUrl/opds/authorsindex/${authorPrefix.urlPathEncode()}")
-}
-
-private fun String.cleanAuthorSearchQuery(): String = trim()
-    .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
-    .replace(Regex("\\s+"), " ")
-    .trim()
-    .lowercase()
-
-private fun String.urlPathEncode(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
-    .replace("+", "%20")

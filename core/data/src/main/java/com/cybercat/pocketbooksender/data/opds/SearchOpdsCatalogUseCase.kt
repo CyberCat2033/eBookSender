@@ -1,9 +1,18 @@
 package com.cybercat.pocketbooksender.data.opds
 
+import java.io.IOException
+import java.net.URI
+import java.net.URLEncoder
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class SearchOpdsCatalogUseCase @Inject constructor(private val opdsRepository: OpdsRepository) {
+class SearchOpdsCatalogUseCase @Inject constructor(
+    private val opdsRepository: OpdsRepository,
+    private val parser: OpdsParser,
+    private val httpClient: OpdsHttpClient
+) {
     suspend operator fun invoke(
         baseUrl: String,
         searchLink: OpdsLink,
@@ -11,7 +20,7 @@ class SearchOpdsCatalogUseCase @Inject constructor(private val opdsRepository: O
         mergedCatalogTitle: String
     ): Result<SearchOpdsCatalogResult> {
         return try {
-            val catalogs = opdsRepository.buildSearchUrls(baseUrl, searchLink, query)
+            val catalogs = buildSearchUrls(baseUrl, searchLink, query)
                 .mapNotNull { searchUrl -> loadSearchCatalog(searchUrl, query) }
 
             if (catalogs.isEmpty()) {
@@ -32,6 +41,36 @@ class SearchOpdsCatalogUseCase @Inject constructor(private val opdsRepository: O
         } catch (error: Throwable) {
             Result.failure(error)
         }
+    }
+
+    private suspend fun buildSearchUrls(
+        baseUrl: String,
+        searchLink: OpdsLink,
+        query: String
+    ): List<String> {
+        val bookSearchUrl = buildSearchUrl(baseUrl, searchLink, query)
+        return (listOf(bookSearchUrl) + bookSearchUrl.flibustaAuthorSearchUrls(query)).distinct()
+    }
+
+    private suspend fun buildSearchUrl(
+        baseUrl: String,
+        searchLink: OpdsLink,
+        query: String
+    ): String = withContext(Dispatchers.IO) {
+        val resolvedLink = resolveTemplateUrl(baseUrl, searchLink.href)
+        val template = when {
+            searchLink.href.contains(SEARCH_TERMS_PLACEHOLDER) -> resolvedLink
+
+            searchLink.type.orEmpty().contains("opensearchdescription", ignoreCase = true) -> {
+                loadOpenSearchTemplate(resolvedLink)
+            }
+
+            else -> {
+                resolvedLink
+            }
+        }
+
+        expandSearchTemplate(template, query)
     }
 
     private suspend fun loadSearchCatalog(searchUrl: String, query: String): SearchOpdsCatalog? {
@@ -61,6 +100,35 @@ class SearchOpdsCatalogUseCase @Inject constructor(private val opdsRepository: O
         } catch (error: Throwable) {
             null
         }
+    }
+
+    private suspend fun loadOpenSearchTemplate(url: String): String {
+        val connection = httpClient.openConnection(
+            url = url,
+            accept = OPENSEARCH_DESCRIPTION_ACCEPT
+        )
+        try {
+            val template = connection.inputStream.use { input ->
+                parser.parseOpenSearch(input).bestTemplate
+            }
+
+            if (template.isNullOrBlank()) {
+                throw IOException("OpenSearch template was not found")
+            }
+
+            return resolveTemplateUrl(url, template)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun resolveTemplateUrl(baseUrl: String, href: String): String {
+        val escapedHref = href
+            .replace("{", "%7B")
+            .replace("}", "%7D")
+        return OpdsUrlResolver.resolveUrl(baseUrl, escapedHref)
+            .replace("%7B", "{")
+            .replace("%7D", "}")
     }
 
     private fun mergeSearchCatalogs(title: String, catalogs: List<OpdsCatalog>): OpdsCatalog {
@@ -102,6 +170,12 @@ class SearchOpdsCatalogUseCase @Inject constructor(private val opdsRepository: O
         .filter { token -> token.length >= 2 }
 
     private fun String.searchComparableText(): String = searchTokens().joinToString(" ")
+
+    private companion object {
+        const val SEARCH_TERMS_PLACEHOLDER = "{searchTerms"
+        const val OPENSEARCH_DESCRIPTION_ACCEPT =
+            "application/opensearchdescription+xml, application/xml, text/xml, */*"
+    }
 }
 
 data class SearchOpdsCatalogResult(val currentUrl: String, val catalog: OpdsCatalog)
@@ -109,3 +183,39 @@ data class SearchOpdsCatalogResult(val currentUrl: String, val catalog: OpdsCata
 class OpdsSearchCatalogUnavailableException : Exception()
 
 private data class SearchOpdsCatalog(val url: String, val catalog: OpdsCatalog)
+
+private fun expandSearchTemplate(template: String, query: String): String {
+    val encodedQuery = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
+    return template
+        .replace(Regex("\\{searchTerms\\??\\}"), encodedQuery)
+        .replace(Regex("[?&][^?&=]+=\\{[^}]+\\}"), "")
+        .replace(Regex("\\{[^}]+\\}"), "")
+        .replace("?&", "?")
+        .trimEnd('?', '&')
+}
+
+private fun String.flibustaAuthorSearchUrls(query: String): List<String> {
+    val uri = runCatching { URI(this) }.getOrNull() ?: return emptyList()
+    val host = uri.host.orEmpty().lowercase()
+    if ("flibusta" !in host && "flub" !in host) return emptyList()
+
+    val normalizedQuery = query.cleanAuthorSearchQuery()
+    if (normalizedQuery.isBlank()) return emptyList()
+
+    val authorPrefix = normalizedQuery
+        .split(' ')
+        .lastOrNull { token -> token.length >= 2 }
+        ?: return emptyList()
+
+    val baseUrl = "${uri.scheme}://${uri.rawAuthority}"
+    return listOf("$baseUrl/opds/authorsindex/${authorPrefix.urlPathEncode()}")
+}
+
+private fun String.cleanAuthorSearchQuery(): String = trim()
+    .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
+    .replace(Regex("\\s+"), " ")
+    .trim()
+    .lowercase()
+
+private fun String.urlPathEncode(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
+    .replace("+", "%20")
