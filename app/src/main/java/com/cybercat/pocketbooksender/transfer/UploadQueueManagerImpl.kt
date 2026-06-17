@@ -229,6 +229,29 @@ class UploadQueueManagerImpl @Inject constructor(
         )
     }
 
+    override fun removeDownloadCacheItems(): Int {
+        val removedItems = mutableListOf<UploadItem>()
+        val retainedSourceUris = mutableSetOf<String>()
+
+        _queue.update { current ->
+            val (removed, remaining) = current.partition { item ->
+                downloadCacheManager.isDownloadCacheSource(item.sourceUri)
+            }
+            removedItems.clear()
+            removedItems.addAll(removed)
+            retainedSourceUris.clear()
+            retainedSourceUris.addAll(remaining.map { item -> item.sourceUri })
+            remaining
+        }
+
+        deleteDownloadCacheSources(
+            removedItems = removedItems,
+            retainedSourceUris = retainedSourceUris
+        )
+
+        return removedItems.size
+    }
+
     override fun updateCategory(id: String, category: BookCategory) {
         _queue.update { current ->
             val settings = activeSettings

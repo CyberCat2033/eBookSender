@@ -11,6 +11,7 @@ interface UploadQueueManager {
     fun addPreparedItems(items: List<UploadItem>)
     fun removeItem(id: String)
     fun clearQueue()
+    fun removeDownloadCacheItems(): Int
     fun updateCategory(id: String, category: BookCategory)
     fun updateDocumentsTag(id: String, tag: String)
     fun updateMangaSeries(id: String, series: String)

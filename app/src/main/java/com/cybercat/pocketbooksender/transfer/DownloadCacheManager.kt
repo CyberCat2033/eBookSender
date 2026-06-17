@@ -28,25 +28,28 @@ class DownloadCacheManager @Inject constructor(@ApplicationContext private val c
     ) {
         withContext(Dispatchers.IO) {
             val retainedFiles = retainedSourceUris.mapNotNull { uri ->
-                uri.toDownloadCacheFile()
+                uri.toDownloadCacheFile(requireExistingFile = true)
             }.toSet()
 
             sourceUris
-                .mapNotNull { uri -> uri.toDownloadCacheFile() }
+                .mapNotNull { uri -> uri.toDownloadCacheFile(requireExistingFile = true) }
                 .distinct()
                 .filterNot { file -> file in retainedFiles }
                 .forEach { file -> runCatching { file.delete() } }
         }
     }
 
-    private fun String.toDownloadCacheFile(): File? = runCatching {
+    fun isDownloadCacheSource(sourceUri: String): Boolean =
+        sourceUri.toDownloadCacheFile(requireExistingFile = false) != null
+
+    private fun String.toDownloadCacheFile(requireExistingFile: Boolean): File? = runCatching {
         val uri = Uri.parse(this)
         if (uri.scheme != ContentResolver.SCHEME_FILE) {
             return@runCatching null
         }
 
         val sourceFile = File(uri.path.orEmpty()).canonicalFile
-        if (!sourceFile.isFile) {
+        if (requireExistingFile && !sourceFile.isFile) {
             return@runCatching null
         }
 
