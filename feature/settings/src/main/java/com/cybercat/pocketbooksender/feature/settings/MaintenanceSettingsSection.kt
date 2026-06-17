@@ -130,39 +130,12 @@ internal fun MaintenanceSettingsSection(
                         onClearStatusMessage()
                     }
 
-                    val displayMessage = when {
-                        message.startsWith("Cleared ") -> {
-                            val size =
-                                message.substringAfter(
-                                    "Cleared "
-                                ).substringBefore(" MB").toDoubleOrNull()
-                                    ?: 0.0
-                            strings.get("settings_cleared_cache", size)
+                    val displayMessage = when (message) {
+                        SettingsStatusMessage.FolderRenameNotSupported -> {
+                            strings.settingsRenameNotSupported
                         }
 
-                        message == "Nothing to clear" -> strings.settingsNothingToClear
-
-                        message.startsWith("Renamed '") -> {
-                            val old = message.substringAfter("Renamed '").substringBefore("' to '")
-                            val new = message.substringAfter(
-                                "' to '"
-                            ).substringBefore("' on device")
-                            strings.get("settings_renamed_on_device", old, new)
-                        }
-
-                        message.startsWith("Could not rename: folder '") -> {
-                            val folder = message.substringAfter(
-                                "Could not rename: folder '"
-                            ).substringBefore("' already exists")
-                            strings.get("settings_rename_failed_exists", folder)
-                        }
-
-                        message.startsWith("Could not rename folder on device: ") -> {
-                            val err = message.substringAfter("Could not rename folder on device: ")
-                            strings.get("settings_rename_failed_error", err)
-                        }
-
-                        else -> message
+                        is SettingsStatusMessage.Text -> message.value
                     }
 
                     Text(

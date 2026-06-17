@@ -33,7 +33,7 @@ class SettingsViewModel @Inject constructor(
     private val logoutUseCase: LogoutUseCase,
     private val deviceFolderRenameUseCase: DeviceFolderRenameUseCase
 ) : ViewModel() {
-    private val _statusMessage = MutableStateFlow<String?>(null)
+    private val _statusMessage = MutableStateFlow<SettingsStatusMessage?>(null)
     private val _pendingRename = MutableStateFlow<PendingRename?>(null)
     private val _showLogoutWarning = MutableStateFlow(false)
     private val _activeFolderRename = MutableStateFlow<FolderType?>(null)
@@ -232,11 +232,9 @@ class SettingsViewModel @Inject constructor(
                     val settings = settingsRepository.settings.first()
                     if (settings.warnOnDisconnectedRename) {
                         _pendingRename.value = PendingRename(folderType, oldName, newName)
-                    } else {
-                        applyFolderName(folderType, newName)
                     }
                     showTemporaryStatus(
-                        localizationManager.currentStrings.value.get("settings_rename_not_supported")
+                        SettingsStatusMessage.FolderRenameNotSupported
                     )
                     settings.warnOnDisconnectedRename.not()
                 }
@@ -253,17 +251,6 @@ class SettingsViewModel @Inject constructor(
             }
         } finally {
             _activeFolderRename.value = null
-        }
-    }
-
-    private suspend fun applyFolderName(
-        folderType: FolderType,
-        value: String
-    ) {
-        when (folderType) {
-            FolderType.Books -> settingsRepository.setBooksFolderName(value)
-            FolderType.Documents -> settingsRepository.setDocumentsFolderName(value)
-            FolderType.Manga -> settingsRepository.setMangaFolderName(value)
         }
     }
 
@@ -381,6 +368,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun showTemporaryStatus(message: String) {
+        showTemporaryStatus(SettingsStatusMessage.Text(message))
+    }
+
+    private fun showTemporaryStatus(message: SettingsStatusMessage) {
         _statusMessage.value = message
         viewModelScope.launch {
             delay(3000)

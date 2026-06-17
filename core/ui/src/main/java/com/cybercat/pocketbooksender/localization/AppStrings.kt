@@ -84,6 +84,7 @@ class AppStrings(
     val settingsRenamedOnDevice: String get() = get("settings_renamed_on_device")
     val settingsRenameFailedExists: String get() = get("settings_rename_failed_exists")
     val settingsRenameFailedError: String get() = get("settings_rename_failed_error")
+    val settingsRenameNotSupported: String get() = get("settings_rename_not_supported")
     val settingsLanguageOption: String get() = get("settings_language_option")
     val settingsLanguageDialogTitle: String get() = get("settings_language_dialog_title")
     val settingsLanguageSystem: String get() = get("settings_language_system")

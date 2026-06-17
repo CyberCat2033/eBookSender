@@ -72,7 +72,7 @@
   "settings_renamed_on_device": "Renamed '%1$s' to '%2$s' on device",
   "settings_rename_failed_exists": "Could not rename: folder '%1$s' already exists",
   "settings_rename_failed_error": "Could not rename folder on device: %1$s",
-  "settings_rename_not_supported": "Folder rename is not supported on this device. Folder name was updated only locally.",
+  "settings_rename_not_supported": "Folder renaming is not supported on this device.",
   "settings_language_option": "App language",
   "settings_language_dialog_title": "Choose Language",
   "settings_language_system": "System language",

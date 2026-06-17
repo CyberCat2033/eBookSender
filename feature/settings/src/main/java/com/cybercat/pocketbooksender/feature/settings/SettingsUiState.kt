@@ -4,7 +4,7 @@ import com.cybercat.pocketbooksender.model.AppSettings
 
 data class SettingsUiState(
     val settings: AppSettings = AppSettings(),
-    val settingsStatusMessage: String? = null,
+    val settingsStatusMessage: SettingsStatusMessage? = null,
     val pendingRename: PendingRename? = null,
     val showLogoutWarning: Boolean = false,
     val activeFolderRename: FolderType? = null,
@@ -12,6 +12,11 @@ data class SettingsUiState(
 )
 
 data class PendingRename(val folderType: FolderType, val oldName: String, val newName: String)
+
+sealed class SettingsStatusMessage {
+    data class Text(val value: String) : SettingsStatusMessage()
+    object FolderRenameNotSupported : SettingsStatusMessage()
+}
 
 enum class FolderType {
     Books,

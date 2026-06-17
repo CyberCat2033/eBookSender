@@ -72,7 +72,7 @@
   "settings_renamed_on_device": "Папка '%1$s' переименована в '%2$s' на устройстве",
   "settings_rename_failed_exists": "Не удалось переименовать: папка '%1$s' уже существует",
   "settings_rename_failed_error": "Не удалось переименовать папку на устройстве: %1$s",
-  "settings_rename_not_supported": "На этом устройстве переименование папки не поддерживается. Меняется только локальная настройка.",
+  "settings_rename_not_supported": "Переименование папок на этом устройстве не поддерживается.",
   "settings_language_option": "Язык приложения",
   "settings_language_dialog_title": "Выберите язык",
   "settings_language_system": "Системная",
