@@ -40,9 +40,10 @@ class UploadQueueManagerImpl @Inject constructor(
     private val pathPlanner: PathPlanner,
     private val settingsRepository: SettingsRepository,
     private val coverCacheManager: CoverCacheManager,
+    private val downloadCacheManager: DownloadCacheManager,
     private val localFileResolver: LocalFileResolver,
     private val mangaTitleParser: MangaTitleParser,
-    private val queueStorageRepository: QueueStorageRepository,
+    private val queueStorageRepository: QueueStorageRepository
 ) : UploadQueueManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -118,8 +119,13 @@ class UploadQueueManagerImpl @Inject constructor(
                         ?: "Book-${UUID.randomUUID()}"
                     val extension = displayName.bookExtension().lowercase().trim()
 
-                    val isSupported = extension in com.cybercat.pocketbooksender.domain.AllSupportedExtensions ||
-                            (extension.endsWith(".zip") && extension.removeSuffix(".zip") in com.cybercat.pocketbooksender.domain.AllSupportedExtensions)
+                    val isSupported =
+                        extension in com.cybercat.pocketbooksender.domain.AllSupportedExtensions ||
+                            (
+                                extension.endsWith(".zip") &&
+                                    extension.removeSuffix(".zip") in
+                                    com.cybercat.pocketbooksender.domain.AllSupportedExtensions
+                                )
                     val fileSize = localFileResolver.resolveFileSize(uri)
                     val isTooBig = fileSize > 500L * 1024L * 1024L // 500 MB limit
 
@@ -144,7 +150,11 @@ class UploadQueueManagerImpl @Inject constructor(
                 "Skipped ${skippedFiles.size} files (unsupported format or >500MB)"
             }
             scope.launch(Dispatchers.Main) {
-                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(
+                    context,
+                    message,
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             }
         }
 
@@ -190,13 +200,33 @@ class UploadQueueManagerImpl @Inject constructor(
     }
 
     override fun removeItem(id: String) {
+        val removedItems = mutableListOf<UploadItem>()
+        val retainedSourceUris = mutableSetOf<String>()
+
         _queue.update { current ->
-            current.filterNot { it.id == id }
+            val remaining = current.filterNot { item -> item.id == id }
+            removedItems.clear()
+            removedItems.addAll(current.filter { item -> item.id == id })
+            retainedSourceUris.clear()
+            retainedSourceUris.addAll(remaining.map { item -> item.sourceUri })
+            remaining
         }
+
+        deleteDownloadCacheSources(
+            removedItems = removedItems,
+            retainedSourceUris = retainedSourceUris
+        )
     }
 
     override fun clearQueue() {
+        val removedItems = _queue.value
+        if (removedItems.isEmpty()) return
+
         _queue.value = emptyList()
+        deleteDownloadCacheSources(
+            removedItems = removedItems,
+            retainedSourceUris = emptySet()
+        )
     }
 
     override fun updateCategory(id: String, category: BookCategory) {
@@ -211,13 +241,15 @@ class UploadQueueManagerImpl @Inject constructor(
                     val updated = when (category) {
                         BookCategory.Documents -> item.copy(
                             category = BookCategory.Documents,
-                            documentsTag = item.documentsTag ?: settings.defaultDocumentsTag,
+                            documentsTag = item.documentsTag ?: settings.defaultDocumentsTag
                         )
+
                         BookCategory.Books -> item.copy(category = BookCategory.Books)
+
                         BookCategory.Manga -> item.copy(
                             category = BookCategory.Manga,
                             mangaSeries = item.mangaSeries ?: settings.defaultMangaSeries,
-                            mangaVolume = item.mangaVolume ?: item.title,
+                            mangaVolume = item.mangaVolume ?: item.title
                         )
                     }
                     replan(updated, settings)
@@ -262,7 +294,10 @@ class UploadQueueManagerImpl @Inject constructor(
             val updated = current.map { item ->
                 if (item.category == BookCategory.Manga &&
                     item.status != UploadStatus.Uploaded &&
-                    (oldSeries == null || item.mangaSeries?.equals(oldSeries, ignoreCase = true) == true)
+                    (
+                        oldSeries == null ||
+                            item.mangaSeries?.equals(oldSeries, ignoreCase = true) == true
+                        )
                 ) {
                     replan(item.copy(mangaSeries = trimmedSeries), activeSettings)
                 } else {
@@ -286,7 +321,7 @@ class UploadQueueManagerImpl @Inject constructor(
                     fallbackId = { UUID.randomUUID().toString() },
                     fallbackCategory = classifier::classify,
                     fallbackExtension = { name -> name.bookExtension().ifBlank { "bin" } },
-                    fallbackTitle = { name -> name.bookTitleWithoutExtension() },
+                    fallbackTitle = { name -> name.bookTitleWithoutExtension() }
                 ) ?: return@mapNotNull null
                 if (item.status == UploadStatus.Uploaded) return@mapNotNull null
                 val canReadSource = localFileResolver.canRead(Uri.parse(item.sourceUri))
@@ -302,9 +337,9 @@ class UploadQueueManagerImpl @Inject constructor(
                     item.copy(
                         preview = previewBitmap,
                         status = restoredStatus,
-                        progress = if (restoredStatus == UploadStatus.Uploaded) 1f else 0f,
+                        progress = if (restoredStatus == UploadStatus.Uploaded) 1f else 0f
                     ),
-                    activeSettings,
+                    activeSettings
                 )
             }
             .deduplicateQueue()
@@ -314,10 +349,10 @@ class UploadQueueManagerImpl @Inject constructor(
         val extension = displayName.bookExtension().ifBlank { "bin" }
         val title = displayName.bookTitleWithoutExtension()
         val category = classifier.classify(displayName)
-        
+
         var mangaSeries: String? = null
         var mangaVolume: String? = null
-        
+
         if (category == BookCategory.Manga) {
             val parsed = mangaTitleParser.parse(displayName)
             mangaSeries = parsed.series ?: settings.defaultMangaSeries
@@ -332,11 +367,17 @@ class UploadQueueManagerImpl @Inject constructor(
             category = category,
             title = title,
             author = if (category == BookCategory.Books) "Unknown Author" else null,
-            documentsTag = if (category == BookCategory.Documents) settings.defaultDocumentsTag else null,
+            documentsTag = if (category ==
+                BookCategory.Documents
+            ) {
+                settings.defaultDocumentsTag
+            } else {
+                null
+            },
             mangaSeries = mangaSeries,
             mangaVolume = mangaVolume,
             plannedPath = "",
-            status = UploadStatus.Preparing,
+            status = UploadStatus.Preparing
         )
 
         return replan(preliminary, settings)
@@ -346,7 +387,7 @@ class UploadQueueManagerImpl @Inject constructor(
         val metadata = metadataExtractor.extract(item.sourceUri, item.originalName)
         val preview = metadata.preview
 
-        if (preview != null) {
+        if (preview != null && _queue.value.any { currentItem -> currentItem.id == item.id }) {
             withContext(Dispatchers.IO) {
                 coverCacheManager.save(item.id, preview)
             }
@@ -364,7 +405,13 @@ class UploadQueueManagerImpl @Inject constructor(
                         .ifBlank { null }
                     val updated = currentItem.copy(
                         title = title,
-                        author = if (currentItem.category == BookCategory.Books) author else currentItem.author,
+                        author = if (currentItem.category ==
+                            BookCategory.Books
+                        ) {
+                            author
+                        } else {
+                            currentItem.author
+                        },
                         mangaSeries = if (currentItem.category == BookCategory.Manga) {
                             metadata.series ?: currentItem.mangaSeries
                         } else {
@@ -377,7 +424,7 @@ class UploadQueueManagerImpl @Inject constructor(
                         publisher = metadata.publisher,
                         coverUri = metadata.coverUri,
                         preview = preview,
-                        status = UploadStatus.Pending,
+                        status = UploadStatus.Pending
                     )
                     replan(updated, activeSettings)
                 } else {
@@ -407,13 +454,12 @@ class UploadQueueManagerImpl @Inject constructor(
         }
     }
 
-    private fun List<UploadItem>.queueIdentityKeys(): Set<String> =
-        flatMap { item ->
-            listOfNotNull(
-                item.sourceUri.takeIf { it.isNotBlank() },
-                item.plannedPath.takeIf { it.isNotBlank() }
-            )
-        }.toSet()
+    private fun List<UploadItem>.queueIdentityKeys(): Set<String> = flatMap { item ->
+        listOfNotNull(
+            item.sourceUri.takeIf { it.isNotBlank() },
+            item.plannedPath.takeIf { it.isNotBlank() }
+        )
+    }.toSet()
 
     private fun UploadStatus.restoredAfterProcessStart(canReadSource: Boolean): UploadStatus =
         when {
@@ -426,5 +472,19 @@ class UploadQueueManagerImpl @Inject constructor(
 
     private fun cleanupCoverCacheFiles(items: List<UploadItem>) {
         coverCacheManager.cleanup(items.map { it.id }.toSet())
+    }
+
+    private fun deleteDownloadCacheSources(
+        removedItems: Collection<UploadItem>,
+        retainedSourceUris: Set<String>
+    ) {
+        if (removedItems.isEmpty()) return
+
+        scope.launch {
+            downloadCacheManager.deleteDownloadSources(
+                sourceUris = removedItems.map { item -> item.sourceUri },
+                retainedSourceUris = retainedSourceUris
+            )
+        }
     }
 }

@@ -19,8 +19,8 @@ import com.cybercat.pocketbooksender.power.ScopedWakeLock
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import java.io.InputStream
-import javax.inject.Inject
 import java.util.concurrent.atomic.AtomicInteger
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,16 +31,22 @@ import kotlinx.coroutines.withContext
 @AndroidEntryPoint
 class TransferForegroundService : Service() {
     @Inject lateinit var ftpGateway: FtpGateway
+
     @Inject lateinit var transferCoordinator: TransferCoordinator
-    @Inject lateinit var localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
+
+    @Inject lateinit var localizationManager:
+        com.cybercat.pocketbooksender.localization.LocalizationManager
+
     @Inject lateinit var rescanCoordinator: PocketBookRescanCoordinator
+
+    @Inject lateinit var downloadCacheManager: DownloadCacheManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val transferWakeLock by lazy {
         ScopedWakeLock(
             context = this,
             tag = "TransferForegroundService",
-            timeoutMillis = TransferWakeLockTimeoutMillis,
+            timeoutMillis = TRANSFER_WAKE_LOCK_TIMEOUT_MILLIS
         )
     }
 
@@ -51,14 +57,25 @@ class TransferForegroundService : Service() {
 
         val request = transferCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
         if (request == null) {
-            startForeground(NOTIFICATION_ID, buildProgressNotification(localizationManager.currentStrings.value.transferNotificationNothingToUpload, 0, 0))
+            startForeground(
+                NOTIFICATION_ID,
+                buildProgressNotification(
+                    localizationManager.currentStrings.value.transferNotificationNothingToUpload,
+                    0,
+                    0
+                )
+            )
             stopSelf(startId)
             return START_NOT_STICKY
         }
 
         startForeground(
             NOTIFICATION_ID,
-            buildProgressNotification(localizationManager.currentStrings.value.transferNotificationUploadingBooks, 0, request.items.size),
+            buildProgressNotification(
+                localizationManager.currentStrings.value.transferNotificationUploadingBooks,
+                0,
+                request.items.size
+            )
         )
 
         transferWakeLock.acquire()
@@ -91,10 +108,18 @@ class TransferForegroundService : Service() {
                     TransferEvent.ItemStarted(
                         itemId = item.id,
                         completed = index,
-                        total = total,
-                    ),
+                        total = total
+                    )
                 )
-                notifyProgress(localizationManager.currentStrings.value.get("transfer_notification_uploading_progress", index + 1, total), index, total)
+                notifyProgress(
+                    localizationManager.currentStrings.value.get(
+                        "transfer_notification_uploading_progress",
+                        index + 1,
+                        total
+                    ),
+                    index,
+                    total
+                )
 
                 val result = uploadItem(request, item)
                 if (result.isSuccess) {
@@ -103,22 +128,32 @@ class TransferForegroundService : Service() {
                         TransferEvent.ItemUploaded(
                             itemId = item.id,
                             completed = uploaded + failed,
-                            total = total,
-                        ),
+                            total = total
+                        )
                     )
-                    deleteWebDownloadedCacheSource(item.sourceUri)
+                    downloadCacheManager.deleteDownloadSource(item.sourceUri)
                 } else {
                     val error = result.exceptionOrNull()
+                    val message = error?.message
+                        ?: localizationManager.currentStrings.value.transferErrorFtpUploadFailed
                     failed += 1
                     transferCoordinator.emit(
                         TransferEvent.ItemFailed(
                             itemId = item.id,
-                            message = error?.message ?: localizationManager.currentStrings.value.transferErrorFtpUploadFailed,
-                        ),
+                            message = message
+                        )
                     )
                 }
 
-                notifyProgress(localizationManager.currentStrings.value.get("transfer_notification_progress_summary", uploaded, failed), uploaded + failed, total)
+                notifyProgress(
+                    localizationManager.currentStrings.value.get(
+                        "transfer_notification_progress_summary",
+                        uploaded,
+                        failed
+                    ),
+                    uploaded + failed,
+                    total
+                )
             }
         } finally {
             if (uploaded > 0) {
@@ -127,8 +162,8 @@ class TransferForegroundService : Service() {
             transferCoordinator.emit(
                 TransferEvent.Completed(
                     uploaded = uploaded,
-                    failed = failed,
-                ),
+                    failed = failed
+                )
             )
             showFinishedNotification(uploaded, failed)
         }
@@ -136,7 +171,7 @@ class TransferForegroundService : Service() {
 
     private suspend fun uploadItem(
         request: TransferRequest,
-        item: TransferUploadItem,
+        item: TransferUploadItem
     ): Result<Unit> {
         val uri = Uri.parse(item.sourceUri)
         val preparedInput = runCatching {
@@ -147,7 +182,14 @@ class TransferForegroundService : Service() {
         val input = preparedInput.openStream() ?: contentResolver.openInputStream(preparedInput.uri)
             ?: run {
                 preparedInput.cleanup()
-                return Result.failure(IllegalStateException(localizationManager.currentStrings.value.get("transfer_error_cannot_open_file", item.originalName)))
+                return Result.failure(
+                    IllegalStateException(
+                        localizationManager.currentStrings.value.get(
+                            "transfer_error_cannot_open_file",
+                            item.originalName
+                        )
+                    )
+                )
             }
 
         val fileSize = preparedInput.size.takeIf { it > 0L } ?: getUriSize(uri)
@@ -159,15 +201,18 @@ class TransferForegroundService : Service() {
                 input = input,
                 onProgress = { bytesRead ->
                     if (fileSize > 0) {
-                        val progress = (bytesRead.toFloat() / fileSize.toFloat()).coerceIn(0f, 0.99f)
+                        val progress = (bytesRead.toFloat() / fileSize.toFloat()).coerceIn(
+                            0f,
+                            0.99f
+                        )
                         transferCoordinator.emit(
                             TransferEvent.ItemProgress(
                                 itemId = item.id,
-                                progress = progress,
-                            ),
+                                progress = progress
+                            )
                         )
                     }
-                },
+                }
             )
         } finally {
             input.close()
@@ -177,10 +222,14 @@ class TransferForegroundService : Service() {
 
     private suspend fun prepareUploadInput(
         uri: Uri,
-        item: TransferUploadItem,
+        item: TransferUploadItem
     ): PreparedUploadInput = withContext(Dispatchers.IO) {
         if (!item.needsCbzMetadataRewrite()) {
-            return@withContext PreparedUploadInput(uri = uri, tempFile = null, size = getUriSize(uri))
+            return@withContext PreparedUploadInput(
+                uri = uri,
+                tempFile = null,
+                size = getUriSize(uri)
+            )
         }
 
         val tempDir = File(cacheDir, "prepared-upload").apply { mkdirs() }
@@ -191,14 +240,19 @@ class TransferForegroundService : Service() {
                 CbzMetadataRewriter.findSingleCommonRootFolder(input)
             }
             val source = contentResolver.openInputStream(uri)
-                ?: throw IllegalStateException(localizationManager.currentStrings.value.get("transfer_error_cannot_open_file", item.originalName))
+                ?: throw IllegalStateException(
+                    localizationManager.currentStrings.value.get(
+                        "transfer_error_cannot_open_file",
+                        item.originalName
+                    )
+                )
             source.use { input ->
                 tempFile.outputStream().use { output ->
                     CbzMetadataRewriter.rewrite(
                         input = input,
                         output = output,
                         metadata = item.toCbzMetadata(),
-                        rootFolder = rootFolder,
+                        rootFolder = rootFolder
                     )
                 }
             }
@@ -219,7 +273,13 @@ class TransferForegroundService : Service() {
         }
         var size = -1L
         try {
-            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            contentResolver.query(
+                uri,
+                arrayOf(android.provider.OpenableColumns.SIZE),
+                null,
+                null,
+                null
+            )?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val index = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
                     if (index != -1) {
@@ -242,34 +302,10 @@ class TransferForegroundService : Service() {
         return size
     }
 
-    private suspend fun deleteWebDownloadedCacheSource(sourceUri: String) {
-        withContext(Dispatchers.IO) {
-            runCatching {
-                val uri = Uri.parse(sourceUri)
-                if (uri.scheme != "file") return@runCatching
-
-                val sourceFile = File(uri.path.orEmpty()).canonicalFile
-                if (!sourceFile.isFile) return@runCatching
-
-                val downloadCacheDirs = listOf(
-                    File(cacheDir, OpdsDownloadCacheDirectory).canonicalFile,
-                    File(cacheDir, MangaDownloadCacheDirectory).canonicalFile,
-                )
-                if (downloadCacheDirs.any { directory -> sourceFile.isInsideOrSameAs(directory) }) {
-                    sourceFile.delete()
-                }
-            }
-        }
-    }
-
-    private fun notifyProgress(
-        text: String,
-        completed: Int,
-        total: Int,
-    ) {
+    private fun notifyProgress(text: String, completed: Int, total: Int) {
         notificationManager().notify(
             NOTIFICATION_ID,
-            buildProgressNotification(text, completed, total),
+            buildProgressNotification(text, completed, total)
         )
     }
 
@@ -292,15 +328,11 @@ class TransferForegroundService : Service() {
                 .setContentIntent(contentIntent())
                 .setAutoCancel(true)
                 .setOngoing(false)
-                .build(),
+                .build()
         )
     }
 
-    private fun buildProgressNotification(
-        text: String,
-        completed: Int,
-        total: Int,
-    ): Notification =
+    private fun buildProgressNotification(text: String, completed: Int, total: Int): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_upload)
             .setContentTitle(localizationManager.currentStrings.value.transferNotificationTitle)
@@ -317,7 +349,7 @@ class TransferForegroundService : Service() {
             this,
             0,
             Intent(this, MainActivity::class.java),
-            flags,
+            flags
         )
     }
 
@@ -325,7 +357,7 @@ class TransferForegroundService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Book transfers",
-            NotificationManager.IMPORTANCE_LOW,
+            NotificationManager.IMPORTANCE_LOW
         )
         notificationManager().createNotificationChannel(channel)
     }
@@ -338,13 +370,11 @@ class TransferForegroundService : Service() {
         private const val NOTIFICATION_ID = 2001
         private const val COMPLETION_NOTIFICATION_ID_START = 2100
         private const val EXTRA_REQUEST_ID = "request_id"
-        private const val TransferWakeLockTimeoutMillis = 60 * 60 * 1000L
-        private const val OpdsDownloadCacheDirectory = "opds"
-        private const val MangaDownloadCacheDirectory = "manga"
-        private val completionNotificationIds = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
+        private const val TRANSFER_WAKE_LOCK_TIMEOUT_MILLIS = 60 * 60 * 1000L
+        private val COMPLETION_NOTIFICATION_IDS = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
 
         private fun nextCompletionNotificationId(): Int =
-            completionNotificationIds.getAndIncrement()
+            COMPLETION_NOTIFICATION_IDS.getAndIncrement()
 
         fun createIntent(context: Context, requestId: String): Intent =
             Intent(context, TransferForegroundService::class.java)
@@ -352,13 +382,8 @@ class TransferForegroundService : Service() {
     }
 }
 
-private data class PreparedUploadInput(
-    val uri: Uri,
-    val tempFile: File?,
-    val size: Long,
-) {
-    fun openStream(): InputStream? =
-        tempFile?.inputStream()
+private data class PreparedUploadInput(val uri: Uri, val tempFile: File?, val size: Long) {
+    fun openStream(): InputStream? = tempFile?.inputStream()
 
     fun cleanup() {
         tempFile?.delete()
@@ -368,21 +393,11 @@ private data class PreparedUploadInput(
 private fun TransferUploadItem.needsCbzMetadataRewrite(): Boolean =
     category == BookCategory.Manga && extension.equals("cbz", ignoreCase = true)
 
-private fun File.isInsideOrSameAs(directory: File): Boolean {
-    var current: File? = this
-    while (current != null) {
-        if (current == directory) return true
-        current = current.parentFile
-    }
-    return false
-}
-
-private fun TransferUploadItem.toCbzMetadata(): CbzMetadata =
-    CbzMetadata(
-        title = plannedPath.fileNameWithoutExtension().ifBlank { title },
-        series = mangaSeries,
-        number = mangaVolume,
-    )
+private fun TransferUploadItem.toCbzMetadata(): CbzMetadata = CbzMetadata(
+    title = plannedPath.fileNameWithoutExtension().ifBlank { title },
+    series = mangaSeries,
+    number = mangaVolume
+)
 
 private fun String.fileNameWithoutExtension(): String {
     val fileName = trim('/').substringAfterLast('/')

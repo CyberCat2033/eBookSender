@@ -72,6 +72,7 @@ fun UploadItemRow(
     documentsTags: List<String>,
     mangaSeriesSuggestions: List<String>,
     enableHaptics: Boolean,
+    canRemove: Boolean,
     settings: AppSettings,
     onRemove: () -> Unit,
     onCategoryChanged: (BookCategory) -> Unit,
@@ -121,7 +122,8 @@ fun UploadItemRow(
                             onRemove()
                         },
                         enabled =
-                            item.status != UploadStatus.Uploading &&
+                            canRemove &&
+                                item.status != UploadStatus.Uploading &&
                                 item.status != UploadStatus.Uploaded
                     ) {
                         Icon(Icons.Outlined.Delete, contentDescription = strings.sendBtnRemove)
@@ -326,7 +328,11 @@ private fun ItemTypeSummary(
             IconButton(onClick = onToggle) {
                 Icon(
                     imageVector = Icons.Outlined.ExpandMore,
-                    contentDescription = if (expanded) strings.sendActionHideDetails else strings.sendActionEditDetails,
+                    contentDescription = if (expanded) {
+                        strings.sendActionHideDetails
+                    } else {
+                        strings.sendActionEditDetails
+                    },
                     modifier = Modifier.rotate(rotationState)
                 )
             }
