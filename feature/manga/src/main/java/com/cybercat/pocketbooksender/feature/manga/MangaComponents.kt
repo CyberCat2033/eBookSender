@@ -58,7 +58,6 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -71,6 +70,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -206,7 +206,7 @@ internal fun MangaDownloadProgressOverlay(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                OutlinedButton(
+                OutlinedIconButton(
                     onClick = {
                         view.performHapticIfAllowed(
                             context,
@@ -215,15 +215,12 @@ internal fun MangaDownloadProgressOverlay(
                         )
                         onCancel()
                     },
-                    modifier = Modifier.widthIn(max = 180.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = contentColor)
+                    modifier = Modifier.size(48.dp)
                 ) {
-                    Icon(Icons.Outlined.Close, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = strings.get("manga_download_cancel"),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = strings.get("manga_download_cancel"),
+                        tint = contentColor
                     )
                 }
             }

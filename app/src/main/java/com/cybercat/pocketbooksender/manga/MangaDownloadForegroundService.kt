@@ -27,6 +27,7 @@ import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.power.ScopedWakeLock
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -137,6 +138,9 @@ class MangaDownloadForegroundService : Service() {
             )
         )
 
+        val queuedDownloads = Collections.synchronizedList(
+            mutableListOf<MangaDownloadedChapter>()
+        )
         try {
             val result = mangaRepository.downloadMultipleSeriesChapters(
                 targets = request.targets,
@@ -148,56 +152,41 @@ class MangaDownloadForegroundService : Service() {
                         )
                     )
                     notifyProgress(progress)
+                },
+                onChapterDownloaded = { downloaded ->
+                    queuedDownloads.add(downloaded)
+                    addDownloadedMangaFiles(listOf(downloaded))
                 }
             )
 
-            if (result.downloaded.isNotEmpty()) {
-                addDownloadedMangaFiles(result.downloaded)
-            }
+            val downloaded = result.downloaded.mergeWith(queuedDownloads)
+            addDownloadedMangaFiles(downloaded.missingFrom(queuedDownloads))
 
             downloadCoordinator.emit(
                 MangaDownloadEvent.Completed(
                     requestId = request.id,
                     kind = request.kind,
-                    downloadedChapterIds = result.downloaded.mapTo(mutableSetOf()) { downloaded ->
-                        downloaded.chapter.chapterId
+                    downloadedChapterIds = downloaded.mapTo(mutableSetOf()) { item ->
+                        item.chapter.chapterId
                     },
-                    downloadedSubscriptionKeys = result.downloaded.mapTo(
+                    downloadedSubscriptionKeys = downloaded.mapTo(
                         mutableSetOf()
-                    ) { downloaded ->
-                        downloaded.chapter.mangaStableSelectionKey()
+                    ) { item ->
+                        item.chapter.mangaStableSelectionKey()
                     },
-                    addedToQueueCount = result.downloaded.size,
+                    addedToQueueCount = downloaded.size,
                     failedMessages = result.failedMessages
                 )
             )
             showFinishedNotification(
-                downloaded = result.downloaded.size,
+                downloaded = downloaded.size,
                 failed = result.failedMessages.size
             )
         } catch (error: MangaDownloadCancelledException) {
-            val result = error.result
-            if (result.downloaded.isNotEmpty()) {
-                addDownloadedMangaFiles(result.downloaded)
-            }
-            downloadCoordinator.emit(
-                MangaDownloadEvent.Canceled(
-                    requestId = request.id,
-                    kind = request.kind,
-                    downloadedChapterIds = result.downloaded.mapTo(mutableSetOf()) { downloaded ->
-                        downloaded.chapter.chapterId
-                    },
-                    downloadedSubscriptionKeys = result.downloaded.mapTo(
-                        mutableSetOf()
-                    ) { downloaded ->
-                        downloaded.chapter.mangaStableSelectionKey()
-                    },
-                    addedToQueueCount = result.downloaded.size
-                )
-            )
-            showFinishedNotification(downloaded = result.downloaded.size, failed = 0)
+            handleCanceledDownload(request, error.result.downloaded.mergeWith(queuedDownloads))
+        } catch (error: CancellationException) {
+            handleCanceledDownload(request, queuedDownloads.toList())
         } catch (error: Throwable) {
-            if (error is CancellationException) throw error
             downloadCoordinator.emit(
                 MangaDownloadEvent.Failed(
                     requestId = request.id,
@@ -209,6 +198,28 @@ class MangaDownloadForegroundService : Service() {
             )
             showFinishedNotification(downloaded = 0, failed = request.targets.size)
         }
+    }
+
+    private fun handleCanceledDownload(
+        request: MangaDownloadRequest,
+        downloaded: List<MangaDownloadedChapter>
+    ) {
+        val completed = downloaded.distinctBy { item -> item.file.absolutePath }
+        addDownloadedMangaFiles(completed)
+        downloadCoordinator.emit(
+            MangaDownloadEvent.Canceled(
+                requestId = request.id,
+                kind = request.kind,
+                downloadedChapterIds = completed.mapTo(mutableSetOf()) { item ->
+                    item.chapter.chapterId
+                },
+                downloadedSubscriptionKeys = completed.mapTo(mutableSetOf()) { item ->
+                    item.chapter.mangaStableSelectionKey()
+                },
+                addedToQueueCount = completed.size
+            )
+        )
+        showFinishedNotification(downloaded = completed.size, failed = 0)
     }
 
     private fun addDownloadedMangaFiles(downloaded: List<MangaDownloadedChapter>) {
@@ -351,4 +362,15 @@ private fun MangaDownloadProgress.notificationPercent(): Int {
     return (((completedChapterCount + currentChapterFraction) / safeTotalChapters) * 100)
         .toInt()
         .coerceIn(0, 99)
+}
+
+private fun List<MangaDownloadedChapter>.mergeWith(
+    other: Collection<MangaDownloadedChapter>
+): List<MangaDownloadedChapter> = (this + other).distinctBy { item -> item.file.absolutePath }
+
+private fun List<MangaDownloadedChapter>.missingFrom(
+    other: Collection<MangaDownloadedChapter>
+): List<MangaDownloadedChapter> {
+    val existing = other.mapTo(mutableSetOf()) { item -> item.file.absolutePath }
+    return filterNot { item -> item.file.absolutePath in existing }
 }

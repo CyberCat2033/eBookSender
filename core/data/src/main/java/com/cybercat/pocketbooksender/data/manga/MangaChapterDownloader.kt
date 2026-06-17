@@ -35,7 +35,8 @@ class MangaChapterDownloader @Inject constructor(
 ) {
     internal suspend fun download(
         targets: List<MangaChapterDownloadTarget>,
-        onProgress: suspend (MangaDownloadProgress) -> Unit = {}
+        onProgress: suspend (MangaDownloadProgress) -> Unit = {},
+        onChapterDownloaded: suspend (MangaChapterDownloadBatch) -> Unit = {}
     ): MangaChapterDownloadBatch = withContext(Dispatchers.IO) {
         if (targets.isEmpty()) {
             throw IllegalArgumentException("No manga chapters selected")
@@ -68,6 +69,9 @@ class MangaChapterDownloader @Inject constructor(
                                 onProgress = onProgress
                             ).also { outcome ->
                                 completedOutcomes.add(outcome)
+                                if (outcome.downloaded != null) {
+                                    onChapterDownloaded(listOf(outcome).toBatch())
+                                }
                             }
                         }
                     }

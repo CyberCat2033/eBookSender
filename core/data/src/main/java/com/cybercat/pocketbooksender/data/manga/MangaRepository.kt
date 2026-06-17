@@ -5,6 +5,7 @@ import com.cybercat.pocketbooksender.data.database.dao.MangaSeriesBookmarkDao
 import com.cybercat.pocketbooksender.data.database.entity.MangaChapterHistoryEntity
 import com.cybercat.pocketbooksender.data.database.entity.MangaSeriesBookmarkEntity
 import com.cybercat.pocketbooksender.util.TimedCacheEntry
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -195,12 +196,25 @@ class MangaRepository @Inject constructor(
 
     suspend fun downloadMultipleSeriesChapters(
         targets: List<MangaChapterDownloadTarget>,
-        onProgress: suspend (MangaDownloadProgress) -> Unit = {}
+        onProgress: suspend (MangaDownloadProgress) -> Unit = {},
+        onChapterDownloaded: suspend (MangaDownloadedChapter) -> Unit = {}
     ): MangaDownloadResult = withContext(Dispatchers.IO) {
+        val deliveredFiles = Collections.synchronizedSet(mutableSetOf<String>())
         try {
             val batch = chapterDownloader.download(
                 targets = targets,
-                onProgress = onProgress
+                onProgress = onProgress,
+                onChapterDownloaded = { chapterBatch ->
+                    withContext(NonCancellable) {
+                        chapterBatch.saveHistory()
+                        chapterBatch.downloaded.forEach { downloaded ->
+                            val key = downloaded.file.absolutePath
+                            if (deliveredFiles.add(key)) {
+                                onChapterDownloaded(downloaded)
+                            }
+                        }
+                    }
+                }
             )
             batch.toResult()
         } catch (error: MangaChapterDownloadCancelledException) {
@@ -211,10 +225,14 @@ class MangaRepository @Inject constructor(
         }
     }
 
-    private suspend fun MangaChapterDownloadBatch.toResult(): MangaDownloadResult {
+    private suspend fun MangaChapterDownloadBatch.saveHistory() {
         if (historyItems.isNotEmpty()) {
             historyDao.upsertAll(historyItems)
         }
+    }
+
+    private suspend fun MangaChapterDownloadBatch.toResult(): MangaDownloadResult {
+        saveHistory()
         return MangaDownloadResult(
             downloaded = downloaded,
             failedMessages = failedMessages
