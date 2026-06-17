@@ -1,25 +1,18 @@
 package com.cybercat.pocketbooksender.transfer
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.IBinder
-import androidx.core.app.NotificationCompat
-import com.cybercat.pocketbooksender.MainActivity
-import com.cybercat.pocketbooksender.R
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
+import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.power.ScopedWakeLock
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import java.io.InputStream
-import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,13 +27,18 @@ class TransferForegroundService : Service() {
 
     @Inject lateinit var transferCoordinator: TransferCoordinator
 
-    @Inject lateinit var localizationManager:
-        com.cybercat.pocketbooksender.localization.LocalizationManager
+    @Inject lateinit var localizationManager: LocalizationManager
 
     @Inject lateinit var rescanCoordinator: PocketBookRescanCoordinator
 
     @Inject lateinit var downloadCacheManager: DownloadCacheManager
 
+    private val transferNotifications by lazy {
+        TransferNotificationManager(
+            context = this,
+            localizationManager = localizationManager
+        )
+    }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val transferWakeLock by lazy {
         ScopedWakeLock(
@@ -53,13 +51,13 @@ class TransferForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        ensureNotificationChannel()
+        transferNotifications.ensureNotificationChannel()
 
         val request = transferCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
         if (request == null) {
             startForeground(
-                NOTIFICATION_ID,
-                buildProgressNotification(
+                TransferNotificationManager.FOREGROUND_NOTIFICATION_ID,
+                transferNotifications.buildProgressNotification(
                     localizationManager.currentStrings.value.transferNotificationNothingToUpload,
                     0,
                     0
@@ -70,8 +68,8 @@ class TransferForegroundService : Service() {
         }
 
         startForeground(
-            NOTIFICATION_ID,
-            buildProgressNotification(
+            TransferNotificationManager.FOREGROUND_NOTIFICATION_ID,
+            transferNotifications.buildProgressNotification(
                 localizationManager.currentStrings.value.transferNotificationUploadingBooks,
                 0,
                 request.items.size
@@ -303,78 +301,17 @@ class TransferForegroundService : Service() {
     }
 
     private fun notifyProgress(text: String, completed: Int, total: Int) {
-        notificationManager().notify(
-            NOTIFICATION_ID,
-            buildProgressNotification(text, completed, total)
-        )
+        transferNotifications.notifyProgress(text, completed, total)
     }
 
     private fun showFinishedNotification(uploaded: Int, failed: Int) {
-        val strings = localizationManager.currentStrings.value
-        val text = if (failed == 0) {
-            strings.get("transfer_notification_complete_success", uploaded)
-        } else {
-            strings.get("transfer_notification_progress_summary", uploaded, failed)
-        }
-
         stopForeground(STOP_FOREGROUND_REMOVE)
-
-        notificationManager().notify(
-            nextCompletionNotificationId(),
-            NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_stat_upload)
-                .setContentTitle(strings.transferNotificationCompleteTitle)
-                .setContentText(text)
-                .setContentIntent(contentIntent())
-                .setAutoCancel(true)
-                .setOngoing(false)
-                .build()
-        )
+        transferNotifications.showFinishedNotification(uploaded, failed)
     }
-
-    private fun buildProgressNotification(text: String, completed: Int, total: Int): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_upload)
-            .setContentTitle(localizationManager.currentStrings.value.transferNotificationTitle)
-            .setContentText(text)
-            .setContentIntent(contentIntent())
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setProgress(total, completed, total == 0)
-            .build()
-
-    private fun contentIntent(): PendingIntent {
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        return PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            flags
-        )
-    }
-
-    private fun ensureNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Book transfers",
-            NotificationManager.IMPORTANCE_LOW
-        )
-        notificationManager().createNotificationChannel(channel)
-    }
-
-    private fun notificationManager(): NotificationManager =
-        getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     companion object {
-        private const val CHANNEL_ID = "book_transfers"
-        private const val NOTIFICATION_ID = 2001
-        private const val COMPLETION_NOTIFICATION_ID_START = 2100
         private const val EXTRA_REQUEST_ID = "request_id"
         private const val TRANSFER_WAKE_LOCK_TIMEOUT_MILLIS = 60 * 60 * 1000L
-        private val COMPLETION_NOTIFICATION_IDS = AtomicInteger(COMPLETION_NOTIFICATION_ID_START)
-
-        private fun nextCompletionNotificationId(): Int =
-            COMPLETION_NOTIFICATION_IDS.getAndIncrement()
 
         fun createIntent(context: Context, requestId: String): Intent =
             Intent(context, TransferForegroundService::class.java)
