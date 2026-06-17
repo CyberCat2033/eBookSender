@@ -1,7 +1,6 @@
 package com.cybercat.pocketbooksender.data.manga
 
 import java.io.IOException
-import java.net.URI
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.json.JSONObject
@@ -9,7 +8,10 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
 @Singleton
-class ComxHtmlParser @Inject constructor(private val searchParser: ComxSearchParser) {
+class ComxHtmlParser @Inject constructor(
+    private val searchParser: ComxSearchParser,
+    private val readerPageParser: ComxReaderPageParser
+) {
     fun ownsUrl(url: String): Boolean = ownsComxUrl(url)
 
     fun parseSearchResults(url: String, html: String): List<MangaSeriesSearchResult> {
@@ -20,7 +22,7 @@ class ComxHtmlParser @Inject constructor(private val searchParser: ComxSearchPar
     fun parseSeriesPage(url: String, html: String): MangaSeriesPage? {
         ensureReadableHtml(html)
         val document = Jsoup.parse(html, url)
-        val data = extractWindowData(html)
+        val data = extractComxWindowData(html)
         val details = parseSeriesDetails(url, document, data)
         val chapters = parseDataChapters(details.seriesId, details.title, data)
             .ifEmpty { parseReaderLinks(details.seriesId, details.title, document) }
@@ -34,30 +36,12 @@ class ComxHtmlParser @Inject constructor(private val searchParser: ComxSearchPar
 
     fun parseSeriesDetails(url: String, html: String): MangaSeriesDetails {
         ensureReadableHtml(html)
-        return parseSeriesDetails(url, Jsoup.parse(html, url), extractWindowData(html))
+        return parseSeriesDetails(url, Jsoup.parse(html, url), extractComxWindowData(html))
     }
 
     fun parseChapterPages(url: String, html: String): List<MangaPage> {
         ensureReadableHtml(html)
-
-        val dataPages = parseReaderDataPages(url, extractWindowData(html))
-        if (dataPages.isNotEmpty()) {
-            return dataPages
-        }
-
-        val document = Jsoup.parse(html, url)
-        val urls = linkedImageUrls(document)
-            .distinctBy { it.normalizeUrlKey() }
-            .filter(::isReaderImageUrl)
-
-        return urls.mapIndexed { index, imageUrl ->
-            MangaPage(
-                index = index,
-                imageUrl = imageUrl,
-                refererUrl = url,
-                fileExtension = imageExtensionFromUrl(imageUrl)
-            )
-        }
+        return readerPageParser.parseChapterPages(url, html)
     }
 
     fun imageExtensionFromUrl(url: String): String? = comxImageExtensionFromUrl(url)
@@ -199,118 +183,5 @@ class ComxHtmlParser @Inject constructor(private val searchParser: ComxSearchPar
                     .thenBy { it.title }
             )
             .toList()
-    }
-
-    private fun parseReaderDataPages(url: String, data: JSONObject?): List<MangaPage> {
-        if (data == null) return emptyList()
-        val images = data.optJSONArray("images") ?: return emptyList()
-        val host = data.optString("host", "img.com-x.life")
-            .removePrefix("https://")
-            .removePrefix("http://")
-            .trim('/')
-            .ifBlank { "img.com-x.life" }
-
-        return (0 until images.length())
-            .asSequence()
-            .mapNotNull { index ->
-                val raw = images.optString(index)
-                    .replace("\\/", "/")
-                    .trim()
-                    .takeIf { it.isNotBlank() }
-                    ?: return@mapNotNull null
-
-                val imageUrl = when {
-                    raw.startsWith("http://") || raw.startsWith("https://") -> raw
-                    raw.trimStart('/').startsWith("comix/") -> "https://$host/${raw.trimStart('/')}"
-                    else -> "https://$host/comix/${raw.trimStart('/')}"
-                }
-
-                MangaPage(
-                    index = index,
-                    imageUrl = imageUrl,
-                    refererUrl = url,
-                    fileExtension = imageExtensionFromUrl(imageUrl)
-                )
-            }
-            .toList()
-    }
-
-    private fun linkedImageUrls(document: Document): List<String> {
-        val urls = mutableListOf<String>()
-        document.select("img, source").forEach { element ->
-            listOf("src", "data-src", "data-original", "data-lazy-src", "data-full")
-                .mapNotNullTo(urls) { attr ->
-                    element.absUrl(attr).takeIf { it.isNotBlank() }
-                }
-
-            element.attr("srcset")
-                .takeIf { it.isNotBlank() }
-                ?.split(',')
-                ?.mapNotNullTo(urls) { candidate ->
-                    candidate.trim().substringBefore(' ').takeIf { it.isNotBlank() }?.let { raw ->
-                        runCatching { URI(document.baseUri()).resolve(raw).toString() }.getOrNull()
-                    }
-                }
-        }
-
-        document.select("script").forEach { script ->
-            ComxImageUrlRegex.findAll(script.data()).forEach { match ->
-                urls += match.value
-                    .replace("\\/", "/")
-                    .replace("\\u0026", "&")
-                    .replace("&amp;", "&")
-            }
-        }
-
-        return urls
-    }
-
-    private fun extractWindowData(html: String): JSONObject? {
-        val markerIndex = html.indexOf("window.__DATA__")
-        if (markerIndex < 0) return null
-
-        val start = html.indexOf('{', markerIndex)
-        if (start < 0) return null
-
-        var depth = 0
-        var inString = false
-        var escape = false
-
-        for (index in start until html.length) {
-            val char = html[index]
-            if (inString) {
-                if (escape) {
-                    escape = false
-                } else if (char == '\\') {
-                    escape = true
-                } else if (char == '"') {
-                    inString = false
-                }
-                continue
-            }
-
-            when (char) {
-                '"' -> inString = true
-
-                '{' -> depth += 1
-
-                '}' -> {
-                    depth -= 1
-                    if (depth == 0) {
-                        return runCatching {
-                            JSONObject(html.substring(start, index + 1))
-                        }.getOrNull()
-                    }
-                }
-            }
-        }
-
-        return null
-    }
-
-    private fun isReaderImageUrl(url: String): Boolean {
-        val lower = url.lowercase()
-        if (imageExtensionFromUrl(lower) == null) return false
-        return ComxIgnoredImageMarkers.none { marker -> lower.contains(marker) }
     }
 }

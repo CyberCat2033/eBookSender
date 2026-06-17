@@ -145,6 +145,49 @@ internal fun JSONObject.optFiniteDouble(key: String): Double? {
     return value.takeIf { !it.isNaN() && it.isFinite() }
 }
 
+internal fun extractComxWindowData(html: String): JSONObject? {
+    val markerIndex = html.indexOf("window.__DATA__")
+    if (markerIndex < 0) return null
+
+    val start = html.indexOf('{', markerIndex)
+    if (start < 0) return null
+
+    var depth = 0
+    var inString = false
+    var escape = false
+
+    for (index in start until html.length) {
+        val char = html[index]
+        if (inString) {
+            if (escape) {
+                escape = false
+            } else if (char == '\\') {
+                escape = true
+            } else if (char == '"') {
+                inString = false
+            }
+            continue
+        }
+
+        when (char) {
+            '"' -> inString = true
+
+            '{' -> depth += 1
+
+            '}' -> {
+                depth -= 1
+                if (depth == 0) {
+                    return runCatching {
+                        JSONObject(html.substring(start, index + 1))
+                    }.getOrNull()
+                }
+            }
+        }
+    }
+
+    return null
+}
+
 internal fun titleFromUrl(url: String): String =
     URLDecoder.decode(url.substringBefore('?').substringAfterLast('/'), Charsets.UTF_8.name())
         .removeSuffix(".html")
