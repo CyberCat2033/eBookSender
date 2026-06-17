@@ -17,8 +17,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -42,7 +43,7 @@ fun StatusMessage(
     text: String,
     isError: Boolean,
     modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
+    icon: ImageVector? = null
 ) {
     Surface(
         modifier = modifier
@@ -54,14 +55,15 @@ fun StatusMessage(
         } else {
             MaterialTheme.colorScheme.secondaryContainer
         },
-        tonalElevation = 2.dp,
+        tonalElevation = 2.dp
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val resolvedIcon = icon ?: if (isError) Icons.Outlined.Close else Icons.Outlined.CheckCircle
+            val resolvedIcon =
+                icon ?: if (isError) Icons.Outlined.Close else Icons.Outlined.CheckCircle
             Icon(
                 imageVector = resolvedIcon,
                 contentDescription = null,
@@ -79,7 +81,7 @@ fun StatusMessage(
                     MaterialTheme.colorScheme.onErrorContainer
                 } else {
                     MaterialTheme.colorScheme.onSecondaryContainer
-                },
+                }
             )
         }
     }
@@ -93,7 +95,7 @@ fun StatusMessageHost(
     text: String?,
     isError: Boolean = false,
     modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
+    icon: ImageVector? = null
 ) {
     var lastText by remember { mutableStateOf(text.orEmpty()) }
 
@@ -106,13 +108,13 @@ fun StatusMessageHost(
     AnimatedVisibility(
         visible = text != null,
         enter = fadeIn() + expandVertically() + slideInVertically { height -> -height / 4 },
-        exit = fadeOut() + shrinkVertically() + slideOutVertically { height -> -height / 4 },
+        exit = fadeOut() + shrinkVertically() + slideOutVertically { height -> -height / 4 }
     ) {
         StatusMessage(
             text = lastText,
             isError = isError,
             modifier = modifier,
-            icon = icon,
+            icon = icon
         )
     }
 }
@@ -121,14 +123,16 @@ fun StatusMessageHost(
  * A standard card with a circular progress indicator and text.
  */
 @Composable
-fun LoadingCard(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    ElevatedCard(modifier.fillMaxWidth()) {
+fun LoadingCard(text: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
         Row(
             modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             CircularProgressIndicator(Modifier.size(24.dp))
             Spacer(Modifier.width(12.dp))

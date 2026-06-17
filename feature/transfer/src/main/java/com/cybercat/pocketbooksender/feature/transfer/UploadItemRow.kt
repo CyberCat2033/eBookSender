@@ -2,10 +2,10 @@ package com.cybercat.pocketbooksender.feature.transfer
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,7 +30,8 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PictureAsPdf
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -75,17 +76,22 @@ fun UploadItemRow(
     onRemove: () -> Unit,
     onCategoryChanged: (BookCategory) -> Unit,
     onDocumentsTagChanged: (String) -> Unit,
-    onMangaSeriesChanged: (String) -> Unit,
+    onMangaSeriesChanged: (String) -> Unit
 ) {
     var detailsExpanded by remember(item.id) { mutableStateOf(false) }
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
 
-    ElevatedCard(modifier.fillMaxWidth()) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
+    ) {
         Column {
             Column(
-                modifier = Modifier.padding(14.dp),
+                modifier = Modifier.padding(14.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BookCover(item)
@@ -95,22 +101,28 @@ fun UploadItemRow(
                             text = item.title,
                             style = MaterialTheme.typography.titleMedium,
                             maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = item.originalName,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     IconButton(
                         onClick = {
-                            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.REJECT)
+                            view.performHapticIfAllowed(
+                                context,
+                                enableHaptics,
+                                HapticFeedbackConstants.REJECT
+                            )
                             onRemove()
                         },
-                        enabled = item.status != UploadStatus.Uploading && item.status != UploadStatus.Uploaded,
+                        enabled =
+                            item.status != UploadStatus.Uploading &&
+                                item.status != UploadStatus.Uploaded
                     ) {
                         Icon(Icons.Outlined.Delete, contentDescription = strings.sendBtnRemove)
                     }
@@ -123,34 +135,42 @@ fun UploadItemRow(
                     expanded = detailsExpanded,
                     onToggle = {
                         detailsExpanded = !detailsExpanded
-                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            HapticFeedbackConstants.VIRTUAL_KEY
+                        )
                     },
-                    settings = settings,
+                    settings = settings
                 )
 
                 AnimatedVisibility(
                     visible = detailsExpanded,
                     enter = expandVertically(
                         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                        expandFrom = Alignment.Top,
+                        expandFrom = Alignment.Top
                     ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow)),
                     exit = shrinkVertically(
                         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                        shrinkTowards = Alignment.Top,
-                    ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow)),
+                        shrinkTowards = Alignment.Top
+                    ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
                 ) {
                     Column(
                         modifier = Modifier.padding(top = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         CategorySelector(
                             selected = item.category,
                             lockedToManga = item.extension == "cbr" || item.extension == "cbz",
                             onCategoryChanged = { cat ->
-                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                )
                                 onCategoryChanged(cat)
                             },
-                            settings = settings,
+                            settings = settings
                         )
 
                         if (item.category == BookCategory.Documents) {
@@ -158,7 +178,7 @@ fun UploadItemRow(
                                 selectedTag = item.documentsTag.orEmpty(),
                                 suggestions = documentsTags,
                                 onTagChanged = onDocumentsTagChanged,
-                                categoryName = settings.documentsFolderName,
+                                categoryName = settings.documentsFolderName
                             )
                         }
 
@@ -166,7 +186,7 @@ fun UploadItemRow(
                             MangaSeriesRenamePanel(
                                 selectedSeries = item.mangaSeries.orEmpty(),
                                 suggestions = mangaSeriesSuggestions,
-                                onSeriesChanged = onMangaSeriesChanged,
+                                onSeriesChanged = onMangaSeriesChanged
                             )
                         }
                     }
@@ -198,11 +218,22 @@ fun UploadItemRow(
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                     val statusText = when (item.status) {
-                        UploadStatus.Uploading -> strings.get("send_status_uploading", (progress * 100).toInt())
+                        UploadStatus.Uploading -> strings.get(
+                            "send_status_uploading",
+                            (
+                                progress *
+                                    100
+                                ).toInt()
+                        )
+
                         UploadStatus.Pending -> strings.sendStatusPending
+
                         UploadStatus.Preparing -> strings.sendStatusPreparing
+
                         UploadStatus.Uploaded -> strings.sendStatusUploaded
+
                         UploadStatus.Failed -> strings.sendStatusFailed
+
                         UploadStatus.Skipped -> strings.sendStatusSkipped
                     }
 
@@ -210,7 +241,7 @@ fun UploadItemRow(
                         text = statusText,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
-                        color = statusColor,
+                        color = statusColor
                     )
                 }
             }
@@ -224,7 +255,7 @@ fun UploadItemRow(
             if (progressHeight > 0.dp) {
                 SmoothProgressIndicator(
                     progress = progress,
-                    modifier = Modifier.fillMaxWidth().height(progressHeight),
+                    modifier = Modifier.fillMaxWidth().height(progressHeight)
                 )
             }
         }
@@ -232,10 +263,7 @@ fun UploadItemRow(
 }
 
 @Composable
-private fun SmoothProgressIndicator(
-    progress: Float,
-    modifier: Modifier = Modifier,
-) {
+private fun SmoothProgressIndicator(progress: Float, modifier: Modifier = Modifier) {
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
         animationSpec = spring(
@@ -246,7 +274,7 @@ private fun SmoothProgressIndicator(
     )
     LinearProgressIndicator(
         progress = { animatedProgress },
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -255,29 +283,29 @@ private fun ItemTypeSummary(
     item: UploadItem,
     expanded: Boolean,
     onToggle: () -> Unit,
-    settings: AppSettings,
+    settings: AppSettings
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = item.category.iconFor(item.extension),
                 contentDescription = null,
                 modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = item.category.label(settings),
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 item.typeDetail()?.let { detail ->
                     Text(
@@ -285,7 +313,7 @@ private fun ItemTypeSummary(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -311,7 +339,7 @@ private fun DocumentsTagEditor(
     selectedTag: String,
     suggestions: List<String>,
     onTagChanged: (String) -> Unit,
-    categoryName: String,
+    categoryName: String
 ) {
     val strings = LocalStrings.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -320,12 +348,12 @@ private fun DocumentsTagEditor(
             onValueChange = onTagChanged,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            label = { Text(strings.get("send_tag_field", categoryName)) },
+            label = { Text(strings.get("send_tag_field", categoryName)) }
         )
 
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             suggestions
                 .filter { it.isNotBlank() }
@@ -334,7 +362,7 @@ private fun DocumentsTagEditor(
                     FilterChip(
                         selected = selectedTag.equals(suggestion, ignoreCase = true),
                         onClick = { onTagChanged(suggestion) },
-                        label = { Text(suggestion) },
+                        label = { Text(suggestion) }
                     )
                 }
         }
@@ -346,7 +374,7 @@ private fun BookCover(item: UploadItem) {
     Surface(
         modifier = Modifier.size(width = 58.dp, height = 78.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.small,
+        shape = MaterialTheme.shapes.small
     ) {
         val preview = item.preview
         if (preview != null) {
@@ -354,14 +382,14 @@ private fun BookCover(item: UploadItem) {
                 bitmap = preview.asImageBitmap(),
                 contentDescription = item.title,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Crop
             )
         } else {
             Icon(
                 imageVector = item.category.iconFor(item.extension),
                 contentDescription = null,
                 modifier = Modifier.padding(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -372,11 +400,11 @@ private fun CategorySelector(
     selected: BookCategory,
     lockedToManga: Boolean,
     onCategoryChanged: (BookCategory) -> Unit,
-    settings: AppSettings,
+    settings: AppSettings
 ) {
     Row(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         BookCategory.entries.forEach { category ->
             FilterChip(
@@ -388,9 +416,9 @@ private fun CategorySelector(
                     Icon(
                         imageVector = category.iconFor(""),
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(18.dp)
                     )
-                },
+                }
             )
         }
     }
