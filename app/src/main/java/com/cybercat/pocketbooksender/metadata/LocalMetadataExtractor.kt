@@ -2,24 +2,15 @@ package com.cybercat.pocketbooksender.metadata
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Base64
-import com.cybercat.pocketbooksender.archive.ArchiveFormat
-import com.cybercat.pocketbooksender.archive.ArchiveFormatDetector
 import com.cybercat.pocketbooksender.domain.NaturalSort
 import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
 import com.cybercat.pocketbooksender.domain.contentExtension
 import com.cybercat.pocketbooksender.domain.isZipWrappedBook
-import com.github.junrar.Archive
-import com.github.junrar.rarfile.FileHeader
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.URLDecoder
 import java.util.zip.ZipInputStream
@@ -31,6 +22,8 @@ import org.xmlpull.v1.XmlPullParserFactory
 
 class LocalMetadataExtractor @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val pdfMetadataParser: PdfMetadataParser,
+    private val mangaArchiveMetadataParser: MangaArchiveMetadataParser,
 ) : MetadataExtractor {
     override suspend fun extract(sourceUri: String, displayName: String): BookMetadata =
         withContext(Dispatchers.IO) {
@@ -42,8 +35,8 @@ class LocalMetadataExtractor @Inject constructor(
                     "fb2" -> extractFb2(uri, displayName, fallbackTitle)
                     "epub" -> extractEpub(uri, fallbackTitle)
                     "mobi", "azw3" -> extractMobi(uri, fallbackTitle)
-                    "pdf" -> extractPdf(uri, fallbackTitle)
-                    "cbz", "cbr" -> extractMangaArchive(uri, fallbackTitle)
+                    "pdf" -> pdfMetadataParser.extract(uri, fallbackTitle)
+                    "cbz", "cbr" -> mangaArchiveMetadataParser.extract(uri, fallbackTitle)
                     else -> BookMetadata(title = fallbackTitle)
                 }
             }.getOrElse { error ->
@@ -215,7 +208,7 @@ class LocalMetadataExtractor @Inject constructor(
                             opfBytes = zip.readCurrentEntry(MAX_TEXT_BYTES)
                         }
                         lowerName.isImageName() && images.size < 20 -> {
-                            images[entry.name] = zip.readCurrentEntry(MAX_IMAGE_BYTES)
+                            images[entry.name] = zip.readCurrentEntry(METADATA_MAX_IMAGE_BYTES)
                         }
                         else -> zip.closeEntry()
                     }
@@ -246,7 +239,7 @@ class LocalMetadataExtractor @Inject constructor(
         return BookMetadata(
             title = parsed.title,
             authors = parsed.authors,
-            preview = coverBytes?.let(::decodeBitmap),
+            preview = coverBytes?.let(MetadataPreviewDecoder::decodeBitmap),
             series = parsed.series,
             seriesIndex = parsed.seriesIndex,
             publisher = parsed.publisher,
@@ -364,103 +357,12 @@ class LocalMetadataExtractor @Inject constructor(
             title = metadata.title,
             authors = metadata.authors,
             description = metadata.description,
-            preview = metadata.coverBytes?.let(::decodeBitmap),
+            preview = metadata.coverBytes?.let(MetadataPreviewDecoder::decodeBitmap),
             language = metadata.language,
             year = metadata.year,
             publisher = metadata.publisher,
         )
     }
-
-    private fun extractPdf(uri: Uri, fallbackTitle: String): BookMetadata {
-        val preview = context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
-            renderFirstPdfPage(descriptor)
-        }
-        return BookMetadata(title = fallbackTitle, preview = preview)
-    }
-
-    private fun renderFirstPdfPage(descriptor: ParcelFileDescriptor): Bitmap? {
-        return runCatching {
-            PdfRenderer(descriptor).use { renderer ->
-                if (renderer.pageCount == 0) return null
-                renderer.openPage(0).use { page ->
-                    val scale = minOf(
-                        PREVIEW_MAX_WIDTH / page.width.toFloat(),
-                        PREVIEW_MAX_HEIGHT / page.height.toFloat(),
-                    )
-                    val width = (page.width * scale).toInt().coerceAtLeast(1)
-                    val height = (page.height * scale).toInt().coerceAtLeast(1)
-                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                    Canvas(bitmap).drawColor(Color.WHITE)
-                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                    bitmap
-                }
-            }
-        }.getOrNull()
-    }
-
-    private fun extractMangaArchive(uri: Uri, fallbackTitle: String): BookMetadata {
-        val format = open(uri).use(ArchiveFormatDetector::detect)
-        val preview = when (format) {
-            ArchiveFormat.Zip -> readFirstNaturalZipImage(uri)
-            ArchiveFormat.Rar4 -> extractRarPreview(uri)
-            ArchiveFormat.Rar5,
-            ArchiveFormat.Unknown -> null
-        }
-
-        return BookMetadata(title = fallbackTitle, preview = preview)
-    }
-
-    private fun readFirstNaturalZipImage(uri: Uri): Bitmap? {
-        open(uri).use { input ->
-            ZipInputStream(input).use { zip ->
-                while (true) {
-                    val entry = zip.nextEntry ?: break
-                    if (entry.isDirectory) {
-                        zip.closeEntry()
-                        continue
-                    }
-
-                    val normalizedName = entry.name
-                        .replace('\\', '/')
-                        .substringAfterLast("/")
-                        .trim()
-
-                    if (normalizedName.lowercase().isImageName()) {
-                        val bitmap = decodeBitmap(zip.readCurrentEntry(MAX_IMAGE_BYTES))
-                        if (bitmap != null) return bitmap
-                        continue
-                    }
-                    zip.closeEntry()
-                }
-            }
-        }
-
-        return null
-    }
-
-    private fun extractRarPreview(uri: Uri): Bitmap? =
-        runCatching {
-            open(uri).use { input ->
-                Archive(input).use { archive ->
-                    var bestHeader: FileHeader? = null
-                    var bestBytes: ByteArray? = null
-
-                    while (true) {
-                        val header = archive.nextFileHeader() ?: break
-                        if (header.isDirectory) continue
-                        val name = header.normalizedName()
-                        if (name.lowercase().isImageName()) {
-                            val currentBest = bestHeader?.normalizedName()
-                            if (currentBest == null || NaturalSort.compare(name, currentBest) < 0) {
-                                bestHeader = header
-                                bestBytes = archive.getInputStream(header).use { it.readBytesLimited(MAX_IMAGE_BYTES) }
-                            }
-                        }
-                    }
-                    bestBytes?.let(::decodeBitmap)
-                }
-            }
-        }.getOrNull()
 
     private fun open(uri: Uri): InputStream =
         requireNotNull(context.contentResolver.openInputStream(uri)) {
@@ -502,7 +404,7 @@ class LocalMetadataExtractor @Inject constructor(
     private fun decodeBase64Bitmap(value: String): Bitmap? =
         runCatching {
             val bytes = Base64.decode(value.replace(Regex("""\s+"""), ""), Base64.DEFAULT)
-            decodeBitmap(bytes)
+            MetadataPreviewDecoder.decodeBitmap(bytes)
         }.getOrNull()
 
     private fun String.toFb2BinaryId(): String {
@@ -527,37 +429,6 @@ class LocalMetadataExtractor @Inject constructor(
             name.contains("front")
     }
 
-    private fun InputStream.readBytesLimited(limit: Int): ByteArray {
-        val output = ByteArrayOutputStream()
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        var total = 0
-        while (true) {
-            val read = read(buffer)
-            if (read < 0) break
-            total += read
-            if (total > limit) break
-            output.write(buffer, 0, read)
-        }
-        return output.toByteArray()
-    }
-
-    private fun ZipInputStream.readCurrentEntry(limit: Int): ByteArray =
-        readBytesLimited(limit)
-
-    private fun FileHeader.normalizedName(): String =
-        fileName
-            .replace('\\', '/')
-            .substringAfterLast("/")
-            .trim()
-
-    private fun String.isImageName(): Boolean =
-        endsWith(".jpg") ||
-            endsWith(".jpeg") ||
-            endsWith(".png") ||
-            endsWith(".webp") ||
-            endsWith(".gif") ||
-            endsWith(".avif")
-
     private fun resolveZipPath(baseDir: String, href: String): String {
         val decoded = runCatching {
             URLDecoder.decode(href.substringBefore('#'), Charsets.UTF_8.name())
@@ -576,44 +447,6 @@ class LocalMetadataExtractor @Inject constructor(
         return parts.joinToString("/")
     }
 
-    private fun decodeBitmap(bytes: ByteArray): Bitmap? =
-        runCatching {
-            val bounds = BitmapFactory.Options().apply {
-                inJustDecodeBounds = true
-            }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-
-            val options = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.RGB_565
-                inSampleSize = calculateInSampleSize(
-                    width = bounds.outWidth,
-                    height = bounds.outHeight,
-                    maxWidth = PREVIEW_MAX_WIDTH,
-                    maxHeight = PREVIEW_MAX_HEIGHT,
-                )
-            }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-        }.getOrNull()
-
-    private fun calculateInSampleSize(
-        width: Int,
-        height: Int,
-        maxWidth: Int,
-        maxHeight: Int,
-    ): Int {
-        if (width <= 0 || height <= 0) return 1
-
-        var sampleSize = 1
-        var sampledWidth = width
-        var sampledHeight = height
-        while (sampledWidth / 2 >= maxWidth || sampledHeight / 2 >= maxHeight) {
-            sampleSize *= 2
-            sampledWidth /= 2
-            sampledHeight /= 2
-        }
-        return sampleSize
-    }
-
     private data class OpfMetadata(
         val title: String,
         val authors: List<String>,
@@ -626,10 +459,7 @@ class LocalMetadataExtractor @Inject constructor(
 
     private companion object {
         const val MAX_TEXT_BYTES = 32 * 1024 * 1024
-        const val MAX_IMAGE_BYTES = 8 * 1024 * 1024
         const val MAX_FB2_CACHED_IMAGE_PREVIEWS = 8
-        const val PREVIEW_MAX_WIDTH = 360
-        const val PREVIEW_MAX_HEIGHT = 540
         const val XLINK_NAMESPACE = "http://www.w3.org/1999/xlink"
     }
 }
