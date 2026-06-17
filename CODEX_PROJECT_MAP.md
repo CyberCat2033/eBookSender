@@ -20,7 +20,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `:core:data` - repositories and data orchestration for catalog, FTP, OPDS, manga, transfer, connection management, and PocketBook control.
 - `:core:ui` - shared Compose UI, Material 3 theme, animated dialogs, status components, remote covers, bitmap cache, localization, gestures, and haptics.
 - `:feature:catalog` - PocketBook catalog screen, state, components (split into `CatalogComponents.kt`, `CatalogConstants.kt`, `CatalogExtensions.kt`), selection, deletion, and catalog ViewModel.
-- `:feature:manga` - manga pane, state, components (split into `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`), selection behavior, and manga ViewModel.
+- `:feature:manga` - manga pane, state, components (split into `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`, `MangaSubscriptionUpdatesDialog.kt`), selection behavior, and manga ViewModel.
 - `:feature:opds` - Web/OPDS screen, OPDS components (split into `OpdsComponents.kt`, `OpdsDialogs.kt`, `OpdsEntryItems.kt`), state, navigation, and ViewModel.
 - `:feature:settings` - settings screen, state, components and dialogs (split into `SettingsScreen.kt`, `SettingsComponents.kt`, `SettingsDialogs.kt`), language and folder/template settings, and ViewModel.
 - `:feature:transfer` - send queue screen, upload item rows, transfer components (split into `TransferComponents.kt`, `TransferDialogs.kt`), state, and ViewModel.
@@ -164,7 +164,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Connection panel animates icon tint over 220 ms, disconnect button alpha over 160 ms, and FTP input visibility with spring expand/shrink plus fade.
   - Upload item details use spring expand/shrink plus fade; uploaded section uses progressive tween expand/shrink plus fade based on the number of items; chevrons rotate with a medium spring.
   - Upload progress height uses `animateDpAsState`; item and overall progress bars use low-stiffness no-bounce spring `animateFloatAsState`.
-- Manga motion: `feature/manga/.../MangaPane.kt`, `MangaComponents.kt`, `MangaSearchComponents.kt`, and `MangaBrowserComponents.kt`.
+- Manga motion: `feature/manga/.../MangaPane.kt`, `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`, and `MangaSubscriptionUpdatesDialog.kt`.
   - Chapter and search-result lists use `Modifier.animateItem()`.
   - Opening a selected series scrolls the list with `animateScrollToItem`.
   - Active manga download overlay enters/exits with fade plus vertical slide from the bottom.
