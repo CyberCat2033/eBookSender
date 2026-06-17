@@ -31,13 +31,21 @@ class MangaViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val mutableMangaState = MutableStateFlow(MangaUiState())
-    private val discoveryController = MangaDiscoveryController(
+    private val browserController = MangaBrowserController(
+        mangaRepository = mangaRepository,
+        localizationManager = localizationManager,
+        mangaState = mutableMangaState,
+        scope = viewModelScope,
+        showStatus = ::showMangaStatus
+    )
+    private val searchController = MangaSearchController(
         mangaRepository = mangaRepository,
         catalogRepository = catalogRepository,
         localizationManager = localizationManager,
         mangaState = mutableMangaState,
         scope = viewModelScope,
-        showStatus = ::showMangaStatus
+        showStatus = ::showMangaStatus,
+        refreshAuthState = browserController::refreshAuthState
     )
     private val downloadController = MangaDownloadController(
         mangaRepository = mangaRepository,
@@ -92,35 +100,35 @@ class MangaViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    fun onMangaSearchChanged(value: String) = discoveryController.onSearchChanged(value)
+    fun onMangaSearchChanged(value: String) = searchController.onSearchChanged(value)
 
-    fun selectMangaSource(sourceId: String) = discoveryController.selectSource(sourceId)
+    fun selectMangaSource(sourceId: String) = searchController.selectSource(sourceId)
 
-    fun openMangaBrowser(url: String? = null) = discoveryController.openBrowser(url)
+    fun openMangaBrowser(url: String? = null) = browserController.openBrowser(url)
 
-    fun closeMangaBrowser() = discoveryController.closeBrowser()
+    fun closeMangaBrowser() = browserController.closeBrowser()
 
     fun performNativeLogin(
         targetUrl: String,
         username: String,
         password: String,
         doNotRemember: Boolean
-    ) = discoveryController.performNativeLogin(
+    ) = browserController.performNativeLogin(
         targetUrl = targetUrl,
         username = username,
         password = password,
         doNotRemember = doNotRemember
     )
 
-    fun clearPendingLoginPost() = discoveryController.clearPendingLoginPost()
+    fun clearPendingLoginPost() = browserController.clearPendingLoginPost()
 
-    fun goBackManga() = discoveryController.goBack()
+    fun goBackManga() = searchController.goBack()
 
-    fun syncMangaWebPage(url: String, html: String) = discoveryController.syncWebPage(url)
+    fun syncMangaWebPage(url: String, html: String) = browserController.syncWebPage(url)
 
-    fun searchManga() = discoveryController.search()
+    fun searchManga() = searchController.search()
 
-    fun openMangaSeries(seriesId: String) = discoveryController.openSeries(seriesId)
+    fun openMangaSeries(seriesId: String) = searchController.openSeries(seriesId)
 
     fun toggleMangaChapter(chapterId: String, selected: Boolean) {
         mutableMangaState.update { state ->
@@ -211,7 +219,7 @@ class MangaViewModel @Inject constructor(
     fun cancelMangaDownload() = downloadController.cancelActiveDownload()
 
     fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) =
-        discoveryController.refreshAuthState(closeBrowserOnAuthenticated)
+        browserController.refreshAuthState(closeBrowserOnAuthenticated)
 
     private fun showMangaStatus(message: String) {
         viewModelScope.launchTemporaryStatus(

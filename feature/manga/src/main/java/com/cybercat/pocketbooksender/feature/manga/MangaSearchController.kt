@@ -1,7 +1,6 @@
 package com.cybercat.pocketbooksender.feature.manga
 
 import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
-import com.cybercat.pocketbooksender.data.manga.MangaAuthState
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
 import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.util.onFailureRethrowing
@@ -10,13 +9,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-internal class MangaDiscoveryController(
+internal class MangaSearchController(
     private val mangaRepository: MangaRepository,
     private val catalogRepository: DeviceCatalogRepository,
     private val localizationManager: LocalizationManager,
     private val mangaState: MutableStateFlow<MangaUiState>,
     private val scope: CoroutineScope,
-    private val showStatus: (String) -> Unit
+    private val showStatus: (String) -> Unit,
+    private val refreshAuthState: () -> Unit
 ) {
     fun onSearchChanged(value: String) {
         mangaState.update {
@@ -31,88 +31,25 @@ internal class MangaDiscoveryController(
     fun selectSource(sourceId: String) {
         val source = mangaRepository.sources.firstOrNull { it.id == sourceId } ?: return
         mangaState.update { state ->
-            state.copy(
+            state.resetSelectedSeries().copy(
                 selectedSourceId = source.id,
                 browserUrl = source.homeUrl,
                 currentWebUrl = null,
                 searchResults = emptyList(),
-                selectedSeries = null,
-                chapters = emptyList(),
-                selectedChapterIds = emptySet(),
                 errorMessage = null,
                 statusMessage = null
             )
         }
         refreshAuthState()
-    }
-
-    fun openBrowser(url: String? = null) {
-        mangaState.update { state ->
-            val homeUrl = mangaRepository.homeUrl(state.selectedSourceId)
-            state.copy(
-                browserVisible = true,
-                browserUrl = url ?: homeUrl,
-                currentWebUrl = state.currentWebUrl ?: homeUrl
-            )
-        }
-    }
-
-    fun closeBrowser() {
-        mangaState.update { state ->
-            state.copy(browserVisible = false)
-        }
-        refreshAuthState()
-    }
-
-    fun performNativeLogin(
-        targetUrl: String,
-        username: String,
-        password: String,
-        doNotRemember: Boolean
-    ) {
-        val sourceId = mangaState.value.selectedSourceId
-        val postBody = mangaRepository.buildLoginPostBody(
-            sourceId,
-            username,
-            password,
-            doNotRemember
-        )
-        if (postBody != null) {
-            mangaState.update { state ->
-                state.copy(
-                    pendingLoginPost = MangaPendingLoginPost(targetUrl, postBody)
-                )
-            }
-        }
-    }
-
-    fun clearPendingLoginPost() {
-        mangaState.update { state ->
-            state.copy(pendingLoginPost = null)
-        }
     }
 
     fun goBack() {
         mangaState.update { state ->
-            state.copy(
-                selectedSeries = null,
-                chapters = emptyList(),
-                selectedChapterIds = emptySet(),
-                lastReadChapterText = null,
+            state.resetSelectedSeries().copy(
                 errorMessage = null,
                 statusMessage = null
             )
         }
-    }
-
-    fun syncWebPage(url: String) {
-        mangaState.update { state ->
-            state.copy(
-                currentWebUrl = url,
-                errorMessage = null
-            )
-        }
-        refreshAuthState(closeBrowserOnAuthenticated = true)
     }
 
     fun search() {
@@ -128,15 +65,12 @@ internal class MangaDiscoveryController(
         }
 
         mangaState.update { state ->
-            state.copy(
+            state.resetSelectedSeries().copy(
                 isLoading = true,
                 browserVisible = false,
                 errorMessage = null,
                 statusMessage = null,
-                searchResults = emptyList(),
-                selectedSeries = null,
-                chapters = emptyList(),
-                selectedChapterIds = emptySet()
+                searchResults = emptyList()
             )
         }
 
@@ -145,12 +79,8 @@ internal class MangaDiscoveryController(
                 mangaRepository.searchSeries(snapshot.selectedSourceId, query)
             }.onSuccess { results ->
                 mangaState.update { state ->
-                    state.copy(
+                    state.resetSelectedSeries().copy(
                         searchResults = results,
-                        selectedSeries = null,
-                        chapters = emptyList(),
-                        selectedChapterIds = emptySet(),
-                        lastReadChapterText = null,
                         isLoading = false,
                         browserVisible = false,
                         statusMessage = null,
@@ -185,14 +115,11 @@ internal class MangaDiscoveryController(
     fun openSeries(seriesId: String) {
         val sourceId = mangaState.value.selectedSourceId
         mangaState.update { state ->
-            state.copy(
+            state.resetSelectedSeries().copy(
                 isLoading = true,
                 browserVisible = false,
                 errorMessage = null,
-                statusMessage = null,
-                selectedSeries = null,
-                chapters = emptyList(),
-                selectedChapterIds = emptySet()
+                statusMessage = null
             )
         }
 
@@ -236,30 +163,12 @@ internal class MangaDiscoveryController(
             }
         }
     }
-
-    fun refreshAuthState(closeBrowserOnAuthenticated: Boolean = false) {
-        scope.launch {
-            val sourceId = mangaState.value.selectedSourceId
-            val authState = mangaRepository.authState(sourceId)
-            val isAuth =
-                authState is MangaAuthState.Authenticated || authState is MangaAuthState.NotRequired
-            var shouldShowLoginSuccess = false
-            mangaState.update { state ->
-                val closeBrowser = closeBrowserOnAuthenticated &&
-                    authState is MangaAuthState.Authenticated &&
-                    state.browserVisible &&
-                    !state.isAuthorized
-                if (closeBrowser) {
-                    shouldShowLoginSuccess = true
-                }
-                state.copy(
-                    isAuthorized = isAuth,
-                    browserVisible = if (closeBrowser) false else state.browserVisible
-                )
-            }
-            if (shouldShowLoginSuccess) {
-                showStatus(localizationManager.currentStrings.value.mangaStatusLoginSuccess)
-            }
-        }
-    }
 }
+
+private fun MangaUiState.resetSelectedSeries(): MangaUiState =
+    copy(
+        selectedSeries = null,
+        chapters = emptyList(),
+        selectedChapterIds = emptySet(),
+        lastReadChapterText = null
+    )
