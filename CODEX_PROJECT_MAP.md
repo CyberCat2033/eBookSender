@@ -22,7 +22,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `:feature:catalog` - PocketBook catalog screen, state, components (split into `CatalogComponents.kt`, `CatalogConstants.kt`, `CatalogExtensions.kt`), selection, deletion, and catalog ViewModel.
 - `:feature:manga` - manga pane, state, components (split into `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`, `MangaSubscriptionUpdatesDialog.kt`), selection behavior, and manga ViewModel.
 - `:feature:opds` - Web/OPDS screen, OPDS components (split into `OpdsComponents.kt`, `OpdsDialogs.kt`, `OpdsEntryItems.kt`), state, navigation, and ViewModel.
-- `:feature:settings` - settings screen, state, components and dialogs (split into `SettingsScreen.kt`, `SettingsComponents.kt`, `SettingsDialogs.kt`), language and folder/template settings, and ViewModel.
+- `:feature:settings` - settings screen, state, components and dialogs (split into `SettingsScreen.kt`, `SettingsComponents.kt`, `SettingsDialogs.kt`, `StorageSettingsSection.kt`, `NamingSettingsSection.kt`, `InterfaceSettingsSection.kt`, `MaintenanceSettingsSection.kt`), language and folder/template settings, and ViewModel.
 - `:feature:transfer` - send queue screen, upload item rows, transfer components (split into `TransferComponents.kt`, `TransferDialogs.kt`), state, and ViewModel.
 
 ## Important paths
