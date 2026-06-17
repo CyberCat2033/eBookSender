@@ -92,7 +92,12 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSelectionKeys.kt` - shared stable manga selection keys used by subscription update UI and background download completion.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaArchiveHelper.kt` - packaging tool for creating CBZ/ZIP files from downloaded manga page images.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaAdapter.kt` - Com-X source adapter; owns the `HtmlMangaSourceAdapter` contract and delegates HTTP/session work plus HTML parsing.
-- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaHttpClient.kt` - Com-X HTTP/session boundary for `HttpURLConnection`, WebView cookies, guard challenge handling, image downloads, and archive authorization/downloads.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaHttpClient.kt` - Com-X HTTP facade for text fetching and image downloads; delegates session, connection, Guard, and archive responsibilities to focused helpers.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHttpConnectionFactory.kt` - shared Com-X `HttpURLConnection` setup for headers, timeouts, user agent, referer, and cookies.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaSessionManager.kt` - Com-X WebView cookie/session boundary, authenticated-session detection, cookie capture, and auth-expiration checks.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxGuardChallengeClient.kt` - Com-X Guard challenge submission helper used when fetched HTML reports a challenge page.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxArchiveDownloader.kt` - Com-X chapter archive authorization, streaming download, progress reporting, and archive type detection.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHttpResponseHelpers.kt` - shared Com-X HTTP response/error snippet helpers.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHtmlParser.kt` - Com-X HTML parser facade; keeps guard detection while delegating search, series-page, and reader-page extraction.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxSeriesPageParser.kt` - Com-X series page parser for series details and chapter-list extraction from `window.__DATA__` or reader links.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxSearchParser.kt` - Com-X search parser for readed blocks, poster links, and JSON-LD search-result fallbacks.
