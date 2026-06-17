@@ -11,7 +11,7 @@ import java.io.IOException
 class PocketBookSenderApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        AppVisibilityTracker.register()
+        AppVisibilityTracker.register(this)
         installHttpCache()
     }
 

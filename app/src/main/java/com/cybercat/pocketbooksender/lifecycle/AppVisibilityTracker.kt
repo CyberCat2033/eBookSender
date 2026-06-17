@@ -1,25 +1,23 @@
 package com.cybercat.pocketbooksender.lifecycle
 
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
-import java.util.concurrent.atomic.AtomicBoolean
+import android.app.ActivityManager
+import android.app.Application
+import android.content.Context
 
-internal object AppVisibilityTracker : DefaultLifecycleObserver {
-    private val appVisible = AtomicBoolean(false)
+internal object AppVisibilityTracker {
+    private var appContext: Context? = null
 
     val isAppVisible: Boolean
-        get() = appVisible.get()
+        get() {
+            val context = appContext ?: return false
+            val info = ActivityManager.RunningAppProcessInfo()
+            runCatching {
+                ActivityManager.getMyMemoryState(info)
+            }
+            return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
+        }
 
-    fun register() {
-        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
-    }
-
-    override fun onStart(owner: LifecycleOwner) {
-        appVisible.set(true)
-    }
-
-    override fun onStop(owner: LifecycleOwner) {
-        appVisible.set(false)
+    fun register(application: Application) {
+        appContext = application.applicationContext
     }
 }
