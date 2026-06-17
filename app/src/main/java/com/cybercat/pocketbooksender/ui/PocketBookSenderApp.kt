@@ -342,8 +342,11 @@ private fun AppNavHost(
         composable(MainDestination.Send.route) {
             val transferViewModel: TransferViewModel = hiltViewModel()
             val transferState by transferViewModel.uiState.collectAsStateWithLifecycle()
+            val transferRuntimeState by
+                transferViewModel.transferRuntimeState.collectAsStateWithLifecycle()
             SendScreen(
                 state = transferState,
+                runtimeState = transferRuntimeState,
                 listState = sendListState,
                 onFtpInputChanged = transferViewModel::onFtpInputChanged,
                 onConnect = transferViewModel::connect,

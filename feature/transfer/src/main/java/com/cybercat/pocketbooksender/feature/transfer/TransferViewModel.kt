@@ -10,11 +10,11 @@ import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.TransferLauncher
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import com.cybercat.pocketbooksender.domain.FtpUrlParser
+import com.cybercat.pocketbooksender.localization.AppStrings
 import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.CatalogGroup
-import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
 import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.model.UploadItem
@@ -68,83 +68,76 @@ class TransferViewModel @Inject constructor(
         MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
     private var pendingClearQueueJob: Job? = null
 
-    @Suppress("UNCHECKED_CAST")
-    val uiState: StateFlow<TransferUiState> = combine<Any?, TransferUiState>(
+    val transferRuntimeState: StateFlow<TransferRuntimeUiState> = combine(
+        _isTransferActive,
+        _activeTransferItemIds,
+        _uploadProgressById
+    ) { isTransferActive, activeTransferItemIds, uploadProgressById ->
+        TransferRuntimeUiState(
+            isTransferActive = isTransferActive,
+            activeTransferItemIds = activeTransferItemIds,
+            uploadProgressById = uploadProgressById
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = TransferRuntimeUiState()
+    )
+
+    private val transferContentState = combine(
+        queueManager.queue,
+        settingsRepository.settings,
+        catalogRepository.catalog,
+        _ftpSuggestions
+    ) { queue, settings, catalog, suggestions ->
+        TransferContentState(
+            queue = queue,
+            settings = settings,
+            documentsTags = if (catalog.documents.isNotEmpty()) {
+                catalog.documents.map(CatalogGroup::name)
+            } else {
+                suggestions.first
+            },
+            mangaSeriesSuggestions = if (catalog.manga.isNotEmpty()) {
+                catalog.manga.map(MangaSeriesGroup::name)
+            } else {
+                suggestions.second
+            }
+        )
+    }
+
+    private val transferUiDetailsState = combine(
+        transferContentState,
+        _errorState,
+        _showVpnBypassDialog,
+        localizationManager.currentStrings
+    ) { content, errorState, showVpnBypassDialog, strings ->
+        TransferUiDetailsState(
+            queue = content.queue,
+            settings = content.settings,
+            errorMessage = mapErrorMessage(errorState, strings),
+            showVpnBypassDialog = showVpnBypassDialog,
+            documentsTags = content.documentsTags,
+            mangaSeriesSuggestions = content.mangaSeriesSuggestions
+        )
+    }
+
+    val uiState: StateFlow<TransferUiState> = combine(
         _ftpInput,
         _isConnecting,
         connectionManager.connectedDevice,
-        _isTransferActive,
-        _activeTransferItemIds,
-        _uploadProgressById,
-        queueManager.queue,
-        settingsRepository.settings,
-        _errorState,
-        _showVpnBypassDialog,
-        catalogRepository.catalog,
-        _ftpSuggestions,
-        localizationManager.currentStrings
-    ) { values ->
-        val ftpInput = values[0] as String
-        val isConnecting = values[1] as Boolean
-        val device = values[2] as RemoteDevice?
-        val isTransfer = values[3] as Boolean
-        val activeTransferItemIds = values[4] as Set<String>
-        val uploadProgressById = values[5] as Map<String, Float>
-        val queue = values[6] as List<UploadItem>
-        val settings = values[7] as AppSettings
-        val errorState = values[8] as FtpErrorState?
-        val showVpnBypassDialog = values[9] as Boolean
-        val catalog = values[10] as DeviceCatalog
-        val suggestions = values[11] as Pair<List<String>, List<String>>
-        val strings = values[12] as com.cybercat.pocketbooksender.localization.AppStrings
-
-        val error = when (errorState) {
-            is FtpErrorState.Connection -> ftpErrorMapper.mapConnectionError(
-                errorState.error,
-                errorState.device,
-                strings
-            )
-
-            is FtpErrorState.InvalidUrl -> ftpErrorMapper.mapInvalidFtpError(
-                errorState.error,
-                strings
-            )
-
-            is FtpErrorState.RawMessage -> errorState.message
-
-            is FtpErrorState.ConnectBeforeUpload -> strings.transferErrorConnectBeforeUpload
-
-            is FtpErrorState.QueueEmpty -> strings.transferErrorQueueEmpty
-
-            is FtpErrorState.NoPendingFiles -> strings.transferErrorNoPendingFiles
-
-            null -> null
-        }
-
-        val tags = if (catalog.documents.isNotEmpty()) {
-            catalog.documents.map(CatalogGroup::name)
-        } else {
-            suggestions.first
-        }
-        val series = if (catalog.manga.isNotEmpty()) {
-            catalog.manga.map(MangaSeriesGroup::name)
-        } else {
-            suggestions.second
-        }
-
+        transferUiDetailsState
+    ) { ftpInput, isConnecting, device, details ->
         TransferUiState(
             ftpInput = ftpInput,
             isConnecting = isConnecting,
             connectedDevice = device,
-            isTransferActive = isTransfer,
-            activeTransferItemIds = activeTransferItemIds,
-            uploadProgressById = uploadProgressById,
-            queue = queue,
-            settings = settings,
-            errorMessage = error,
-            showVpnBypassDialog = showVpnBypassDialog,
-            documentsTags = tags,
-            mangaSeriesSuggestions = series
+            queue = details.queue,
+            settings = details.settings,
+            errorMessage = details.errorMessage,
+            showVpnBypassDialog = details.showVpnBypassDialog,
+            documentsTags = details.documentsTags,
+            mangaSeriesSuggestions = details.mangaSeriesSuggestions
         )
     }.stateIn(
         scope = viewModelScope,
@@ -328,15 +321,11 @@ class TransferViewModel @Inject constructor(
         _showVpnBypassDialog.value = false
 
         val pendingIds = pending.mapTo(mutableSetOf()) { item -> item.id }
-        queueManager.updateQueue { current ->
-            current.map { item ->
-                if (item.id in pendingIds) {
-                    item.copy(status = UploadStatus.Pending, progress = 0.0f)
-                } else {
-                    item
-                }
-            }
-        }
+        updateQueuedTransferStatus(
+            itemIds = pendingIds,
+            status = UploadStatus.Pending,
+            progress = 0f
+        )
 
         transferLauncher.startTransfer(requestId)
     }
@@ -347,15 +336,11 @@ class TransferViewModel @Inject constructor(
                 _uploadProgressById.update { current ->
                     current + (event.itemId to 0f)
                 }
-                queueManager.updateQueue { current ->
-                    current.map { item ->
-                        if (item.id == event.itemId) {
-                            item.copy(status = UploadStatus.Uploading, progress = 0.0f)
-                        } else {
-                            item
-                        }
-                    }
-                }
+                updateQueuedTransferStatus(
+                    itemId = event.itemId,
+                    status = UploadStatus.Uploading,
+                    progress = 0f
+                )
             }
 
             is TransferEvent.ItemProgress -> {
@@ -372,30 +357,22 @@ class TransferViewModel @Inject constructor(
                 _uploadProgressById.update { current ->
                     current + (event.itemId to 1f)
                 }
-                queueManager.updateQueue { current ->
-                    current.map { item ->
-                        if (item.id == event.itemId) {
-                            item.copy(status = UploadStatus.Uploaded, progress = 1f)
-                        } else {
-                            item
-                        }
-                    }
-                }
+                updateQueuedTransferStatus(
+                    itemId = event.itemId,
+                    status = UploadStatus.Uploaded,
+                    progress = 1f
+                )
             }
 
             is TransferEvent.ItemFailed -> {
                 _uploadProgressById.update { current ->
                     current - event.itemId
                 }
-                queueManager.updateQueue { current ->
-                    current.map { item ->
-                        if (item.id == event.itemId) {
-                            item.copy(status = UploadStatus.Failed, progress = 0f)
-                        } else {
-                            item
-                        }
-                    }
-                }
+                updateQueuedTransferStatus(
+                    itemId = event.itemId,
+                    status = UploadStatus.Failed,
+                    progress = 0f
+                )
                 if (event.failureReason == TransferFailureReason.LocalNetworkBypassBlocked) {
                     _showVpnBypassDialog.value = true
                     _errorState.value = null
@@ -433,7 +410,80 @@ class TransferViewModel @Inject constructor(
             _ftpSuggestions.value = Pair(tags, series)
         }
     }
+
+    private fun mapErrorMessage(errorState: FtpErrorState?, strings: AppStrings): String? =
+        when (errorState) {
+            is FtpErrorState.Connection -> ftpErrorMapper.mapConnectionError(
+                errorState.error,
+                errorState.device,
+                strings
+            )
+
+            is FtpErrorState.InvalidUrl -> ftpErrorMapper.mapInvalidFtpError(
+                errorState.error,
+                strings
+            )
+
+            is FtpErrorState.RawMessage -> errorState.message
+
+            is FtpErrorState.ConnectBeforeUpload -> strings.transferErrorConnectBeforeUpload
+
+            is FtpErrorState.QueueEmpty -> strings.transferErrorQueueEmpty
+
+            is FtpErrorState.NoPendingFiles -> strings.transferErrorNoPendingFiles
+
+            null -> null
+        }
+
+    private fun updateQueuedTransferStatus(itemId: String, status: UploadStatus, progress: Float) {
+        updateQueuedTransferStatus(
+            itemIds = setOf(itemId),
+            status = status,
+            progress = progress
+        )
+    }
+
+    private fun updateQueuedTransferStatus(
+        itemIds: Set<String>,
+        status: UploadStatus,
+        progress: Float
+    ) {
+        if (itemIds.isEmpty()) return
+        queueManager.updateQueue { current ->
+            var changed = false
+            val updated = current.map { item ->
+                if (item.id !in itemIds) {
+                    item
+                } else {
+                    val updatedItem = if (item.status == status && item.progress == progress) {
+                        item
+                    } else {
+                        item.copy(status = status, progress = progress)
+                    }
+                    changed = changed || updatedItem !== item
+                    updatedItem
+                }
+            }
+            if (changed) updated else current
+        }
+    }
 }
+
+private data class TransferContentState(
+    val queue: List<UploadItem>,
+    val settings: AppSettings,
+    val documentsTags: List<String>,
+    val mangaSeriesSuggestions: List<String>
+)
+
+private data class TransferUiDetailsState(
+    val queue: List<UploadItem>,
+    val settings: AppSettings,
+    val errorMessage: String?,
+    val showVpnBypassDialog: Boolean,
+    val documentsTags: List<String>,
+    val mangaSeriesSuggestions: List<String>
+)
 
 sealed interface FtpErrorState {
     data class Connection(val error: Throwable, val device: RemoteDevice) : FtpErrorState

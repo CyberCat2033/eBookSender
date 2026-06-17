@@ -4,9 +4,8 @@ import com.cybercat.pocketbooksender.data.database.dao.MangaChapterHistoryDao
 import com.cybercat.pocketbooksender.data.database.dao.MangaSeriesBookmarkDao
 import com.cybercat.pocketbooksender.data.database.entity.MangaChapterHistoryEntity
 import com.cybercat.pocketbooksender.data.database.entity.MangaSeriesBookmarkEntity
-import com.cybercat.pocketbooksender.util.TimedCacheEntry
+import com.cybercat.pocketbooksender.util.ExpiringLruCache
 import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -22,9 +21,14 @@ class MangaRepository @Inject constructor(
     private val sourceRegistry: MangaSourceRegistry,
     private val chapterDownloader: MangaChapterDownloader
 ) {
-    private val searchCache =
-        ConcurrentHashMap<String, TimedCacheEntry<List<MangaSeriesSearchResult>>>()
-    private val seriesCache = ConcurrentHashMap<String, TimedCacheEntry<MangaSeriesPage>>()
+    private val searchCache = ExpiringLruCache<String, List<MangaSeriesSearchResult>>(
+        ttlMillis = SEARCH_CACHE_TTL_MILLIS,
+        maxSize = SEARCH_CACHE_MAX_ENTRIES
+    )
+    private val seriesCache = ExpiringLruCache<String, MangaSeriesPage>(
+        ttlMillis = SERIES_CACHE_TTL_MILLIS,
+        maxSize = SERIES_CACHE_MAX_ENTRIES
+    )
 
     val sources: List<MangaSourceSummary> = sourceRegistry.sources
 
@@ -70,20 +74,20 @@ class MangaRepository @Inject constructor(
 
     suspend fun searchSeries(sourceId: String, query: String): List<MangaSeriesSearchResult> {
         val key = "$sourceId:${query.trim().lowercase()}"
-        searchCache[key]?.takeIf { entry -> entry.isFresh(SEARCH_CACHE_TTL_MILLIS) }?.let { entry ->
-            return entry.value
+        searchCache.get(key)?.let { cachedResults ->
+            return cachedResults
         }
 
         val results = adapter(sourceId).searchSeries(query)
-        searchCache[key] = TimedCacheEntry(results)
+        searchCache.put(key, results)
         return results
     }
 
     suspend fun openSeries(sourceId: String, seriesId: String): MangaSeriesPage {
         val key = "$sourceId:${seriesId.normalizeCacheKey()}"
-        seriesCache[key]?.takeIf { entry -> entry.isFresh(SERIES_CACHE_TTL_MILLIS) }?.let { entry ->
-            saveSeriesSnapshot(entry.value.details)
-            return entry.value
+        seriesCache.get(key)?.let { cachedPage ->
+            saveSeriesSnapshot(cachedPage.details)
+            return cachedPage
         }
 
         val page = runCatching {
@@ -91,7 +95,7 @@ class MangaRepository @Inject constructor(
         }.getOrElse { error ->
             recoverMovedSavedSeries(sourceId, seriesId, error) ?: throw error
         }
-        seriesCache[key] = TimedCacheEntry(page)
+        seriesCache.put(key, page)
         saveSeriesSnapshot(page.details)
         return page
     }
@@ -313,7 +317,9 @@ class MangaRepository @Inject constructor(
 
     private companion object {
         const val SEARCH_CACHE_TTL_MILLIS = 5 * 60 * 1000L
+        const val SEARCH_CACHE_MAX_ENTRIES = 24
         const val SERIES_CACHE_TTL_MILLIS = 2 * 60 * 1000L
+        const val SERIES_CACHE_MAX_ENTRIES = 24
         const val MAX_MOVED_SERIES_CANDIDATES = 5
     }
 }

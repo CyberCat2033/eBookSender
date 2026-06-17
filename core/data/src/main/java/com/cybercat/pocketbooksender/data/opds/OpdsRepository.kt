@@ -4,14 +4,13 @@ import android.content.Context
 import com.cybercat.pocketbooksender.data.database.dao.OpdsSourceDao
 import com.cybercat.pocketbooksender.data.database.entity.OpdsSourceEntity
 import com.cybercat.pocketbooksender.domain.bookExtension
-import com.cybercat.pocketbooksender.util.TimedCacheEntry
+import com.cybercat.pocketbooksender.util.ExpiringLruCache
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -29,7 +28,10 @@ class OpdsRepository @Inject constructor(
     private val httpClient: OpdsHttpClient,
     private val sourceDao: OpdsSourceDao
 ) {
-    private val catalogCache = ConcurrentHashMap<String, TimedCacheEntry<OpdsCatalog>>()
+    private val catalogCache = ExpiringLruCache<String, OpdsCatalog>(
+        ttlMillis = CATALOG_CACHE_TTL_MILLIS,
+        maxSize = CATALOG_CACHE_MAX_ENTRIES
+    )
 
     fun clearCache() {
         catalogCache.clear()
@@ -119,10 +121,8 @@ class OpdsRepository @Inject constructor(
 
     suspend fun loadCatalog(url: String): OpdsCatalog = withContext(Dispatchers.IO) {
         val normalizedUrl = normalizeUrl(url)
-        catalogCache[normalizedUrl]?.takeIf { entry ->
-            entry.isFresh(CATALOG_CACHE_TTL_MILLIS)
-        }?.let { entry ->
-            return@withContext entry.value
+        catalogCache.get(normalizedUrl)?.let { cachedCatalog ->
+            return@withContext cachedCatalog
         }
 
         val connection = httpClient.openConnection(
@@ -133,7 +133,7 @@ class OpdsRepository @Inject constructor(
             val catalog = connection.inputStream.use { input ->
                 parser.parse(input).resolvedAgainst(normalizedUrl)
             }
-            catalogCache[normalizedUrl] = TimedCacheEntry(catalog)
+            catalogCache.put(normalizedUrl, catalog)
             catalog
         } finally {
             connection.disconnect()
@@ -360,6 +360,7 @@ class OpdsRepository @Inject constructor(
 
     private companion object {
         const val CATALOG_CACHE_TTL_MILLIS = 5 * 60 * 1000L
+        const val CATALOG_CACHE_MAX_ENTRIES = 32
         const val DEFAULT_DOWNLOAD_BUFFER_SIZE = 64 * 1024
         const val PROGRESS_REPORT_BYTES_INTERVAL = 256 * 1024L
         const val PROGRESS_REPORT_MIN_INTERVAL_MILLIS = 250L

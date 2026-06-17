@@ -56,6 +56,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun SendScreen(
     state: TransferUiState,
+    runtimeState: TransferRuntimeUiState,
     listState: LazyListState,
     onFtpInputChanged: (String) -> Unit,
     onConnect: () -> Unit,
@@ -77,11 +78,11 @@ fun SendScreen(
     var clearTrigger by remember { mutableStateOf(0) }
     var clearInProgress by remember { mutableStateOf(false) }
     val queue = state.queue
-    val activeTransferItemIds = state.activeTransferItemIds
+    val activeTransferItemIds = runtimeState.activeTransferItemIds
     val transferQueue = remember(queue, activeTransferItemIds) {
         queue.filter { item -> item.id in activeTransferItemIds }
     }
-    val isTransferProgressVisible = state.isTransferActive &&
+    val isTransferProgressVisible = runtimeState.isTransferActive &&
         transferQueue.any { item -> item.status != UploadStatus.Uploaded }
     val activeQueue = remember(queue) {
         queue.filterNot { it.status == UploadStatus.Uploaded }
@@ -102,7 +103,7 @@ fun SendScreen(
         displayedActiveQueue.filter { it.category == BookCategory.Manga }
     }
     val canBatchRenameManga =
-        activeMangaQueue.size > 1 && !state.isTransferActive && !clearInProgress
+        activeMangaQueue.size > 1 && !runtimeState.isTransferActive && !clearInProgress
     var showMangaBatchEditor by remember { mutableStateOf(false) }
     val uploadedQueue = remember(queue) {
         queue.filter { it.status == UploadStatus.Uploaded }
@@ -166,7 +167,7 @@ fun SendScreen(
                         val view = LocalView.current
                         IconButton(
                             onClick = {
-                                if (!clearInProgress && !state.isTransferActive) {
+                                if (!clearInProgress && !runtimeState.isTransferActive) {
                                     view.performHapticIfAllowed(
                                         context,
                                         state.settings.enableHaptics,
@@ -178,7 +179,7 @@ fun SendScreen(
                                     onClearQueue(queueClearDelayMillis(rowCount))
                                 }
                             },
-                            enabled = !clearInProgress && !state.isTransferActive
+                            enabled = !clearInProgress && !runtimeState.isTransferActive
                         ) {
                             Icon(
                                 Icons.Outlined.Delete,
@@ -216,7 +217,9 @@ fun SendScreen(
                     ActionRow(
                         canAddFiles = !clearInProgress,
                         canUpload =
-                            state.isConnected && hasUploadableFiles && !state.isTransferActive &&
+                            state.isConnected &&
+                                hasUploadableFiles &&
+                                !runtimeState.isTransferActive &&
                                 !clearInProgress,
                         enableHaptics = state.settings.enableHaptics,
                         onAddFiles = { picker.launch(arrayOf("*/*")) },
@@ -287,11 +290,12 @@ fun SendScreen(
                         ) { triggerRemove ->
                             UploadItemRow(
                                 item = item,
-                                progress = state.uploadProgressById[item.id] ?: item.progress,
+                                progress =
+                                    runtimeState.uploadProgressById[item.id] ?: item.progress,
                                 documentsTags = state.documentsTags,
                                 mangaSeriesSuggestions = state.mangaSeriesSuggestions,
                                 enableHaptics = state.settings.enableHaptics,
-                                canRemove = item.id !in state.activeTransferItemIds,
+                                canRemove = item.id !in runtimeState.activeTransferItemIds,
                                 settings = state.settings,
                                 onRemove = {
                                     visuallyRemovedActiveItemIds =
@@ -327,7 +331,7 @@ fun SendScreen(
             ) {
                 UploadProgressOverlay(
                     queue = transferQueue,
-                    progressById = state.uploadProgressById
+                    progressById = runtimeState.uploadProgressById
                 )
             }
         }
