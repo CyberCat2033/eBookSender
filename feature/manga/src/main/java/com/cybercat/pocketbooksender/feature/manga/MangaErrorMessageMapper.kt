@@ -1,0 +1,44 @@
+package com.cybercat.pocketbooksender.feature.manga
+
+import com.cybercat.pocketbooksender.data.manga.MANGA_AUTHENTICATION_EXPIRED_MESSAGE
+import com.cybercat.pocketbooksender.data.manga.MangaAuthenticationExpiredException
+import com.cybercat.pocketbooksender.localization.AppStrings
+
+internal object MangaErrorMessageMapper {
+    fun isAuthenticationExpired(error: Throwable): Boolean =
+        error is MangaAuthenticationExpiredException ||
+            error.message == MANGA_AUTHENTICATION_EXPIRED_MESSAGE
+
+    fun isAuthenticationExpired(message: String): Boolean =
+        message == MANGA_AUTHENTICATION_EXPIRED_MESSAGE
+
+    fun errorMessage(error: Throwable, fallback: String, strings: AppStrings): String =
+        if (isAuthenticationExpired(error)) {
+            strings.mangaErrorLoginExpired
+        } else {
+            error.message ?: fallback
+        }
+
+    fun errorMessage(message: String, strings: AppStrings): String = message
+        .replace(
+            MANGA_NETWORK_UNAVAILABLE_MESSAGE,
+            strings.get("manga_error_network_unavailable")
+        )
+        .replace(MANGA_AUTHENTICATION_EXPIRED_MESSAGE, strings.mangaErrorLoginExpired)
+
+    fun formatFailures(failedMessages: List<String>, strings: AppStrings): String? {
+        if (failedMessages.isEmpty()) return null
+        val visible = failedMessages.take(VISIBLE_FAILURE_LIMIT).joinToString("\n") { message ->
+            errorMessage(message, strings)
+        }
+        val hiddenCount = failedMessages.size - VISIBLE_FAILURE_LIMIT
+        return if (hiddenCount > 0) {
+            strings.get("manga_error_failures_summary", visible, hiddenCount)
+        } else {
+            visible
+        }
+    }
+
+    private const val MANGA_NETWORK_UNAVAILABLE_MESSAGE = "MANGA_NETWORK_UNAVAILABLE"
+    private const val VISIBLE_FAILURE_LIMIT = 3
+}
