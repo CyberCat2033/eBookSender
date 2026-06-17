@@ -33,6 +33,8 @@ class TransferForegroundService : Service() {
 
     @Inject lateinit var downloadCacheManager: DownloadCacheManager
 
+    @Inject lateinit var localFileResolver: LocalFileResolver
+
     private val transferNotifications by lazy {
         TransferNotificationManager(
             context = this,
@@ -190,7 +192,8 @@ class TransferForegroundService : Service() {
                 )
             }
 
-        val fileSize = preparedInput.size.takeIf { it > 0L } ?: getUriSize(uri)
+        val fileSize =
+            preparedInput.size.takeIf { it > 0L } ?: localFileResolver.resolveFileSize(uri)
 
         return try {
             ftpGateway.uploadAtomically(
@@ -226,7 +229,7 @@ class TransferForegroundService : Service() {
             return@withContext PreparedUploadInput(
                 uri = uri,
                 tempFile = null,
-                size = getUriSize(uri)
+                size = localFileResolver.resolveFileSize(uri)
             )
         }
 
@@ -259,45 +262,6 @@ class TransferForegroundService : Service() {
             tempFile.delete()
             throw error
         }
-    }
-
-    private fun getUriSize(uri: Uri): Long {
-        if (uri.scheme == "file") {
-            return try {
-                java.io.File(uri.path.orEmpty()).length()
-            } catch (e: Exception) {
-                -1L
-            }
-        }
-        var size = -1L
-        try {
-            contentResolver.query(
-                uri,
-                arrayOf(android.provider.OpenableColumns.SIZE),
-                null,
-                null,
-                null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val index = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                    if (index != -1) {
-                        size = cursor.getLong(index)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            // ignore
-        }
-        if (size <= 0L) {
-            try {
-                contentResolver.openAssetFileDescriptor(uri, "r")?.use {
-                    size = it.length
-                }
-            } catch (e: Exception) {
-                // ignore
-            }
-        }
-        return size
     }
 
     private fun notifyProgress(text: String, completed: Int, total: Int) {

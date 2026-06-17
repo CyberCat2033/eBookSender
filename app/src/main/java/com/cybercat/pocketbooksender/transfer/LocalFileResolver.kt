@@ -11,62 +11,75 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class LocalFileResolver @Inject constructor(
-    @ApplicationContext private val context: Context,
-) {
-    fun resolveDisplayName(uri: Uri): String? =
-        runCatching {
-            queryOpenableColumn(uri, OpenableColumns.DISPLAY_NAME) { index ->
-                getString(index)
-            }
-        }.getOrNull()
+class LocalFileResolver @Inject constructor(@ApplicationContext private val context: Context) {
+    fun resolveDisplayName(uri: Uri): String? = runCatching {
+        queryOpenableColumn(uri, OpenableColumns.DISPLAY_NAME) { index ->
+            getString(index)
+        }
+    }.getOrNull()
 
-    fun resolveFileSize(uri: Uri): Long =
-        runCatching {
+    fun resolveFileSize(uri: Uri): Long {
+        if (uri.scheme == "file") {
+            return try {
+                File(uri.path.orEmpty()).length()
+            } catch (e: Exception) {
+                -1L
+            }
+        }
+        var size = runCatching {
             queryOpenableColumn(uri, OpenableColumns.SIZE) { index ->
                 getLong(index)
-            } ?: 0L
-        }.getOrDefault(0L)
+            } ?: -1L
+        }.getOrDefault(-1L)
+
+        if (size <= 0L) {
+            try {
+                context.contentResolver.openAssetFileDescriptor(uri, "r")?.use {
+                    size = it.length
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+        return size
+    }
 
     fun persistReadPermission(uri: Uri) {
         try {
             context.contentResolver.takePersistableUriPermission(
                 uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
         } catch (_: SecurityException) {
         } catch (_: IllegalArgumentException) {
         }
     }
 
-    fun canRead(uri: Uri): Boolean =
-        when (uri.scheme?.lowercase()) {
-            null, "file" -> canReadFile(uri)
-            "content" -> canOpenInputStream(uri)
-            else -> canOpenInputStream(uri)
-        }
+    fun canRead(uri: Uri): Boolean = when (uri.scheme?.lowercase()) {
+        null, "file" -> canReadFile(uri)
+        "content" -> canOpenInputStream(uri)
+        else -> canOpenInputStream(uri)
+    }
 
     private inline fun <T> queryOpenableColumn(
         uri: Uri,
         columnName: String,
-        readColumn: Cursor.(Int) -> T,
-    ): T? =
-        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val index = cursor.getColumnIndex(columnName)
-            if (index >= 0 && cursor.moveToFirst()) {
-                cursor.readColumn(index)
-            } else {
-                null
-            }
+        readColumn: Cursor.(Int) -> T
+    ): T? = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+        val index = cursor.getColumnIndex(columnName)
+        if (index >= 0 && cursor.moveToFirst()) {
+            cursor.readColumn(index)
+        } else {
+            null
         }
+    }
 
     private fun canReadFile(uri: Uri): Boolean {
         val path = uri.path.orEmpty()
         return path.isNotBlank() && File(path).let { file -> file.isFile && file.canRead() }
     }
 
-    private fun canOpenInputStream(uri: Uri): Boolean =
-        runCatching {
-            context.contentResolver.openInputStream(uri)?.use { } ?: error("Cannot open source")
-        }.isSuccess
+    private fun canOpenInputStream(uri: Uri): Boolean = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { } ?: error("Cannot open source")
+    }.isSuccess
 }
