@@ -44,7 +44,7 @@
   "settings_haptic": "Haptic feedback",
   "settings_haptic_desc": "Vibrate on interactions",
   "settings_bypass_vpn": "Bypass VPN for PocketBook",
-  "settings_bypass_vpn_desc": "Use the local Wi-Fi/Ethernet route for PocketBook FTP and keep-alive checks",
+  "settings_bypass_vpn_desc": "Use the local Wi-Fi/Ethernet route for PocketBook FTP and library rescan requests",
   "settings_warn_disconnected": "Warn on disconnected rename",
   "settings_warn_disconnected_desc": "Warn when changing folder names while disconnected",
   

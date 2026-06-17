@@ -13,26 +13,27 @@ import kotlinx.coroutines.withContext
 
 @Singleton
 class PocketBookControlClient @Inject constructor(
-    private val localDeviceNetworkProvider: LocalDeviceNetworkProvider,
+    private val localDeviceNetworkProvider: LocalDeviceNetworkProvider
 ) {
-    suspend fun isAlive(device: PocketBookDevice): Boolean =
-        request(device = device, method = "GET", path = "alive").isSuccess
-
     suspend fun requestDatabaseRescan(device: PocketBookDevice): Result<Unit> =
         request(device = device, method = "POST", path = "rescan")
 
     private suspend fun request(
         device: PocketBookDevice,
         method: String,
-        path: String,
+        path: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val connection =
-                (localDeviceNetworkProvider.openConnection(device.controlUrl(path)) as HttpURLConnection)
+                (
+                    localDeviceNetworkProvider.openConnection(
+                        device.controlUrl(path)
+                    ) as HttpURLConnection
+                    )
                     .apply {
                         requestMethod = method
-                        connectTimeout = ConnectTimeoutMillis
-                        readTimeout = ReadTimeoutMillis
+                        connectTimeout = CONNECT_TIMEOUT_MILLIS
+                        readTimeout = READ_TIMEOUT_MILLIS
                         useCaches = false
                         setRequestProperty("Cache-Control", "no-cache")
                         setRequestProperty("Accept", "application/json")
@@ -62,12 +63,12 @@ class PocketBookControlClient @Inject constructor(
         URL("http", host, controlPort(), "/$path")
 
     private fun PocketBookDevice.controlPort(): Int =
-        (port + 1).takeIf { it in 1..MaxPort } ?: DefaultControlPort
+        (port + 1).takeIf { it in 1..MAX_PORT } ?: DEFAULT_CONTROL_PORT
 
     private companion object {
-        const val DefaultControlPort = 2122
-        const val MaxPort = 65_535
-        const val ConnectTimeoutMillis = 1_500
-        const val ReadTimeoutMillis = 2_000
+        const val DEFAULT_CONTROL_PORT = 2122
+        const val MAX_PORT = 65_535
+        const val CONNECT_TIMEOUT_MILLIS = 1_500
+        const val READ_TIMEOUT_MILLIS = 2_000
     }
 }
