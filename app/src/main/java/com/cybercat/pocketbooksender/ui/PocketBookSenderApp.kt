@@ -48,20 +48,15 @@ import com.cybercat.pocketbooksender.ui.navigation.MainDestination
 import com.cybercat.pocketbooksender.ui.navigation.MainDestinations
 import com.cybercat.pocketbooksender.feature.catalog.CatalogScreen
 import com.cybercat.pocketbooksender.feature.catalog.CatalogViewModel
-import com.cybercat.pocketbooksender.feature.catalog.CatalogUiState
 import com.cybercat.pocketbooksender.feature.settings.SettingsScreen
 import com.cybercat.pocketbooksender.feature.settings.SettingsViewModel
-import com.cybercat.pocketbooksender.feature.settings.SettingsUiState
 import com.cybercat.pocketbooksender.feature.transfer.SendScreen
 import com.cybercat.pocketbooksender.feature.transfer.TransferViewModel
-import com.cybercat.pocketbooksender.feature.transfer.TransferUiState
 import com.cybercat.pocketbooksender.feature.opds.OpdsScreen
 import com.cybercat.pocketbooksender.feature.opds.OpdsViewModel
-import com.cybercat.pocketbooksender.feature.opds.OpdsUiState
-import com.cybercat.pocketbooksender.feature.opds.WebContentMode
 import com.cybercat.pocketbooksender.feature.manga.MangaViewModel
-import com.cybercat.pocketbooksender.feature.manga.MangaUiState
 import com.cybercat.pocketbooksender.ui.theme.PocketBookSenderTheme
+import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -92,17 +87,9 @@ private class NavigationClickGate(
 fun PocketBookSenderApp(
     sharedUris: List<Uri>,
     onSharedUrisConsumed: () -> Unit,
-    transferViewModel: TransferViewModel = hiltViewModel(),
-    catalogViewModel: CatalogViewModel = hiltViewModel(),
-    opdsViewModel: OpdsViewModel = hiltViewModel(),
-    mangaViewModel: MangaViewModel = hiltViewModel(),
-    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    rootViewModel: RootViewModel = hiltViewModel(),
 ) {
-    val transferState by transferViewModel.uiState.collectAsStateWithLifecycle()
-    val catalogState by catalogViewModel.uiState.collectAsStateWithLifecycle()
-    val opdsState by opdsViewModel.uiState.collectAsStateWithLifecycle()
-    val mangaState by mangaViewModel.uiState.collectAsStateWithLifecycle()
-    val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
+    val settings by rootViewModel.settings.collectAsStateWithLifecycle()
 
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -118,7 +105,7 @@ fun PocketBookSenderApp(
 
     LaunchedEffect(sharedUris) {
         if (sharedUris.isNotEmpty()) {
-            transferViewModel.addUris(sharedUris)
+            rootViewModel.addUris(sharedUris)
             onSharedUrisConsumed()
         }
     }
@@ -130,18 +117,15 @@ fun PocketBookSenderApp(
                 MainDestination.Send.route -> sendListState.animateScrollToTop()
                 MainDestination.Catalog.route -> catalogListState.animateScrollToTop()
                 MainDestination.Opds.route -> {
-                    if (opdsState.webMode == WebContentMode.Manga) {
-                        mangaListState.animateScrollToTop()
-                    } else {
-                        opdsListState.animateScrollToTop()
-                    }
+                    opdsListState.animateScrollToTop()
+                    mangaListState.animateScrollToTop()
                 }
                 MainDestination.Settings.route -> settingsScrollState.animateScrollTo(0)
             }
         }
     }
 
-    val darkTheme = when (settingsState.settings.theme) {
+    val darkTheme = when (settings.theme) {
         AppTheme.Light -> false
         AppTheme.Dark -> true
         AppTheme.System -> androidx.compose.foundation.isSystemInDarkTheme()
@@ -149,7 +133,7 @@ fun PocketBookSenderApp(
 
     PocketBookSenderTheme(
         darkTheme = darkTheme,
-        useDynamicColor = settingsState.settings.useDynamicColor
+        useDynamicColor = settings.useDynamicColor
     ) {
         SyncSystemBarsWithTheme(darkTheme = darkTheme)
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -186,16 +170,7 @@ fun PocketBookSenderApp(
                 ) {
                     AppNavHost(
                         navController = navController,
-                        transferViewModel = transferViewModel,
-                        catalogViewModel = catalogViewModel,
-                        opdsViewModel = opdsViewModel,
-                        mangaViewModel = mangaViewModel,
-                        settingsViewModel = settingsViewModel,
-                        transferState = transferState,
-                        catalogState = catalogState,
-                        opdsState = opdsState,
-                        mangaState = mangaState,
-                        settingsState = settingsState,
+                        appSettings = settings,
                         sendListState = sendListState,
                         catalogListState = catalogListState,
                         opdsListState = opdsListState,
@@ -248,16 +223,7 @@ private suspend fun LazyListState.animateScrollToTop() {
 @Composable
 private fun AppNavHost(
     navController: NavHostController,
-    transferViewModel: TransferViewModel,
-    catalogViewModel: CatalogViewModel,
-    opdsViewModel: OpdsViewModel,
-    mangaViewModel: MangaViewModel,
-    settingsViewModel: SettingsViewModel,
-    transferState: TransferUiState,
-    catalogState: CatalogUiState,
-    opdsState: OpdsUiState,
-    mangaState: MangaUiState,
-    settingsState: SettingsUiState,
+    appSettings: AppSettings,
     sendListState: LazyListState,
     catalogListState: LazyListState,
     opdsListState: LazyListState,
@@ -285,6 +251,8 @@ private fun AppNavHost(
         },
     ) {
         composable(MainDestination.Send.route) {
+            val transferViewModel: TransferViewModel = hiltViewModel()
+            val transferState by transferViewModel.uiState.collectAsStateWithLifecycle()
             SendScreen(
                 state = transferState,
                 listState = sendListState,
@@ -303,10 +271,12 @@ private fun AppNavHost(
             )
         }
         composable(MainDestination.Catalog.route) {
+            val catalogViewModel: CatalogViewModel = hiltViewModel()
+            val catalogState by catalogViewModel.uiState.collectAsStateWithLifecycle()
             CatalogScreen(
                 state = catalogState,
                 isConnected = catalogState.connectedDevice != null,
-                enableHaptics = catalogState.settings.enableHaptics,
+                enableHaptics = appSettings.enableHaptics,
                 listState = catalogListState,
                 onRefresh = catalogViewModel::reloadDeviceCatalog,
                 onSetEditMode = catalogViewModel::setEditMode,
@@ -318,10 +288,15 @@ private fun AppNavHost(
             )
         }
         composable(MainDestination.Opds.route) {
+            val opdsViewModel: OpdsViewModel = hiltViewModel()
+            val opdsState by opdsViewModel.uiState.collectAsStateWithLifecycle()
+            val mangaViewModel: MangaViewModel = hiltViewModel()
+            val mangaState by mangaViewModel.uiState.collectAsStateWithLifecycle()
+
             val strings = com.cybercat.pocketbooksender.localization.LocalStrings.current
             val view = androidx.compose.ui.platform.LocalView.current
             val context = androidx.compose.ui.platform.LocalContext.current
-            val enableHaptics = settingsState.settings.enableHaptics
+            val enableHaptics = appSettings.enableHaptics
 
             OpdsScreen(
                 state = opdsState,
@@ -330,9 +305,11 @@ private fun AppNavHost(
                 onWebModeSelected = opdsViewModel::setWebContentMode,
                 onSaveSource = { title, url, username, password -> opdsViewModel.saveOpdsSource(title, url, username, password) },
                 onRemoveSource = opdsViewModel::removeOpdsSource,
-                onOpenSource = opdsViewModel::openOpdsUrl,
+                onOpenSource = opdsViewModel::openOpdsSource,
                 onOpenLink = opdsViewModel::openOpdsLink,
                 onBack = opdsViewModel::goBackOpds,
+                onPreviousPage = opdsViewModel::goPreviousOpdsPage,
+                onNextPage = opdsViewModel::goNextOpdsPage,
                 onSearch = opdsViewModel::searchOpds,
                 onDownload = opdsViewModel::downloadOpdsAcquisition,
                 onAuthUsernameChanged = opdsViewModel::onAuthUsernameChanged,
@@ -421,6 +398,8 @@ private fun AppNavHost(
             )
         }
         composable(MainDestination.Settings.route) {
+            val settingsViewModel: SettingsViewModel = hiltViewModel()
+            val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
             LaunchedEffect(Unit) {
                 settingsViewModel.scanLocales()
             }
