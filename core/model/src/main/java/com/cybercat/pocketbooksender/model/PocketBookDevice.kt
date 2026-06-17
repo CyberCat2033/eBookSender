@@ -7,5 +7,8 @@ data class PocketBookDevice(
     val rootPath: String = DEFAULT_FTP_ROOT_PATH
 ) {
     val ftpUrl: String
-        get() = "ftp://$username@$host:$port/"
+        get() {
+            val path = normalizeFtpRootPath(rootPath)
+            return "ftp://$username@$host:$port$path"
+        }
 }

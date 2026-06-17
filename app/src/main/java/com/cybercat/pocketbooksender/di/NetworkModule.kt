@@ -2,6 +2,8 @@ package com.cybercat.pocketbooksender.di
 
 import com.cybercat.pocketbooksender.data.ftp.CommonsNetFtpGateway
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.data.opds.OpdsCredentialsProvider
+import com.cybercat.pocketbooksender.data.opds.OpdsCredentialsProviderImpl
 import com.cybercat.pocketbooksender.metadata.LocalMetadataExtractor
 import com.cybercat.pocketbooksender.metadata.MetadataExtractor
 import dagger.Binds
@@ -20,4 +22,10 @@ abstract class NetworkModule {
     @Binds
     @Singleton
     abstract fun bindMetadataExtractor(impl: LocalMetadataExtractor): MetadataExtractor
+
+    @Binds
+    @Singleton
+    abstract fun bindOpdsCredentialsProvider(
+        impl: OpdsCredentialsProviderImpl
+    ): OpdsCredentialsProvider
 }

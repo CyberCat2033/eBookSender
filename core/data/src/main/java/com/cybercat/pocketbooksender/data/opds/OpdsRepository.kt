@@ -4,7 +4,6 @@ import android.content.Context
 import com.cybercat.pocketbooksender.data.database.dao.OpdsSourceDao
 import com.cybercat.pocketbooksender.data.database.entity.OpdsSourceEntity
 import com.cybercat.pocketbooksender.domain.bookExtension
-import com.cybercat.pocketbooksender.util.AppConstants
 import com.cybercat.pocketbooksender.util.TimedCacheEntry
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -14,8 +13,8 @@ import java.net.URI
 import java.net.URL
 import java.net.URLDecoder
 import java.net.URLEncoder
-import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +26,8 @@ import kotlinx.coroutines.withContext
 class OpdsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val parser: OpdsParser,
-    private val sourceDao: OpdsSourceDao,
+    private val httpClient: OpdsHttpClient,
+    private val sourceDao: OpdsSourceDao
 ) {
     private val catalogCache = ConcurrentHashMap<String, TimedCacheEntry<OpdsCatalog>>()
 
@@ -66,30 +66,35 @@ class OpdsRepository @Inject constructor(
                         title = entity.title,
                         url = entity.url,
                         username = entity.username,
-                        password = entity.password,
+                        password = entity.password
                     )
                 }
                 .distinctBy { source -> source.url.trimEnd('/').lowercase() }
         }
 
     suspend fun seedDefaultsIfNeeded() {
-        sourceDao.deleteById(LegacyProjectGutenbergSourceId)
+        sourceDao.deleteById(LEGACY_PROJECT_GUTENBERG_SOURCE_ID)
         if (sourceDao.count() > 0) return
 
-        DefaultSources.forEach { source ->
+        DEFAULT_SOURCES.forEach { source ->
             sourceDao.upsert(
                 OpdsSourceEntity(
                     id = source.id,
                     title = source.title,
                     url = source.url,
                     enabled = true,
-                    lastSyncedAt = null,
-                ),
+                    lastSyncedAt = null
+                )
             )
         }
     }
 
-    suspend fun addSource(title: String, url: String, username: String? = null, password: String? = null) {
+    suspend fun addSource(
+        title: String,
+        url: String,
+        username: String? = null,
+        password: String? = null
+    ) {
         val normalizedUrl = normalizeUrl(url)
         val sourceTitle = title.ifBlank {
             runCatching { URL(normalizedUrl).host.removePrefix("www.") }.getOrDefault("OPDS")
@@ -103,8 +108,8 @@ class OpdsRepository @Inject constructor(
                 enabled = true,
                 lastSyncedAt = null,
                 username = username,
-                password = password,
-            ),
+                password = password
+            )
         )
     }
 
@@ -114,13 +119,15 @@ class OpdsRepository @Inject constructor(
 
     suspend fun loadCatalog(url: String): OpdsCatalog = withContext(Dispatchers.IO) {
         val normalizedUrl = normalizeUrl(url)
-        catalogCache[normalizedUrl]?.takeIf { entry -> entry.isFresh(CatalogCacheTtlMillis) }?.let { entry ->
+        catalogCache[normalizedUrl]?.takeIf { entry ->
+            entry.isFresh(CATALOG_CACHE_TTL_MILLIS)
+        }?.let { entry ->
             return@withContext entry.value
         }
 
-        val connection = openConnection(
+        val connection = httpClient.openConnection(
             url = normalizedUrl,
-            accept = "application/atom+xml;profile=opds-catalog, application/atom+xml, application/xml, text/xml, */*",
+            accept = OPDS_CATALOG_ACCEPT
         )
         try {
             val catalog = connection.inputStream.use { input ->
@@ -136,19 +143,19 @@ class OpdsRepository @Inject constructor(
     suspend fun downloadPublication(
         baseUrl: String,
         entry: OpdsEntry,
-        acquisition: OpdsAcquisition,
+        acquisition: OpdsAcquisition
     ): File = withContext(Dispatchers.IO) {
-        val resolvedUrl = resolveUrl(baseUrl, acquisition.href)
-        val connection = openConnection(
+        val resolvedUrl = OpdsUrlResolver.resolveUrl(baseUrl, acquisition.href)
+        val connection = httpClient.openConnection(
             url = resolvedUrl,
-            accept = acquisition.type ?: "*/*",
+            accept = acquisition.type ?: "*/*"
         )
         try {
             val fileName = chooseFileName(
                 connection = connection,
                 url = resolvedUrl,
                 entry = entry,
-                acquisition = acquisition,
+                acquisition = acquisition
             )
             val outputDir = File(context.cacheDir, "opds").apply { mkdirs() }
             val outputFile = uniqueFile(outputDir, fileName)
@@ -165,156 +172,62 @@ class OpdsRepository @Inject constructor(
         }
     }
 
-    suspend fun buildSearchUrl(
-        baseUrl: String,
-        searchLink: OpdsLink,
-        query: String,
-    ): String = withContext(Dispatchers.IO) {
-        val resolvedLink = resolveTemplateUrl(baseUrl, searchLink.href)
-        val template = when {
-            searchLink.href.contains(SearchTermsPlaceholder) -> resolvedLink
-            searchLink.type.orEmpty().contains("opensearchdescription", ignoreCase = true) -> {
-                loadOpenSearchTemplate(resolvedLink)
-            }
-            searchLink.type.orEmpty().contains("application/atom+xml", ignoreCase = true) -> {
-                resolvedLink
-            }
-            else -> {
-                resolvedLink
-            }
-        }
+    suspend fun buildSearchUrl(baseUrl: String, searchLink: OpdsLink, query: String): String =
+        withContext(Dispatchers.IO) {
+            val resolvedLink = resolveTemplateUrl(baseUrl, searchLink.href)
+            val template = when {
+                searchLink.href.contains(SEARCH_TERMS_PLACEHOLDER) -> resolvedLink
 
-        expandSearchTemplate(template, query)
-    }
+                searchLink.type.orEmpty().contains("opensearchdescription", ignoreCase = true) -> {
+                    loadOpenSearchTemplate(resolvedLink)
+                }
+
+                searchLink.type.orEmpty().contains("application/atom+xml", ignoreCase = true) -> {
+                    resolvedLink
+                }
+
+                else -> {
+                    resolvedLink
+                }
+            }
+
+            expandSearchTemplate(template, query)
+        }
 
     suspend fun buildSearchUrls(
         baseUrl: String,
         searchLink: OpdsLink,
-        query: String,
+        query: String
     ): List<String> = withContext(Dispatchers.IO) {
         val bookSearchUrl = buildSearchUrl(baseUrl, searchLink, query)
         (listOf(bookSearchUrl) + bookSearchUrl.flibustaAuthorSearchUrls(query)).distinct()
     }
 
-    fun resolveUrl(baseUrl: String, href: String): String {
-        return runCatching {
-            URI(baseUrl).resolve(href).toString()
-        }.getOrElse {
-            href
-        }
-    }
+    fun resolveUrl(baseUrl: String, href: String): String =
+        OpdsUrlResolver.resolveUrl(baseUrl, href)
 
-    private fun OpdsCatalog.resolvedAgainst(baseUrl: String): OpdsCatalog =
-        copy(
-            links = links.map { it.resolvedAgainst(baseUrl) },
-            entries = entries.map { entry ->
-                entry.copy(
-                    coverHref = entry.coverHref?.let { resolveUrl(baseUrl, it) },
-                    navigation = entry.navigation.map { it.resolvedAgainst(baseUrl) },
-                    acquisitions = entry.acquisitions.map { acquisition ->
-                        acquisition.copy(href = resolveUrl(baseUrl, acquisition.href))
-                    },
-                )
-            },
-        )
-
-    private fun OpdsLink.resolvedAgainst(baseUrl: String): OpdsLink =
-        copy(href = resolveUrl(baseUrl, href))
-
-    private suspend fun getCredentialsForUrl(urlStr: String): Pair<String, String>? {
-        val requestHost = runCatching { URL(urlStr).host.lowercase() }.getOrNull() ?: return null
-        val sourcesList = sourceDao.getAllSources()
-        for (source in sourcesList) {
-            val sourceHost = runCatching { URL(source.url).host.lowercase() }.getOrNull()
-            if (sourceHost != null && sourceHost == requestHost) {
-                val username = source.username
-                val password = source.password
-                if (!username.isNullOrBlank() && !password.isNullOrBlank()) {
-                    return Pair(username, password)
+    private fun OpdsCatalog.resolvedAgainst(baseUrl: String): OpdsCatalog = copy(
+        links = links.map { it.resolvedAgainst(baseUrl) },
+        entries = entries.map { entry ->
+            entry.copy(
+                coverHref = entry.coverHref?.let { OpdsUrlResolver.resolveUrl(baseUrl, it) },
+                navigation = entry.navigation.map { it.resolvedAgainst(baseUrl) },
+                acquisitions = entry.acquisitions.map { acquisition ->
+                    acquisition.copy(
+                        href = OpdsUrlResolver.resolveUrl(baseUrl, acquisition.href)
+                    )
                 }
-            }
-        }
-        return null
-    }
-
-    private fun getCredentialsFromUrl(urlStr: String): Pair<String, String>? {
-        return runCatching {
-            val uri = URI(urlStr)
-            val userInfo = uri.userInfo
-            if (!userInfo.isNullOrBlank()) {
-                val parts = userInfo.split(':', limit = 2)
-                if (parts.size == 2) {
-                    Pair(parts[0], parts[1])
-                } else null
-            } else null
-        }.getOrNull()
-    }
-
-    private suspend fun openConnection(
-        url: String,
-        accept: String,
-        redirectsLeft: Int = MaxRedirects,
-    ): HttpURLConnection {
-        val credentials = getCredentialsFromUrl(url) ?: getCredentialsForUrl(url)
-        val cleanedUrl = if (url.contains("@")) {
-            runCatching {
-                val uri = URI(url)
-                val cleanUri = URI(uri.scheme, null, uri.host, uri.port, uri.path, uri.query, uri.fragment)
-                cleanUri.toString()
-            }.getOrDefault(url)
-        } else {
-            url
-        }
-
-        val connection = (URL(cleanedUrl).openConnection() as HttpURLConnection).apply {
-            instanceFollowRedirects = false
-            connectTimeout = ConnectTimeoutMillis
-            readTimeout = ReadTimeoutMillis
-            setRequestProperty("Accept", accept)
-            setRequestProperty("User-Agent", AppConstants.UserAgent)
-            if (credentials != null) {
-                val authString = "${credentials.first}:${credentials.second}"
-                val authHeaderValue = "Basic " + android.util.Base64.encodeToString(
-                    authString.toByteArray(Charsets.UTF_8),
-                    android.util.Base64.NO_WRAP
-                )
-                setRequestProperty("Authorization", authHeaderValue)
-            }
-        }
-
-        val code = connection.responseCode
-        if (code in 300..399 && redirectsLeft > 0) {
-            val location = connection.getHeaderField("Location")
-            connection.disconnect()
-
-            if (location.isNullOrBlank()) {
-                throw IOException("HTTP redirect without Location")
-            }
-
-            return openConnection(
-                url = resolveUrl(url, location),
-                accept = accept,
-                redirectsLeft = redirectsLeft - 1,
             )
         }
+    )
 
-        if (code == HttpURLConnection.HTTP_UNAUTHORIZED || code == HttpURLConnection.HTTP_FORBIDDEN) {
-            connection.disconnect()
-            throw OpdsAuthenticationRequiredException(url)
-        }
-        if (code !in 200..299) {
-            val message = connection.responseMessage?.takeIf { it.isNotBlank() }
-            connection.disconnect()
-            throw IOException("HTTP $code${message?.let { ": $it" }.orEmpty()}")
-        }
-
-        return connection
-    }
+    private fun OpdsLink.resolvedAgainst(baseUrl: String): OpdsLink =
+        copy(href = OpdsUrlResolver.resolveUrl(baseUrl, href))
 
     private suspend fun loadOpenSearchTemplate(url: String): String {
-        val connection = openConnection(
+        val connection = httpClient.openConnection(
             url = url,
-            accept = "application/opensearchdescription+xml, application/xml, text/xml, */*",
+            accept = "application/opensearchdescription+xml, application/xml, text/xml, */*"
         )
         try {
             val template = connection.inputStream.use { input ->
@@ -335,7 +248,7 @@ class OpdsRepository @Inject constructor(
         val escapedHref = href
             .replace("{", "%7B")
             .replace("}", "%7D")
-        return resolveUrl(baseUrl, escapedHref)
+        return OpdsUrlResolver.resolveUrl(baseUrl, escapedHref)
             .replace("%7B", "{")
             .replace("%7D", "}")
     }
@@ -354,7 +267,7 @@ class OpdsRepository @Inject constructor(
         connection: HttpURLConnection,
         url: String,
         entry: OpdsEntry,
-        acquisition: OpdsAcquisition,
+        acquisition: OpdsAcquisition
     ): String {
         val dispositionName = connection.getHeaderField("Content-Disposition")
             ?.let(::fileNameFromDisposition)
@@ -413,10 +326,9 @@ class OpdsRepository @Inject constructor(
         return candidate
     }
 
-    private fun String.sanitizeFileName(): String =
-        replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            .replace(Regex("\\s+"), "_")
-            .trim('_', '.', ' ')
+    private fun String.sanitizeFileName(): String = replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        .replace(Regex("\\s+"), "_")
+        .trim('_', '.', ' ')
 
     private fun OpdsAcquisition.extensionFromType(): String {
         val mime = type.orEmpty().lowercase()
@@ -429,27 +341,23 @@ class OpdsRepository @Inject constructor(
     }
 
     private companion object {
-        const val ConnectTimeoutMillis = 15_000
-        const val ReadTimeoutMillis = 45_000
-        const val CatalogCacheTtlMillis = 5 * 60 * 1000L
-        const val MaxRedirects = 5
-        const val SearchTermsPlaceholder = "{searchTerms"
-        const val LegacyProjectGutenbergSourceId = "project-gutenberg"
+        const val CATALOG_CACHE_TTL_MILLIS = 5 * 60 * 1000L
+        const val SEARCH_TERMS_PLACEHOLDER = "{searchTerms"
+        const val LEGACY_PROJECT_GUTENBERG_SOURCE_ID = "project-gutenberg"
+        const val OPDS_CATALOG_ACCEPT =
+            "application/atom+xml;profile=opds-catalog, application/atom+xml, application/xml, text/xml, */*"
 
-        val DefaultSources = listOf(
+        val DEFAULT_SOURCES = listOf(
             OpdsSource(
                 id = "flibusta-test",
                 title = "Flibusta",
-                url = "https://flub.flibusta.is/opds",
-            ),
+                url = "https://flub.flibusta.is/opds"
+            )
         )
     }
 }
 
-private fun expandSearchTemplate(
-    template: String,
-    query: String,
-): String {
+private fun expandSearchTemplate(template: String, query: String): String {
     val encodedQuery = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
     return template
         .replace(Regex("\\{searchTerms\\??\\}"), encodedQuery)
@@ -476,13 +384,11 @@ private fun String.flibustaAuthorSearchUrls(query: String): List<String> {
     return listOf("$baseUrl/opds/authorsindex/${authorPrefix.urlPathEncode()}")
 }
 
-private fun String.cleanAuthorSearchQuery(): String =
-    trim()
-        .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .lowercase()
+private fun String.cleanAuthorSearchQuery(): String = trim()
+    .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
+    .replace(Regex("\\s+"), " ")
+    .trim()
+    .lowercase()
 
-private fun String.urlPathEncode(): String =
-    URLEncoder.encode(this, Charsets.UTF_8.name())
-        .replace("+", "%20")
+private fun String.urlPathEncode(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
+    .replace("+", "%20")
