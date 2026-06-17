@@ -41,6 +41,14 @@ class OpdsViewModel @Inject constructor(
 
     private val mutableOpdsState = MutableStateFlow(OpdsUiState())
     private var initialCatalogLoadRequested = false
+    private val authController = OpdsAuthController(
+        opdsRepository = opdsRepository,
+        localizationManager = localizationManager,
+        opdsState = mutableOpdsState,
+        scope = viewModelScope,
+        showStatus = ::showOpdsStatus,
+        loadCatalog = ::loadOpdsCatalog
+    )
 
     val uiState: StateFlow<OpdsUiState> = combine(
         opdsRepository.sources,
@@ -137,83 +145,15 @@ class OpdsViewModel @Inject constructor(
     fun openCredentialsDialog(
         source: com.cybercat.pocketbooksender.data.opds.OpdsSource,
         urlToRetry: String? = null
-    ) {
-        mutableOpdsState.update { state ->
-            state.copy(
-                showAuthDialog = true,
-                authDialogSourceId = source.id,
-                authDialogSourceTitle = source.title,
-                authDialogUsername = source.username.orEmpty(),
-                authDialogPassword = source.password.orEmpty(),
-                authDialogUrlToRetry = urlToRetry
-            )
-        }
-    }
+    ) = authController.openCredentialsDialog(source, urlToRetry)
 
-    fun onAuthUsernameChanged(value: String) {
-        mutableOpdsState.update { it.copy(authDialogUsername = value) }
-    }
+    fun onAuthUsernameChanged(value: String) = authController.onAuthUsernameChanged(value)
 
-    fun onAuthPasswordChanged(value: String) {
-        mutableOpdsState.update { it.copy(authDialogPassword = value) }
-    }
+    fun onAuthPasswordChanged(value: String) = authController.onAuthPasswordChanged(value)
 
-    fun dismissCredentialsDialog() {
-        mutableOpdsState.update { state ->
-            state.copy(
-                showAuthDialog = false,
-                authDialogSourceId = null,
-                authDialogUrlToRetry = null
-            )
-        }
-    }
+    fun dismissCredentialsDialog() = authController.dismissCredentialsDialog()
 
-    fun saveCredentials() {
-        val snapshot = mutableOpdsState.value
-        val sourceId = snapshot.authDialogSourceId ?: return
-        val username = snapshot.authDialogUsername
-        val password = snapshot.authDialogPassword
-        val urlToRetry = snapshot.authDialogUrlToRetry
-
-        viewModelScope.launch {
-            val source =
-                opdsRepository.sources.first().firstOrNull { it.id == sourceId } ?: return@launch
-            runCatching {
-                opdsRepository.addSource(
-                    title = source.title,
-                    url = source.url,
-                    username = username.trim().ifBlank { null },
-                    password = password.trim().ifBlank { null }
-                )
-            }.onSuccess {
-                mutableOpdsState.update {
-                    it.copy(
-                        showAuthDialog = false,
-                        authDialogSourceId = null,
-                        authDialogUrlToRetry = null
-                    )
-                }
-                showOpdsStatus(
-                    localizationManager.currentStrings.value.opdsStatusCredentialsUpdated
-                )
-                if (urlToRetry != null) {
-                    loadOpdsCatalog(urlToRetry, snapshot.history)
-                }
-            }.onFailure { error ->
-                mutableOpdsState.update { state ->
-                    state.copy(
-                        errorMessage =
-                            error.message
-                                ?: localizationManager.currentStrings.value
-                                    .opdsErrorCannotSaveCredentials,
-                        showAuthDialog = false,
-                        authDialogSourceId = null,
-                        authDialogUrlToRetry = null
-                    )
-                }
-            }
-        }
-    }
+    fun saveCredentials() = authController.saveCredentials()
 
     fun removeOpdsSource(id: String) {
         viewModelScope.launch {
