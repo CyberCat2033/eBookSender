@@ -3,7 +3,6 @@ package com.cybercat.pocketbooksender.feature.manga
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
-import com.cybercat.pocketbooksender.data.manga.MangaAuthState
 import com.cybercat.pocketbooksender.data.manga.MangaChapterDownloadTarget
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadCoordinator
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadEvent
@@ -11,6 +10,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaDownloadLauncher
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadRequestKind
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
 import com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult
+import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.util.launchTemporaryStatus
 import com.cybercat.pocketbooksender.util.onFailureRethrowing
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,11 +31,19 @@ class MangaViewModel @Inject constructor(
     private val catalogRepository: DeviceCatalogRepository,
     private val downloadCoordinator: MangaDownloadCoordinator,
     private val downloadLauncher: MangaDownloadLauncher,
-    private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
+    private val localizationManager: LocalizationManager
 ) : ViewModel() {
 
     private val mutableMangaState = MutableStateFlow(MangaUiState())
     private var activeDownload: ActiveMangaDownload? = null
+    private val discoveryController = MangaDiscoveryController(
+        mangaRepository = mangaRepository,
+        catalogRepository = catalogRepository,
+        localizationManager = localizationManager,
+        mangaState = mutableMangaState,
+        scope = viewModelScope,
+        showStatus = ::showMangaStatus
+    )
 
     val uiState: StateFlow<MangaUiState> = combine(
         mangaRepository.downloadedStableKeys,
@@ -80,225 +88,35 @@ class MangaViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    fun onMangaSearchChanged(value: String) {
-        mutableMangaState.update {
-            it.copy(
-                searchInput = value,
-                errorMessage = null,
-                statusMessage = null
-            )
-        }
-    }
+    fun onMangaSearchChanged(value: String) = discoveryController.onSearchChanged(value)
 
-    fun selectMangaSource(sourceId: String) {
-        val source = mangaRepository.sources.firstOrNull { it.id == sourceId } ?: return
-        mutableMangaState.update { state ->
-            state.copy(
-                selectedSourceId = source.id,
-                browserUrl = source.homeUrl,
-                currentWebUrl = null,
-                searchResults = emptyList(),
-                selectedSeries = null,
-                chapters = emptyList(),
-                selectedChapterIds = emptySet(),
-                errorMessage = null,
-                statusMessage = null
-            )
-        }
-        refreshMangaAuthState()
-    }
+    fun selectMangaSource(sourceId: String) = discoveryController.selectSource(sourceId)
 
-    fun openMangaBrowser(url: String? = null) {
-        mutableMangaState.update { state ->
-            val homeUrl = mangaRepository.homeUrl(state.selectedSourceId)
-            state.copy(
-                browserVisible = true,
-                browserUrl = url ?: homeUrl,
-                currentWebUrl = state.currentWebUrl ?: homeUrl
-            )
-        }
-    }
+    fun openMangaBrowser(url: String? = null) = discoveryController.openBrowser(url)
 
-    fun closeMangaBrowser() {
-        mutableMangaState.update { state ->
-            state.copy(browserVisible = false)
-        }
-        refreshMangaAuthState()
-    }
+    fun closeMangaBrowser() = discoveryController.closeBrowser()
 
     fun performNativeLogin(
         targetUrl: String,
         username: String,
         password: String,
         doNotRemember: Boolean
-    ) {
-        val sourceId = mutableMangaState.value.selectedSourceId
-        val postBody = mangaRepository.buildLoginPostBody(
-            sourceId,
-            username,
-            password,
-            doNotRemember
-        )
-        if (postBody != null) {
-            mutableMangaState.update { state ->
-                state.copy(
-                    pendingLoginPost = MangaPendingLoginPost(targetUrl, postBody)
-                )
-            }
-        }
-    }
+    ) = discoveryController.performNativeLogin(
+        targetUrl = targetUrl,
+        username = username,
+        password = password,
+        doNotRemember = doNotRemember
+    )
 
-    fun clearPendingLoginPost() {
-        mutableMangaState.update { state ->
-            state.copy(pendingLoginPost = null)
-        }
-    }
+    fun clearPendingLoginPost() = discoveryController.clearPendingLoginPost()
 
-    fun goBackManga() {
-        mutableMangaState.update { state ->
-            state.copy(
-                selectedSeries = null,
-                chapters = emptyList(),
-                selectedChapterIds = emptySet(),
-                lastReadChapterText = null,
-                errorMessage = null,
-                statusMessage = null
-            )
-        }
-    }
+    fun goBackManga() = discoveryController.goBack()
 
-    fun syncMangaWebPage(url: String, html: String) {
-        mutableMangaState.update { state ->
-            state.copy(
-                currentWebUrl = url,
-                errorMessage = null
-            )
-        }
-        refreshMangaAuthState(closeBrowserOnAuthenticated = true)
-    }
+    fun syncMangaWebPage(url: String, html: String) = discoveryController.syncWebPage(url)
 
-    fun searchManga() {
-        val snapshot = mutableMangaState.value
-        val query = snapshot.searchInput.trim()
-        if (query.isBlank()) {
-            mutableMangaState.update {
-                it.copy(
-                    errorMessage = localizationManager.currentStrings.value.mangaErrorSearchEmpty
-                )
-            }
-            return
-        }
+    fun searchManga() = discoveryController.search()
 
-        mutableMangaState.update { state ->
-            state.copy(
-                isLoading = true,
-                browserVisible = false,
-                errorMessage = null,
-                statusMessage = null,
-                searchResults = emptyList(),
-                selectedSeries = null,
-                chapters = emptyList(),
-                selectedChapterIds = emptySet()
-            )
-        }
-
-        viewModelScope.launch {
-            runCatching {
-                mangaRepository.searchSeries(snapshot.selectedSourceId, query)
-            }.onSuccess { results ->
-                mutableMangaState.update { state ->
-                    state.copy(
-                        searchResults = results,
-                        selectedSeries = null,
-                        chapters = emptyList(),
-                        selectedChapterIds = emptySet(),
-                        lastReadChapterText = null,
-                        isLoading = false,
-                        browserVisible = false,
-                        statusMessage = null,
-                        errorMessage = null
-                    )
-                }
-                if (results.isEmpty()) {
-                    showMangaStatus(
-                        localizationManager.currentStrings.value.mangaStatusNoMangaFound
-                    )
-                }
-            }.onFailureRethrowing { error ->
-                val strings = localizationManager.currentStrings.value
-                mutableMangaState.update { state ->
-                    state.copy(
-                        isLoading = false,
-                        browserVisible = false,
-                        isAuthorized = state.isAuthorized &&
-                            !MangaErrorMessageMapper.isAuthenticationExpired(error),
-                        errorMessage = MangaErrorMessageMapper.errorMessage(
-                            error = error,
-                            fallback = strings.mangaErrorCannotSearch,
-                            strings = strings
-                        ),
-                        statusMessage = null
-                    )
-                }
-            }
-        }
-    }
-
-    fun openMangaSeries(seriesId: String) {
-        val sourceId = mutableMangaState.value.selectedSourceId
-        mutableMangaState.update { state ->
-            state.copy(
-                isLoading = true,
-                browserVisible = false,
-                errorMessage = null,
-                statusMessage = null,
-                selectedSeries = null,
-                chapters = emptyList(),
-                selectedChapterIds = emptySet()
-            )
-        }
-
-        viewModelScope.launch {
-            runCatching {
-                mangaRepository.openSeries(sourceId, seriesId)
-            }.onSuccess { seriesPage ->
-                val lastRead = MangaCatalogProgressFormatter.lastReadChapterText(
-                    series = seriesPage.details,
-                    catalog = catalogRepository.catalog.value,
-                    strings = localizationManager.currentStrings.value
-                )
-                mutableMangaState.update { state ->
-                    state.copy(
-                        selectedSeries = seriesPage.details,
-                        selectedSeriesScrollRequest = state.selectedSeriesScrollRequest + 1,
-                        chapters = seriesPage.chapters,
-                        selectedChapterIds = emptySet(),
-                        lastReadChapterText = lastRead,
-                        isLoading = false,
-                        browserVisible = false,
-                        errorMessage = null
-                    )
-                }
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
-                val strings = localizationManager.currentStrings.value
-                mutableMangaState.update { state ->
-                    state.copy(
-                        isLoading = false,
-                        browserVisible = false,
-                        isAuthorized = state.isAuthorized &&
-                            !MangaErrorMessageMapper.isAuthenticationExpired(error),
-                        errorMessage = MangaErrorMessageMapper.errorMessage(
-                            error = error,
-                            fallback = strings.mangaErrorCannotOpenSeries,
-                            strings = strings
-                        ),
-                        statusMessage = null
-                    )
-                }
-            }
-        }
-    }
+    fun openMangaSeries(seriesId: String) = discoveryController.openSeries(seriesId)
 
     fun toggleMangaChapter(chapterId: String, selected: Boolean) {
         mutableMangaState.update { state ->
@@ -669,31 +487,8 @@ class MangaViewModel @Inject constructor(
         }
     }
 
-    fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) {
-        viewModelScope.launch {
-            val sourceId = mutableMangaState.value.selectedSourceId
-            val authState = mangaRepository.authState(sourceId)
-            val isAuth =
-                authState is MangaAuthState.Authenticated || authState is MangaAuthState.NotRequired
-            var shouldShowLoginSuccess = false
-            mutableMangaState.update { state ->
-                val closeBrowser = closeBrowserOnAuthenticated &&
-                    authState is MangaAuthState.Authenticated &&
-                    state.browserVisible &&
-                    !state.isAuthorized
-                if (closeBrowser) {
-                    shouldShowLoginSuccess = true
-                }
-                state.copy(
-                    isAuthorized = isAuth,
-                    browserVisible = if (closeBrowser) false else state.browserVisible
-                )
-            }
-            if (shouldShowLoginSuccess) {
-                showMangaStatus(localizationManager.currentStrings.value.mangaStatusLoginSuccess)
-            }
-        }
-    }
+    fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) =
+        discoveryController.refreshAuthState(closeBrowserOnAuthenticated)
 
     private fun showMangaStatus(message: String) {
         viewModelScope.launchTemporaryStatus(
