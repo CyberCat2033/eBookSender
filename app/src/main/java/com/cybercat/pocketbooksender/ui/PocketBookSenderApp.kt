@@ -351,7 +351,7 @@ private fun AppNavHost(
                 onDisconnect = transferViewModel::disconnect,
                 onAddUris = transferViewModel::addUris,
                 onRemoveItem = transferViewModel::removeItem,
-                onClearQueue = transferViewModel::clearQueue,
+                onClearQueue = transferViewModel::clearQueueAfterDelay,
                 onCategoryChanged = transferViewModel::updateCategory,
                 onDocumentsTagChanged = transferViewModel::updateDocumentsTag,
                 onMangaSeriesChanged = transferViewModel::updateMangaSeries,

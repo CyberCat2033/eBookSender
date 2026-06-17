@@ -34,6 +34,8 @@ import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -68,6 +70,7 @@ class TransferViewModel @Inject constructor(
     private val _errorState = MutableStateFlow<FtpErrorState?>(null)
     private val _ftpSuggestions =
         MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
+    private var pendingClearQueueJob: Job? = null
 
     @Suppress("UNCHECKED_CAST")
     val uiState: StateFlow<TransferUiState> = combine<Any?, TransferUiState>(
@@ -230,7 +233,21 @@ class TransferViewModel @Inject constructor(
     }
 
     fun clearQueue() {
+        pendingClearQueueJob?.cancel()
+        pendingClearQueueJob = null
         queueManager.clearQueue()
+    }
+
+    fun clearQueueAfterDelay(delayMillis: Long) {
+        pendingClearQueueJob?.cancel()
+        if (delayMillis <= 0L) {
+            clearQueue()
+            return
+        }
+        pendingClearQueueJob = viewModelScope.launch {
+            delay(delayMillis)
+            queueManager.clearQueue()
+        }
     }
 
     fun updateCategory(id: String, category: BookCategory) {

@@ -63,7 +63,7 @@ fun SendScreen(
     onDisconnect: () -> Unit,
     onAddUris: (List<Uri>) -> Unit,
     onRemoveItem: (String) -> Unit,
-    onClearQueue: () -> Unit,
+    onClearQueue: (delayMillis: Long) -> Unit,
     onCategoryChanged: (String, BookCategory) -> Unit,
     onDocumentsTagChanged: (String, String) -> Unit,
     onMangaSeriesChanged: (String, String) -> Unit,
@@ -74,7 +74,6 @@ fun SendScreen(
     val adaptiveLayout = LocalAdaptiveLayoutInfo.current
     var clearTrigger by remember { mutableStateOf(0) }
     var clearInProgress by remember { mutableStateOf(false) }
-    var clearAnimatedRowCount by remember { mutableStateOf(0) }
     val queue = state.queue
     val activeTransferItemIds = state.activeTransferItemIds
     val transferQueue = remember(queue, activeTransferItemIds) {
@@ -137,13 +136,6 @@ fun SendScreen(
         )
     }
 
-    LaunchedEffect(clearTrigger) {
-        if (clearTrigger > 0) {
-            delay(queueClearDelayMillis(clearAnimatedRowCount))
-            onClearQueue()
-        }
-    }
-
     LaunchedEffect(activeItemIds) {
         visuallyRemovedActiveItemIds = visuallyRemovedActiveItemIds intersect activeItemIds
     }
@@ -170,10 +162,10 @@ fun SendScreen(
                                         state.settings.enableHaptics,
                                         HapticFeedbackConstants.LONG_PRESS
                                     )
-                                    clearAnimatedRowCount =
-                                        animatedUploadedSectionCount + activeRows.size
+                                    val rowCount = animatedUploadedSectionCount + activeRows.size
                                     clearInProgress = true
                                     clearTrigger++
+                                    onClearQueue(queueClearDelayMillis(rowCount))
                                 }
                             },
                             enabled = !clearInProgress && !state.isTransferActive
