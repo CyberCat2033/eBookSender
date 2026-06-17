@@ -179,7 +179,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - OPDS feed navigation uses `OpdsNavigation.kt` helpers; hierarchy back and page navigation are separate. `OpdsPagingState` drives the bottom page bar, including local previous-page history when a catalog page does not expose `previous`/`prev`.
 - Settings motion: `feature/settings/.../SettingsScreen.kt`, `SettingsComponents.kt`, and `SettingsDialogs.kt`.
   - Editable setting trailing action uses `AnimatedContent` with 120 ms fade-in and 90 ms fade-out between save icon and spinner.
-  - Focused editable settings fields use `BringIntoViewRequester` with the settings `ScrollState` and IME padding so the active input scrolls into view after focus/keyboard changes.
+  - Settings IME padding is applied inside the scroll chain so focused inputs can move above the keyboard without a fixed spacer over the screen.
   - Folder rename warning and language dialogs reuse `AnimatedAlertDialog`.
   - Maintenance section uses `animateContentSize` with a medium-low spring.
   - Maintenance status messages use `AnimatedContent`: expand/fade in when present, shrink/fade out when cleared, and auto-clear after 3 seconds.

@@ -11,7 +11,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,8 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -37,7 +34,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,11 +62,7 @@ import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlin.math.roundToInt
-import kotlinx.coroutines.delay
 
-private const val FOCUSED_SETTINGS_FIELD_SCROLL_DELAY_MILLIS = 160L
-
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ValidatedSettingsField(
     value: String,
@@ -95,15 +87,6 @@ internal fun ValidatedSettingsField(
     val strings = LocalStrings.current
     val isChanged = textFieldValue.text != value
     val canCommitChange = isChanged && !isSaving && actionEnabled
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
-    var isFieldFocused by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isFieldFocused) {
-        if (isFieldFocused) {
-            delay(FOCUSED_SETTINGS_FIELD_SCROLL_DELAY_MILLIS)
-            bringIntoViewRequester.bringIntoView()
-        }
-    }
 
     fun commitChange(clearFocus: Boolean) {
         if (!canCommitChange) return
@@ -123,9 +106,7 @@ internal fun ValidatedSettingsField(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .bringIntoViewRequester(bringIntoViewRequester)
                 .onFocusChanged { focusState ->
-                    isFieldFocused = focusState.isFocused
                     onFocusChanged(focusState.isFocused)
                 },
         label = { Text(label) },

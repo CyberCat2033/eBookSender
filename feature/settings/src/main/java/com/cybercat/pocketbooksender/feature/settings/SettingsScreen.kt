@@ -145,8 +145,8 @@ fun SettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .imePadding()
                     .verticalScroll(scrollState)
+                    .imePadding()
                     .padding(
                         horizontal = adaptiveLayout.screenHorizontalPadding,
                         vertical = 16.dp
