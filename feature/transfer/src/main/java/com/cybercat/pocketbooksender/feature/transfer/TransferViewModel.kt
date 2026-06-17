@@ -60,21 +60,26 @@ class TransferViewModel @Inject constructor(
     private val _ftpInput = MutableStateFlow("")
     private val _isConnecting = MutableStateFlow(false)
     private val _isTransferActive = MutableStateFlow(false)
+    private val _isTransferCanceling = MutableStateFlow(false)
     private val _activeTransferItemIds = MutableStateFlow<Set<String>>(emptySet())
     private val _currentUploadProgress = MutableStateFlow(ActiveUploadProgress())
+    private val _statusMessage = MutableStateFlow<String?>(null)
     private val _errorState = MutableStateFlow<FtpErrorState?>(null)
     private val _showVpnBypassDialog = MutableStateFlow(false)
     private val _ftpSuggestions =
         MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
     private var pendingClearQueueJob: Job? = null
+    private var activeTransferRequestId: String? = null
 
     val transferRuntimeState: StateFlow<TransferRuntimeUiState> = combine(
         _isTransferActive,
+        _isTransferCanceling,
         _activeTransferItemIds,
         _currentUploadProgress
-    ) { isTransferActive, activeTransferItemIds, currentUploadProgress ->
+    ) { isTransferActive, isTransferCanceling, activeTransferItemIds, currentUploadProgress ->
         TransferRuntimeUiState(
             isTransferActive = isTransferActive,
+            isTransferCanceling = isTransferCanceling,
             activeTransferItemIds = activeTransferItemIds,
             currentUploadItemId = currentUploadProgress.itemId,
             currentUploadProgress = currentUploadProgress.progress
@@ -110,12 +115,14 @@ class TransferViewModel @Inject constructor(
     private val transferUiDetailsState = combine(
         transferContentState,
         _errorState,
+        _statusMessage,
         _showVpnBypassDialog,
         localizationManager.currentStrings
-    ) { content, errorState, showVpnBypassDialog, strings ->
+    ) { content, errorState, statusMessage, showVpnBypassDialog, strings ->
         TransferUiDetailsState(
             queue = content.queue,
             settings = content.settings,
+            statusMessage = statusMessage,
             errorMessage = mapErrorMessage(errorState, strings),
             showVpnBypassDialog = showVpnBypassDialog,
             documentsTags = content.documentsTags,
@@ -135,6 +142,7 @@ class TransferViewModel @Inject constructor(
             connectedDevice = device,
             queue = details.queue,
             settings = details.settings,
+            statusMessage = details.statusMessage,
             errorMessage = details.errorMessage,
             showVpnBypassDialog = details.showVpnBypassDialog,
             documentsTags = details.documentsTags,
@@ -179,6 +187,7 @@ class TransferViewModel @Inject constructor(
         val parsedDevice = FtpUrlParser.parse(rawLink)
             .getOrElse { error ->
                 _isConnecting.value = false
+                _statusMessage.value = null
                 _errorState.value = FtpErrorState.InvalidUrl(error)
                 return
             }
@@ -191,6 +200,7 @@ class TransferViewModel @Inject constructor(
         _isConnecting.value = true
         connectionManager.disconnect()
         _ftpInput.value = device.ftpUrl
+        _statusMessage.value = null
         _errorState.value = null
         _showVpnBypassDialog.value = false
 
@@ -211,6 +221,7 @@ class TransferViewModel @Inject constructor(
                         _showVpnBypassDialog.value = true
                         _errorState.value = null
                     } else {
+                        _statusMessage.value = null
                         _errorState.value = FtpErrorState.Connection(error, device)
                     }
                 }
@@ -235,6 +246,7 @@ class TransferViewModel @Inject constructor(
     }
 
     fun addUris(uris: List<Uri>) {
+        _statusMessage.value = null
         queueManager.addUris(uris)
     }
 
@@ -279,11 +291,13 @@ class TransferViewModel @Inject constructor(
     fun uploadAll() {
         val device = uiState.value.connectedDevice
         if (device == null) {
+            _statusMessage.value = null
             _errorState.value = FtpErrorState.ConnectBeforeUpload
             return
         }
         val items = uiState.value.queue
         if (items.isEmpty()) {
+            _statusMessage.value = null
             _errorState.value = FtpErrorState.QueueEmpty
             return
         }
@@ -293,6 +307,7 @@ class TransferViewModel @Inject constructor(
                 it.status == UploadStatus.Skipped
         }
         if (pending.isEmpty()) {
+            _statusMessage.value = null
             _errorState.value = FtpErrorState.NoPendingFiles
             return
         }
@@ -318,6 +333,9 @@ class TransferViewModel @Inject constructor(
         _activeTransferItemIds.value = pending.map { it.id }.toSet()
         _currentUploadProgress.value = ActiveUploadProgress()
         _isTransferActive.value = true
+        _isTransferCanceling.value = false
+        activeTransferRequestId = requestId
+        _statusMessage.value = null
         _errorState.value = null
         _showVpnBypassDialog.value = false
 
@@ -329,6 +347,22 @@ class TransferViewModel @Inject constructor(
         )
 
         transferLauncher.startTransfer(requestId)
+    }
+
+    fun cancelUpload() {
+        if (_isTransferCanceling.value) return
+        val requestId = activeTransferRequestId ?: return
+        _isTransferCanceling.value = true
+        _statusMessage.value = null
+        _errorState.value = null
+
+        val canceledPendingRequest = transferCoordinator.cancelPendingRequest(requestId)
+        if (canceledPendingRequest != null) {
+            handleTransferEvent(TransferEvent.Canceled(uploaded = 0, failed = 0))
+            return
+        }
+
+        transferLauncher.cancelTransfer(requestId)
     }
 
     private fun handleTransferEvent(event: TransferEvent) {
@@ -369,6 +403,7 @@ class TransferViewModel @Inject constructor(
             }
 
             is TransferEvent.ItemFailed -> {
+                _isTransferCanceling.value = false
                 _currentUploadProgress.update { current ->
                     if (current.itemId == event.itemId) ActiveUploadProgress() else current
                 }
@@ -381,6 +416,7 @@ class TransferViewModel @Inject constructor(
                     _showVpnBypassDialog.value = true
                     _errorState.value = null
                 } else {
+                    _statusMessage.value = null
                     _errorState.value = FtpErrorState.RawMessage(event.message)
                 }
             }
@@ -389,8 +425,28 @@ class TransferViewModel @Inject constructor(
                 _isTransferActive.value = false
                 _activeTransferItemIds.value = emptySet()
                 _currentUploadProgress.value = ActiveUploadProgress()
+                _isTransferCanceling.value = false
+                activeTransferRequestId = null
                 val device = connectionManager.connectedDevice.value
-                if (device != null) {
+                if (device != null && event.uploaded > 0) {
+                    refreshRemoteFolderSuggestions(device)
+                    viewModelScope.launch {
+                        catalogRepository.refresh(device)
+                    }
+                }
+            }
+
+            is TransferEvent.Canceled -> {
+                val activeItemIds = _activeTransferItemIds.value
+                restoreCanceledQueuedItems(activeItemIds)
+                _isTransferActive.value = false
+                _activeTransferItemIds.value = emptySet()
+                _currentUploadProgress.value = ActiveUploadProgress()
+                _isTransferCanceling.value = false
+                activeTransferRequestId = null
+                _statusMessage.value = transferCanceledMessage(event.uploaded)
+                val device = connectionManager.connectedDevice.value
+                if (device != null && event.uploaded > 0) {
                     refreshRemoteFolderSuggestions(device)
                     viewModelScope.launch {
                         catalogRepository.refresh(device)
@@ -471,6 +527,44 @@ class TransferViewModel @Inject constructor(
             if (changed) updated else current
         }
     }
+
+    private fun restoreCanceledQueuedItems(itemIds: Set<String>) {
+        if (itemIds.isEmpty()) return
+        queueManager.updateQueue { current ->
+            var changed = false
+            val updated = current.map { item ->
+                if (item.id !in itemIds) {
+                    item
+                } else {
+                    val restoredItem = when (item.status) {
+                        UploadStatus.Uploading -> item.copy(
+                            status = UploadStatus.Pending,
+                            progress = 0f
+                        )
+
+                        UploadStatus.Pending,
+                        UploadStatus.Preparing -> item.copy(progress = 0f)
+
+                        UploadStatus.Uploaded,
+                        UploadStatus.Failed,
+                        UploadStatus.Skipped -> item
+                    }
+                    changed = changed || restoredItem != item
+                    restoredItem
+                }
+            }
+            if (changed) updated else current
+        }
+    }
+
+    private fun transferCanceledMessage(uploaded: Int): String {
+        val strings = localizationManager.currentStrings.value
+        return if (uploaded > 0) {
+            strings.get("transfer_status_upload_canceled_with_files", uploaded)
+        } else {
+            strings.get("transfer_status_upload_canceled")
+        }
+    }
 }
 
 private data class TransferContentState(
@@ -483,6 +577,7 @@ private data class TransferContentState(
 private data class TransferUiDetailsState(
     val queue: List<UploadItem>,
     val settings: AppSettings,
+    val statusMessage: String?,
     val errorMessage: String?,
     val showVpnBypassDialog: Boolean,
     val documentsTags: List<String>,

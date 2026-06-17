@@ -8,13 +8,16 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class TransferLauncherImpl @Inject constructor(
-    @ApplicationContext private val context: Context,
-) : TransferLauncher {
+class TransferLauncherImpl @Inject constructor(@ApplicationContext private val context: Context) :
+    TransferLauncher {
     override fun startTransfer(requestId: String) {
         ContextCompat.startForegroundService(
             context,
             TransferForegroundService.createIntent(context, requestId)
         )
+    }
+
+    override fun cancelTransfer(requestId: String) {
+        context.startService(TransferForegroundService.createCancelIntent(context, requestId))
     }
 }

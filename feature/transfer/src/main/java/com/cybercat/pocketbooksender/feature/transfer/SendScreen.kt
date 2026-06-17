@@ -29,7 +29,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -49,6 +48,8 @@ import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
+import com.cybercat.pocketbooksender.ui.StatusMessage
+import com.cybercat.pocketbooksender.ui.StatusMessageHost
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
 
@@ -71,7 +72,8 @@ fun SendScreen(
     onQueuedMangaSeriesChanged: (String?, String) -> Unit,
     onDismissVpnBypassDialog: () -> Unit,
     onDisableVpnBypass: () -> Unit,
-    onUploadAll: () -> Unit
+    onUploadAll: () -> Unit,
+    onCancelUpload: () -> Unit
 ) {
     val strings = LocalStrings.current
     val adaptiveLayout = LocalAdaptiveLayoutInfo.current
@@ -250,12 +252,17 @@ fun SendScreen(
 
                 if (state.errorMessage != null) {
                     item {
-                        Text(
+                        StatusMessage(
                             text = state.errorMessage,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium
+                            isError = true
                         )
                     }
+                }
+
+                item {
+                    StatusMessageHost(
+                        text = if (state.errorMessage == null) state.statusMessage else null
+                    )
                 }
 
                 item {
@@ -331,7 +338,10 @@ fun SendScreen(
                 UploadProgressOverlay(
                     queue = transferQueue,
                     currentUploadItemId = runtimeState.currentUploadItemId,
-                    currentUploadProgress = runtimeState.currentUploadProgress
+                    currentUploadProgress = runtimeState.currentUploadProgress,
+                    isCanceling = runtimeState.isTransferCanceling,
+                    enableHaptics = state.settings.enableHaptics,
+                    onCancel = onCancelUpload
                 )
             }
         }

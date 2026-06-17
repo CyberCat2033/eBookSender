@@ -36,6 +36,12 @@ class TransferCoordinator @Inject constructor() {
         return if (pendingRequest.compareAndSet(current, null)) current else null
     }
 
+    fun cancelPendingRequest(id: String?): TransferRequest? {
+        val current = pendingRequest.get() ?: return null
+        if (current.id != id) return null
+        return if (pendingRequest.compareAndSet(current, null)) current else null
+    }
+
     fun emit(event: TransferEvent) {
         _events.tryEmit(event)
     }
@@ -74,6 +80,8 @@ sealed interface TransferEvent {
     ) : TransferEvent
 
     data class Completed(val uploaded: Int, val failed: Int) : TransferEvent
+
+    data class Canceled(val uploaded: Int, val failed: Int) : TransferEvent
 }
 
 enum class TransferFailureReason {

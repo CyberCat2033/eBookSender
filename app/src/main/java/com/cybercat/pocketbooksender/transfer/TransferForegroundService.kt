@@ -12,13 +12,16 @@ import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.network.isLocalNetworkBypassBlocked
 import com.cybercat.pocketbooksender.power.ScopedWakeLock
 import dagger.hilt.android.AndroidEntryPoint
-import java.io.File
-import java.io.InputStream
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -45,6 +48,8 @@ class TransferForegroundService : Service() {
         )
     }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var activeRequestId: String? = null
+    private var activeTransferJob: Job? = null
     private val transferWakeLock by lazy {
         ScopedWakeLock(
             context = this,
@@ -57,6 +62,11 @@ class TransferForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         transferNotifications.ensureNotificationChannel()
+
+        if (intent?.action == ACTION_CANCEL_TRANSFER) {
+            cancelActiveTransfer(intent.getStringExtra(EXTRA_REQUEST_ID), startId)
+            return START_NOT_STICKY
+        }
 
         val request = transferCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
         if (request == null) {
@@ -82,10 +92,13 @@ class TransferForegroundService : Service() {
         )
 
         transferWakeLock.acquire()
-        serviceScope.launch {
+        activeRequestId = request.id
+        activeTransferJob = serviceScope.launch {
             try {
                 runTransfer(request)
             } finally {
+                activeRequestId = null
+                activeTransferJob = null
                 transferWakeLock.release()
                 stopSelf(startId)
             }
@@ -96,17 +109,37 @@ class TransferForegroundService : Service() {
 
     override fun onDestroy() {
         transferWakeLock.release()
+        activeTransferJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    private fun cancelActiveTransfer(requestId: String?, startId: Int) {
+        val activeId = activeRequestId
+        val activeJob = activeTransferJob
+        if (activeJob == null || activeId == null) {
+            stopSelf(startId)
+            return
+        }
+        if (requestId == null || requestId == activeId) {
+            transferNotifications.notifyProgress(
+                localizationManager.currentStrings.value.get("transfer_notification_canceling"),
+                completed = 0,
+                total = 0
+            )
+            activeJob.cancel()
+        }
     }
 
     private suspend fun runTransfer(request: TransferRequest) {
         var uploaded = 0
         var failed = 0
         val total = request.items.size
+        var canceled = false
 
         try {
             request.items.forEachIndexed { index, item ->
+                currentCoroutineContext().ensureActive()
                 transferCoordinator.emit(
                     TransferEvent.ItemStarted(
                         itemId = item.id,
@@ -137,6 +170,9 @@ class TransferForegroundService : Service() {
                     downloadCacheManager.deleteDownloadSource(item.sourceUri)
                 } else {
                     val error = result.exceptionOrNull()
+                    if (error is CancellationException) {
+                        throw error
+                    }
                     val message = error?.message
                         ?: localizationManager.currentStrings.value.transferErrorFtpUploadFailed
                     failed += 1
@@ -159,17 +195,31 @@ class TransferForegroundService : Service() {
                     total
                 )
             }
+        } catch (error: CancellationException) {
+            canceled = true
         } finally {
-            if (uploaded > 0) {
-                deviceLibraryRefresher.refreshAndWait(request.device)
+            withContext(NonCancellable) {
+                if (uploaded > 0) {
+                    deviceLibraryRefresher.refreshAndWait(request.device)
+                }
+                if (canceled) {
+                    transferCoordinator.emit(
+                        TransferEvent.Canceled(
+                            uploaded = uploaded,
+                            failed = failed
+                        )
+                    )
+                    showCanceledNotification(uploaded)
+                } else {
+                    transferCoordinator.emit(
+                        TransferEvent.Completed(
+                            uploaded = uploaded,
+                            failed = failed
+                        )
+                    )
+                    showFinishedNotification(uploaded, failed)
+                }
             }
-            transferCoordinator.emit(
-                TransferEvent.Completed(
-                    uploaded = uploaded,
-                    failed = failed
-                )
-            )
-            showFinishedNotification(uploaded, failed)
         }
     }
 
@@ -181,6 +231,7 @@ class TransferForegroundService : Service() {
         val preparedInput = runCatching {
             uploadPreparationUseCase.prepareUploadInput(uri, item)
         }.getOrElse { error ->
+            if (error is CancellationException) throw error
             return Result.failure(error)
         }
         val input = preparedInput.openStream() ?: contentResolver.openInputStream(preparedInput.uri)
@@ -234,6 +285,11 @@ class TransferForegroundService : Service() {
         transferNotifications.showFinishedNotification(uploaded, failed)
     }
 
+    private fun showCanceledNotification(uploaded: Int) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        transferNotifications.showCanceledNotification(uploaded)
+    }
+
     private fun Throwable.localNetworkBypassFailureReason(): TransferFailureReason? =
         if (isLocalNetworkBypassBlocked()) {
             TransferFailureReason.LocalNetworkBypassBlocked
@@ -243,10 +299,17 @@ class TransferForegroundService : Service() {
 
     companion object {
         private const val EXTRA_REQUEST_ID = "request_id"
+        private const val ACTION_CANCEL_TRANSFER =
+            "com.cybercat.pocketbooksender.transfer.CANCEL_TRANSFER"
         private const val TRANSFER_WAKE_LOCK_TIMEOUT_MILLIS = 60 * 60 * 1000L
 
         fun createIntent(context: Context, requestId: String): Intent =
             Intent(context, TransferForegroundService::class.java)
+                .putExtra(EXTRA_REQUEST_ID, requestId)
+
+        fun createCancelIntent(context: Context, requestId: String): Intent =
+            Intent(context, TransferForegroundService::class.java)
+                .setAction(ACTION_CANCEL_TRANSFER)
                 .putExtra(EXTRA_REQUEST_ID, requestId)
     }
 }

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.WifiTethering
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -46,6 +47,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -501,8 +503,13 @@ fun UploadProgressOverlay(
     queue: List<UploadItem>,
     currentUploadItemId: String?,
     currentUploadProgress: Float,
+    isCanceling: Boolean,
+    enableHaptics: Boolean,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val view = LocalView.current
     val currentItem = currentUploadItemId?.let { itemId ->
         queue.firstOrNull { item -> item.id == itemId }
     } ?: queue.firstOrNull { item -> item.status == UploadStatus.Uploading }
@@ -546,30 +553,65 @@ fun UploadProgressOverlay(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = if (uploadedCount ==
-                        totalCount
-                    ) {
-                        strings.sendUploadComplete
-                    } else {
-                        strings.sendSendingStatus
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                if (isCanceling) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = contentColor,
+                        strokeWidth = 3.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Upload,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = contentColor
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = when {
+                            isCanceling -> strings.get("send_upload_canceling")
+                            uploadedCount == totalCount -> strings.sendUploadComplete
+                            else -> strings.sendSendingStatus
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Text(
                     text = "${(overallProgress * 100).toInt()}%",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = contentColor
                 )
+                OutlinedIconButton(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            HapticFeedbackConstants.REJECT
+                        )
+                        onCancel()
+                    },
+                    modifier = Modifier.size(48.dp),
+                    enabled = !isCanceling
+                ) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = strings.get("send_upload_cancel"),
+                        tint = if (isCanceling) {
+                            contentColor.copy(alpha = 0.38f)
+                        } else {
+                            contentColor
+                        }
+                    )
+                }
             }
 
             LinearProgressIndicator(

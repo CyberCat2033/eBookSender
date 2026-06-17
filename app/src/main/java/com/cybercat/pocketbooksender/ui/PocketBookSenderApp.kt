@@ -361,7 +361,8 @@ private fun AppNavHost(
                 onQueuedMangaSeriesChanged = transferViewModel::updateQueuedMangaSeries,
                 onDismissVpnBypassDialog = transferViewModel::dismissVpnBypassDialog,
                 onDisableVpnBypass = transferViewModel::disableVpnBypassForLocalConnections,
-                onUploadAll = transferViewModel::uploadAll
+                onUploadAll = transferViewModel::uploadAll,
+                onCancelUpload = transferViewModel::cancelUpload
             )
         }
         composable(MainDestination.Catalog.route) {

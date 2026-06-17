@@ -7,7 +7,12 @@ import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
 import java.io.InputStream
 import java.io.OutputStream
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.apache.commons.net.ftp.FTP
 import org.apache.commons.net.ftp.FTPClient
@@ -36,37 +41,72 @@ class CommonsNetFtpGateway @Inject constructor(
         remoteRelativePath: String,
         input: InputStream,
         onProgress: ((Long) -> Unit)?
-    ): Result<Unit> = withFtpClient(device) { client ->
-        runCatching {
-            val normalized = remoteRelativePath.trimStart('/')
-            val directory = normalized.substringBeforeLast('/', missingDelimiterValue = "")
-            val fileName = normalized.substringAfterLast('/')
-            val tempName = ".$fileName.uploading"
-            val tempPath = if (directory.isBlank()) tempName else "$directory/$tempName"
+    ): Result<Unit> {
+        val normalized = remoteRelativePath.trimStart('/').toSafeRelativeFtpPath()
+        val directory = normalized.substringBeforeLast('/', missingDelimiterValue = "")
+        val fileName = normalized.substringAfterLast('/')
+        val tempName = ".$fileName.uploading"
+        val tempPath = if (directory.isBlank()) tempName else "$directory/$tempName"
 
-            if (directory.isNotBlank()) {
-                client.makeDirectories(directory)
-            }
+        return try {
+            withFtpClient(device) { client ->
+                try {
+                    if (directory.isNotBlank()) {
+                        client.makeDirectories(directory)
+                    }
 
-            val wrappedInput = if (onProgress != null) {
-                ProgressInputStream(input, onProgress)
-            } else {
-                input
-            }
+                    val uploadContext = currentCoroutineContext()
+                    val cancellationHandle = uploadContext[Job]?.invokeOnCompletion { cause ->
+                        if (cause is CancellationException) {
+                            runCatching { client.disconnect() }
+                        }
+                    }
 
-            wrappedInput.use { stream ->
-                check(client.storeFile(tempPath, stream)) {
-                    "FTP upload failed: ${client.replyString}"
+                    try {
+                        ProgressInputStream(
+                            delegate = input,
+                            onProgress = onProgress,
+                            ensureActive = { uploadContext.ensureActive() }
+                        ).use { stream ->
+                            check(client.storeFile(tempPath, stream)) {
+                                "FTP upload failed: ${client.replyString}"
+                            }
+                        }
+                    } catch (error: Throwable) {
+                        if (error is CancellationException) throw error
+                        if (uploadContext[Job]?.isCancelled == true) {
+                            throw CancellationException("FTP upload canceled").also {
+                                it.initCause(error)
+                            }
+                        }
+                        throw error
+                    } finally {
+                        cancellationHandle?.dispose()
+                    }
+
+                    uploadContext.ensureActive()
+
+                    if (client.listFiles(normalized).isNotEmpty()) {
+                        client.deleteFile(normalized)
+                    }
+
+                    uploadContext.ensureActive()
+
+                    check(client.rename(tempPath, normalized)) {
+                        "FTP rename failed: ${client.replyString}"
+                    }
+
+                    Result.success(Unit)
+                } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    Result.failure(error)
                 }
             }
-
-            if (client.listFiles(normalized).isNotEmpty()) {
-                client.deleteFile(normalized)
+        } catch (error: CancellationException) {
+            withContext(NonCancellable) {
+                deleteFile(device, tempPath)
             }
-
-            check(client.rename(tempPath, normalized)) {
-                "FTP rename failed: ${client.replyString}"
-            }
+            throw error
         }
     }
 
@@ -176,7 +216,7 @@ class CommonsNetFtpGateway @Inject constructor(
 
     private suspend fun <T> withFtpClient(
         device: RemoteDevice,
-        block: (FTPClient) -> Result<T>
+        block: suspend (FTPClient) -> Result<T>
     ): Result<T> = withContext(Dispatchers.IO) {
         val client = FTPClient()
 
@@ -205,6 +245,7 @@ class CommonsNetFtpGateway @Inject constructor(
 
             block(client)
         } catch (error: Throwable) {
+            if (error is CancellationException) throw error
             Result.failure(error)
         } finally {
             if (client.isConnected) {
@@ -255,21 +296,25 @@ class CommonsNetFtpGateway @Inject constructor(
 
 private class ProgressInputStream(
     private val delegate: InputStream,
-    private val onProgress: (Long) -> Unit
+    private val onProgress: ((Long) -> Unit)?,
+    private val ensureActive: () -> Unit
 ) : InputStream() {
     private var bytesRead = 0L
     private var lastUpdate = 0L
 
     private fun reportProgress(force: Boolean = false) {
+        val progressCallback = onProgress ?: return
         val now = System.currentTimeMillis()
         if (force || now - lastUpdate >= 100) { // Throttle updates to every 100ms
-            onProgress(bytesRead)
+            progressCallback(bytesRead)
             lastUpdate = now
         }
     }
 
     override fun read(): Int {
+        ensureActive()
         val b = delegate.read()
+        ensureActive()
         if (b != -1) {
             bytesRead++
             reportProgress()
@@ -280,7 +325,9 @@ private class ProgressInputStream(
     override fun read(b: ByteArray): Int = read(b, 0, b.size)
 
     override fun read(b: ByteArray, off: Int, len: Int): Int {
+        ensureActive()
         val result = delegate.read(b, off, len)
+        ensureActive()
         if (result != -1) {
             bytesRead += result
             reportProgress()
@@ -295,7 +342,9 @@ private class ProgressInputStream(
 
     override fun available(): Int = delegate.available()
     override fun skip(n: Long): Long {
+        ensureActive()
         val result = delegate.skip(n)
+        ensureActive()
         if (result > 0) {
             bytesRead += result
             reportProgress()

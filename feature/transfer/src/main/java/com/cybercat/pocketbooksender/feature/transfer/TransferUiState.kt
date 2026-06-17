@@ -10,6 +10,7 @@ data class TransferUiState(
     val connectedDevice: RemoteDevice? = null,
     val queue: List<UploadItem> = emptyList(),
     val settings: AppSettings = AppSettings(),
+    val statusMessage: String? = null,
     val errorMessage: String? = null,
     val showVpnBypassDialog: Boolean = false,
     val documentsTags: List<String> = emptyList(),

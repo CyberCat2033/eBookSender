@@ -69,6 +69,29 @@ internal class TransferNotificationManager(
         )
     }
 
+    fun showCanceledNotification(uploaded: Int) {
+        if (AppVisibilityTracker.isAppVisible) return
+
+        val strings = localizationManager.currentStrings.value
+        val text = if (uploaded > 0) {
+            strings.get("transfer_notification_canceled_with_uploads", uploaded)
+        } else {
+            strings.get("transfer_notification_canceled")
+        }
+
+        notificationManager().notify(
+            nextCompletionNotificationId(),
+            NotificationCompat.Builder(appContext, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_upload)
+                .setContentTitle(strings.get("transfer_notification_canceled_title"))
+                .setContentText(text)
+                .setContentIntent(contentIntent())
+                .setAutoCancel(true)
+                .setOngoing(false)
+                .build()
+        )
+    }
+
     private fun contentIntent(): PendingIntent {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         return PendingIntent.getActivity(
