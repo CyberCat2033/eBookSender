@@ -197,32 +197,69 @@ class OpdsViewModel @Inject constructor(
         openOpdsUrl(_opdsState.value.urlInput)
     }
 
-    fun openOpdsUrl(url: String) {
-        val trimmedUrl = url.trim()
-        if (trimmedUrl.isBlank()) {
-            _opdsState.update {
-                it.copy(
-                    errorMessage = localizationManager.currentStrings.value.opdsErrorUrlEmpty,
-                    statusMessage = null,
-                )
-            }
-            return
-        }
+    fun openOpdsSource(url: String) {
+        val trimmedUrl = validateOpdsUrl(url) ?: return
+        openOpdsUrl(
+            url = trimmedUrl,
+            history = emptyList(),
+            paging = OpdsPagingState(),
+        )
+    }
 
+    fun openOpdsUrl(url: String) {
+        val trimmedUrl = validateOpdsUrl(url) ?: return
         val previous = _opdsState.value
-        loadOpdsCatalog(
+        openOpdsUrl(
             url = trimmedUrl,
             history = previous.currentUrl?.let { currentUrl ->
                 previous.history + OpdsHistoryEntry(
                     title = previous.catalog?.title ?: localizationManager.currentStrings.value.opdsHistoryFallbackTitle,
                     url = currentUrl,
+                    paging = previous.paging.toSnapshot(),
                 )
             } ?: previous.history,
+            paging = OpdsPagingState(),
+        )
+    }
+
+    private fun openOpdsUrl(
+        url: String,
+        history: List<OpdsHistoryEntry>,
+        paging: OpdsPagingState,
+    ) {
+        loadOpdsCatalog(
+            url = url,
+            history = history,
+            paging = paging,
         )
     }
 
     fun openOpdsLink(link: OpdsLink) {
-        openOpdsUrl(link.href)
+        when {
+            link.isNextLink() -> goNextOpdsPage()
+            link.isPreviousLink() -> goPreviousOpdsPage()
+            link.isStartLink() -> {
+                openOpdsUrl(
+                    url = link.href,
+                    history = emptyList(),
+                    paging = OpdsPagingState(),
+                )
+            }
+            else -> openOpdsUrl(link.href)
+        }
+    }
+
+    private fun validateOpdsUrl(url: String): String? {
+        val trimmedUrl = url.trim()
+        if (trimmedUrl.isNotBlank()) return trimmedUrl
+
+        _opdsState.update {
+            it.copy(
+                errorMessage = localizationManager.currentStrings.value.opdsErrorUrlEmpty,
+                statusMessage = null,
+            )
+        }
+        return null
     }
 
     fun goBackOpds() {
@@ -231,6 +268,36 @@ class OpdsViewModel @Inject constructor(
         loadOpdsCatalog(
             url = previous.url,
             history = snapshot.history.dropLast(1),
+            paging = previous.paging.toPagingState(),
+        )
+    }
+
+    fun goPreviousOpdsPage() {
+        val snapshot = _opdsState.value
+        val previousPage = snapshot.paging.previousPages.lastOrNull() ?: return
+        loadOpdsCatalog(
+            url = previousPage.url,
+            history = snapshot.history,
+            paging = snapshot.paging.copy(
+                currentPage = (snapshot.paging.currentPage - 1).coerceAtLeast(1),
+                previousPages = snapshot.paging.previousPages.dropLast(1),
+                nextLink = null,
+            ),
+        )
+    }
+
+    fun goNextOpdsPage() {
+        val snapshot = _opdsState.value
+        val nextLink = snapshot.paging.nextLink ?: return
+        val currentPage = snapshot.currentPageHistoryEntry() ?: return
+        loadOpdsCatalog(
+            url = nextLink.href,
+            history = snapshot.history,
+            paging = snapshot.paging.copy(
+                currentPage = snapshot.paging.currentPage + 1,
+                previousPages = snapshot.paging.previousPages + currentPage,
+                nextLink = null,
+            ),
         )
     }
 
@@ -294,15 +361,18 @@ class OpdsViewModel @Inject constructor(
                 }
                 catalogs
             }.onSuccess { catalogs ->
+                val mergedCatalog = mergeSearchCatalogs(query, catalogs.map { (_, catalog) -> catalog })
                 _opdsState.update { state ->
                     state.copy(
                         currentUrl = catalogs.first().first,
                         urlInput = catalogs.first().first,
-                        catalog = mergeSearchCatalogs(query, catalogs.map { (_, catalog) -> catalog }),
+                        catalog = mergedCatalog,
                         history = snapshot.history + OpdsHistoryEntry(
                             title = catalog.title,
                             url = currentUrl,
+                            paging = snapshot.paging.toSnapshot(),
                         ),
+                        paging = OpdsPagingState().withCatalogLinks(mergedCatalog),
                         isLoading = false,
                         errorMessage = null,
                         statusMessage = null,
@@ -322,6 +392,7 @@ class OpdsViewModel @Inject constructor(
                                 catalog = snapshot.catalog,
                                 currentUrl = snapshot.currentUrl,
                                 history = snapshot.history,
+                                paging = snapshot.paging,
                             )
                         }
                         openCredentialsDialog(matchingSource, urlToRetry = error.url)
@@ -448,7 +519,11 @@ class OpdsViewModel @Inject constructor(
         }
     }
 
-    private fun loadOpdsCatalog(url: String, history: List<OpdsHistoryEntry>) {
+    private fun loadOpdsCatalog(
+        url: String,
+        history: List<OpdsHistoryEntry>,
+        paging: OpdsPagingState = OpdsPagingState(),
+    ) {
         viewModelScope.launch {
             val snapshotBeforeLoad = _opdsState.value
             _opdsState.update {
@@ -469,6 +544,7 @@ class OpdsViewModel @Inject constructor(
                         urlInput = url,
                         catalog = catalog,
                         history = history,
+                        paging = paging.withCatalogLinks(catalog),
                         isLoading = false,
                         errorMessage = null,
                         statusMessage = null,
@@ -489,6 +565,7 @@ class OpdsViewModel @Inject constructor(
                                 catalog = snapshotBeforeLoad.catalog,
                                 currentUrl = snapshotBeforeLoad.currentUrl,
                                 history = snapshotBeforeLoad.history,
+                                paging = snapshotBeforeLoad.paging,
                             )
                         }
                         openCredentialsDialog(matchingSource, urlToRetry = url)
@@ -554,6 +631,22 @@ class OpdsViewModel @Inject constructor(
         } else {
             copy(entries = filteredEntries)
         }
+    }
+
+    private fun OpdsPagingState.withCatalogLinks(catalog: OpdsCatalog): OpdsPagingState {
+        val nextLink = catalog.links.firstOrNull(OpdsLink::isNextLink)
+        return copy(
+            nextLink = nextLink,
+            totalPages = totalPages ?: if (nextLink == null && currentPage > 1) currentPage else null,
+        )
+    }
+
+    private fun OpdsUiState.currentPageHistoryEntry(): OpdsPageHistoryEntry? {
+        val currentUrl = currentUrl ?: return null
+        return OpdsPageHistoryEntry(
+            title = catalog?.title ?: localizationManager.currentStrings.value.opdsHistoryFallbackTitle,
+            url = currentUrl,
+        )
     }
 
     private fun showOpdsStatus(message: String) {

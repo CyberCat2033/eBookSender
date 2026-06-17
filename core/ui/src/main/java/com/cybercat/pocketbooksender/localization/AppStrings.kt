@@ -175,6 +175,8 @@ class AppStrings(
     val opdsRelUp: String get() = get("opds_rel_up")
     val opdsRelOpen: String get() = get("opds_rel_open")
     val opdsCatalogEmpty: String get() = get("opds_catalog_empty")
+    val opdsPageCurrent: String get() = get("opds_page_current")
+    val opdsPageRatio: String get() = get("opds_page_ratio")
     val genericSelectedCount: String get() = get("generic_selected_count")
     
     // Manga Pane

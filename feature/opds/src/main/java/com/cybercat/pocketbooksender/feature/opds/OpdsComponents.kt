@@ -1,16 +1,11 @@
 package com.cybercat.pocketbooksender.feature.opds
 
-import android.graphics.Bitmap
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Image as ComposeImage
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -21,44 +16,50 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
@@ -72,10 +73,7 @@ import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
-import com.cybercat.pocketbooksender.ui.BitmapCache
-import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
-import kotlinx.coroutines.delay
 
 internal data class OpdsEntryRow(
     val key: String,
@@ -389,20 +387,155 @@ internal fun FeedLinksRow(
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
-    TrailingActionRow(modifier = modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         links.forEach { link ->
-            OutlinedButton(
+            FeedNavigationChip(
+                icon = link.feedNavigationIcon(),
+                enabled = enabled,
+                label = link.displayTitle(strings),
                 onClick = {
                     view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                     onOpenLink(link)
                 },
-                enabled = enabled,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun OpdsPaginationBar(
+    paging: OpdsPagingState,
+    enabled: Boolean,
+    enableHaptics: Boolean,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!paging.shouldShow) return
+
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    val canGoPrevious = enabled && paging.canGoPrevious
+    val canGoNext = enabled && paging.canGoNext
+    Surface(
+        modifier = modifier.widthIn(min = 300.dp, max = 380.dp),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.primary,
+        ),
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .height(56.dp)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            FilledIconButton(
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    onPreviousPage()
+                },
+                enabled = canGoPrevious,
+                modifier = Modifier
+                    .width(68.dp)
+                    .height(40.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
             ) {
-                Icon(Icons.Outlined.Folder, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(link.displayTitle(strings))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = strings.get("opds_page_previous"),
+                )
+            }
+            Text(
+                text = paging.displayLabel(strings),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            FilledIconButton(
+                onClick = {
+                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    onNextPage()
+                },
+                enabled = canGoNext,
+                modifier = Modifier
+                    .width(68.dp)
+                    .height(40.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                    contentDescription = strings.get("opds_page_next"),
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun FeedNavigationChip(
+    icon: ImageVector,
+    enabled: Boolean,
+    label: String,
+    onClick: () -> Unit,
+) {
+    AssistChip(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.widthIn(max = 280.dp),
+        label = {
+            Text(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+            )
+        },
+    )
+}
+
+@Composable
+private fun CenteredActionRow(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .widthIn(min = maxWidth),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
     }
 }
 
@@ -422,6 +555,19 @@ private fun TrailingActionRow(
         )
     }
 }
+
+private fun OpdsLink.feedNavigationIcon() =
+    when (normalizedRelName()) {
+        "start" -> Icons.Outlined.Home
+        "up" -> Icons.Outlined.ArrowUpward
+        "previous", "prev" -> Icons.AutoMirrored.Outlined.ArrowBack
+        "next" -> Icons.AutoMirrored.Outlined.ArrowForward
+        else -> Icons.Outlined.Folder
+    }
+
+private fun OpdsPagingState.displayLabel(strings: com.cybercat.pocketbooksender.localization.AppStrings): String =
+    totalPages?.let { total -> strings.get("opds_page_ratio", currentPage, total) }
+        ?: strings.get("opds_page_current", currentPage)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -548,7 +694,7 @@ private fun OpdsEntryCardContent(
         }
 
         if (navigationLinks.isNotEmpty()) {
-            TrailingActionRow {
+            CenteredActionRow {
                 navigationLinks.forEach { link ->
                     OutlinedButton(
                         onClick = {
@@ -556,10 +702,15 @@ private fun OpdsEntryCardContent(
                             onOpenLink(link)
                         },
                         enabled = enabled,
+                        modifier = Modifier.widthIn(max = NavigationActionButtonMaxWidth),
                     ) {
                         Icon(Icons.Outlined.Folder, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text(link.displayTitle(strings))
+                        Text(
+                            text = link.displayTitle(strings),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -621,7 +772,7 @@ internal fun EntryArtwork(
 internal fun OpdsLink.displayTitle(strings: com.cybercat.pocketbooksender.localization.AppStrings): String {
     val linkTitle = title
     if (!linkTitle.isNullOrBlank()) return linkTitle
-    val relValue = rel?.substringAfterLast('/')?.lowercase() ?: return strings.opdsRelOpen
+    val relValue = normalizedRelName() ?: return strings.opdsRelOpen
     return when (relValue) {
         "start" -> strings.opdsRelStart
         "next" -> strings.opdsRelNext
@@ -630,13 +781,6 @@ internal fun OpdsLink.displayTitle(strings: com.cybercat.pocketbooksender.locali
         "open" -> strings.opdsRelOpen
         else -> strings.opdsRelOpen
     }
-}
-
-internal fun OpdsLink.isBrowsableFeedLink(): Boolean {
-    val relValue = rel.orEmpty()
-    val typeValue = type.orEmpty()
-    return relValue in setOf("next", "previous", "up", "start") ||
-        (relValue != "self" && typeValue.contains("profile=opds-catalog"))
 }
 
 internal fun OpdsCatalog.hasSearch(): Boolean =
@@ -657,3 +801,4 @@ internal fun String.cleanSummary(): String =
 private const val CoverLoadDelayMillis = 120L
 private const val CoverRequestWidth = 160
 private const val CoverRequestHeight = 220
+private val NavigationActionButtonMaxWidth = 320.dp

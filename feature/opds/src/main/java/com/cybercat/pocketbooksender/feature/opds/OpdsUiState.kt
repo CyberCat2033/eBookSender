@@ -1,6 +1,7 @@
 package com.cybercat.pocketbooksender.feature.opds
 
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
+import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsSource
 
 data class OpdsUiState(
@@ -12,6 +13,7 @@ data class OpdsUiState(
     val currentUrl: String? = null,
     val catalog: OpdsCatalog? = null,
     val history: List<OpdsHistoryEntry> = emptyList(),
+    val paging: OpdsPagingState = OpdsPagingState(),
     val isLoading: Boolean = false,
     val isDownloading: Boolean = false,
     val errorMessage: String? = null,
@@ -29,7 +31,44 @@ data class OpdsUiState(
 data class OpdsHistoryEntry(
     val title: String,
     val url: String,
+    val paging: OpdsPagingSnapshot = OpdsPagingSnapshot(),
 )
+
+data class OpdsPageHistoryEntry(
+    val title: String,
+    val url: String,
+)
+
+data class OpdsPagingSnapshot(
+    val currentPage: Int = 1,
+    val previousPages: List<OpdsPageHistoryEntry> = emptyList(),
+    val totalPages: Int? = null,
+)
+
+data class OpdsPagingState(
+    val currentPage: Int = 1,
+    val previousPages: List<OpdsPageHistoryEntry> = emptyList(),
+    val nextLink: OpdsLink? = null,
+    val totalPages: Int? = null,
+) {
+    val canGoPrevious: Boolean = previousPages.isNotEmpty()
+    val canGoNext: Boolean = nextLink != null
+    val shouldShow: Boolean = currentPage > 1 || canGoNext
+}
+
+internal fun OpdsPagingState.toSnapshot(): OpdsPagingSnapshot =
+    OpdsPagingSnapshot(
+        currentPage = currentPage,
+        previousPages = previousPages,
+        totalPages = totalPages,
+    )
+
+internal fun OpdsPagingSnapshot.toPagingState(): OpdsPagingState =
+    OpdsPagingState(
+        currentPage = currentPage,
+        previousPages = previousPages,
+        totalPages = totalPages,
+    )
 
 enum class WebContentMode {
     Opds,

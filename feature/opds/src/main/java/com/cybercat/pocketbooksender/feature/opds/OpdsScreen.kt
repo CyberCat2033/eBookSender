@@ -2,10 +2,22 @@ package com.cybercat.pocketbooksender.feature.opds
 
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,11 +49,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
-import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsSource
@@ -50,6 +65,27 @@ import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.ui.StatusMessage
 import com.cybercat.pocketbooksender.ui.StatusMessageHost
 import com.cybercat.pocketbooksender.ui.LoadingCard
+import kotlinx.coroutines.launch
+
+private const val WebModeEnterDurationMillis = 220
+private const val WebModeExitDurationMillis = 140
+private const val OpdsContentEnterDurationMillis = 220
+private const val OpdsContentFadeDurationMillis = 160
+
+private val OpdsFeedFadeInSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+)
+
+private val OpdsFeedFadeOutSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMedium,
+)
+
+private val OpdsFeedPlacementSpec = spring<IntOffset>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +99,8 @@ fun OpdsScreen(
     onOpenSource: (String) -> Unit,
     onOpenLink: (OpdsLink) -> Unit,
     onBack: () -> Unit,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
     onSearch: () -> Unit,
     onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
     onAuthUsernameChanged: (String) -> Unit,
@@ -71,7 +109,7 @@ fun OpdsScreen(
     onSaveCredentials: () -> Unit,
     onOpenCredentialsEdit: (OpdsSource) -> Unit,
     enableHaptics: Boolean,
-    
+
     // Slots for Manga to keep modules independent
     mangaPane: @Composable () -> Unit,
     mangaTopBarActions: @Composable () -> Unit,
@@ -91,8 +129,24 @@ fun OpdsScreen(
     var newSourceUsername by remember { mutableStateOf("") }
     var newSourcePassword by remember { mutableStateOf("") }
     val webMode = state.webMode
+    val canHandleOpdsBack = webMode == WebContentMode.Opds && state.canGoBack && !state.isLoading
+    val opdsStartLink = remember(webMode, state.catalog, state.currentUrl, state.sources) {
+        if (webMode != WebContentMode.Opds) {
+            null
+        } else {
+            state.catalog
+                ?.links
+                ?.firstOrNull { link ->
+                    link.isStartLink() &&
+                        !link.isRedundantStartLink(
+                            currentUrl = state.currentUrl,
+                            sources = state.sources,
+                        )
+                }
+        }
+    }
 
-    BackHandler(enabled = webMode == WebContentMode.Opds && state.canGoBack) {
+    BackHandler(enabled = canHandleOpdsBack) {
         onBack()
     }
 
@@ -153,7 +207,7 @@ fun OpdsScreen(
                                 view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
                                 onBack()
                             },
-                            enabled = !state.isLoading,
+                            enabled = canHandleOpdsBack,
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
@@ -168,6 +222,24 @@ fun OpdsScreen(
                     if (isMangaSelectionActive) {
                         mangaTopBarActions()
                     } else if (webMode == WebContentMode.Opds) {
+                        opdsStartLink?.let { startLink ->
+                            IconButton(
+                                onClick = {
+                                    view.performHapticIfAllowed(
+                                        context,
+                                        enableHaptics,
+                                        HapticFeedbackConstants.VIRTUAL_KEY,
+                                    )
+                                    onOpenLink(startLink)
+                                },
+                                enabled = !state.isLoading,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Home,
+                                    contentDescription = strings.opdsRelStart,
+                                )
+                            }
+                        }
                         IconButton(
                             onClick = {
                                 newSourceUrl = ""
@@ -209,115 +281,263 @@ fun OpdsScreen(
                     modifier = Modifier.padding(bottom = 10.dp),
                 )
 
-                if (webMode == WebContentMode.Manga) {
-                    mangaPane()
-                } else {
-                    val catalog = state.catalog
-                    val entryRows = remember(catalog) { catalog?.entries?.withStableLazyKeys() ?: emptyList() }
-                    val feedLinks = remember(catalog) { catalog?.links?.filter(OpdsLink::isBrowsableFeedLink) ?: emptyList() }
-                    val hasSearch = remember(catalog) { catalog?.hasSearch() ?: false }
-                    LazyColumn(
-                        state = opdsListState,
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        item {
-                            SourcePicker(
+                Box(Modifier.weight(1f)) {
+                    AnimatedContent(
+                        targetState = webMode,
+                        modifier = Modifier.fillMaxSize(),
+                        transitionSpec = {
+                            val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                            (
+                                slideInHorizontally(
+                                    animationSpec = tween(
+                                        durationMillis = WebModeEnterDurationMillis,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                                    initialOffsetX = { width -> direction * width / 5 },
+                                ) + fadeIn(
+                                    animationSpec = tween(durationMillis = WebModeEnterDurationMillis),
+                                )
+                            ).togetherWith(
+                                slideOutHorizontally(
+                                    animationSpec = tween(
+                                        durationMillis = WebModeExitDurationMillis,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                                    targetOffsetX = { width -> -direction * width / 8 },
+                                ) + fadeOut(
+                                    animationSpec = tween(durationMillis = WebModeExitDurationMillis),
+                                )
+                            )
+                        },
+                        label = "WebModeContentAnimation",
+                    ) { targetMode ->
+                        when (targetMode) {
+                            WebContentMode.Manga -> mangaPane()
+                            WebContentMode.Opds -> OpdsCatalogContent(
                                 state = state,
+                                opdsListState = opdsListState,
                                 enableHaptics = enableHaptics,
                                 onOpenSource = onOpenSource,
                                 onRemoveSource = onRemoveSource,
-                                onEditCredentials = onOpenCredentialsEdit,
+                                onOpenCredentialsEdit = onOpenCredentialsEdit,
+                                onSearchChanged = onSearchChanged,
+                                onSearch = onSearch,
+                                onOpenLink = onOpenLink,
+                                onDownload = onDownload,
                             )
                         }
+                    }
 
-                        state.errorMessage?.let { message ->
-                            item {
-                                StatusMessage(
-                                    text = message,
-                                    isError = true,
-                                )
-                            }
-                        }
-
-                        item {
-                            StatusMessageHost(text = state.statusMessage)
-                        }
-
-                        if (state.isLoading) {
-                            item {
-                                LoadingCard(strings.opdsStatusOpening)
-                            }
-                        }
-
-                        if (catalog != null) {
-                            item {
-                                SearchPanel(
-                                    query = state.searchInput,
-                                    isSearchAvailable = hasSearch,
-                                    enabled = !state.isLoading,
-                                    enableHaptics = enableHaptics,
-                                    onSearchChanged = onSearchChanged,
-                                    onSearch = onSearch,
-                                )
-                            }
-
-                            if (feedLinks.isNotEmpty()) {
-                                item {
-                                    FeedLinksRow(
-                                        links = feedLinks,
-                                        enabled = !state.isLoading,
-                                        enableHaptics = enableHaptics,
-                                        onOpenLink = onOpenLink,
-                                    )
-                                }
-                            }
-
-                            if (catalog.entries.isEmpty() && !state.isLoading) {
-                                item {
-                                    StatusMessage(
-                                        text = strings.opdsCatalogEmpty,
-                                        isError = false,
-                                    )
-                                }
-                            }
-
-                            itemsIndexed(
-                                entryRows,
-                                key = { _, row -> row.key },
-                                contentType = { _, _ -> "entry" },
-                            ) { _, row ->
-                                OpdsEntryCard(
-                                    entry = row.entry,
-                                    enabled = !state.isLoading && !state.isDownloading,
-                                    enableHaptics = enableHaptics,
-                                    onOpenLink = onOpenLink,
-                                    onDownload = onDownload,
-                                    modifier = Modifier.animateItem(),
-                                )
-                            }
-
-                            if (feedLinks.isNotEmpty()) {
-                                item {
-                                    FeedLinksRow(
-                                        links = feedLinks,
-                                        enabled = !state.isLoading,
-                                        enableHaptics = enableHaptics,
-                                        onOpenLink = onOpenLink,
-                                        modifier = Modifier.padding(top = 10.dp),
-                                    )
-                                }
-                            }
-                        }
-
-                        item {
-                            Spacer(Modifier.height(8.dp))
-                        }
+                    if (webMode == WebContentMode.Opds) {
+                        OpdsPaginationBar(
+                            paging = state.paging,
+                            enabled = !state.isLoading,
+                            enableHaptics = enableHaptics,
+                            onPreviousPage = onPreviousPage,
+                            onNextPage = onNextPage,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 12.dp),
+                        )
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun OpdsCatalogContent(
+    state: OpdsUiState,
+    opdsListState: LazyListState,
+    enableHaptics: Boolean,
+    onOpenSource: (String) -> Unit,
+    onRemoveSource: (String) -> Unit,
+    onOpenCredentialsEdit: (OpdsSource) -> Unit,
+    onSearchChanged: (String) -> Unit,
+    onSearch: () -> Unit,
+    onOpenLink: (OpdsLink) -> Unit,
+    onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
+) {
+    val strings = LocalStrings.current
+    val density = LocalDensity.current
+    val catalog = state.catalog
+    val entryRows = remember(catalog) { catalog?.entries?.withStableLazyKeys() ?: emptyList() }
+    val feedLinks = remember(catalog, state.currentUrl, state.sources) {
+        catalog?.links
+            ?.filter(OpdsLink::isBrowsableFeedLink)
+            ?.filterNot(OpdsLink::isStartLink)
+            ?.filterNot(OpdsLink::isPageNavigationLink)
+            ?.filterNot { link ->
+                link.isRedundantStartLink(
+                    currentUrl = state.currentUrl,
+                    sources = state.sources,
+                )
+            }
+            ?: emptyList()
+    }
+    val hasSearch = remember(catalog) { catalog?.hasSearch() ?: false }
+    val contentMotionKey = remember(state.currentUrl, catalog, state.isLoading, feedLinks.size) {
+        state.opdsContentMotionKey(feedLinks.size)
+    }
+    val contentAlpha = remember { Animatable(1f) }
+    val contentOffsetY = remember { Animatable(0f) }
+    val contentEnterOffsetPx = with(density) { 14.dp.toPx() }
+    var skipInitialAnimation by remember { mutableStateOf(true) }
+
+    LaunchedEffect(contentMotionKey, contentEnterOffsetPx) {
+        if (skipInitialAnimation) {
+            skipInitialAnimation = false
+            contentAlpha.snapTo(1f)
+            contentOffsetY.snapTo(0f)
+            return@LaunchedEffect
+        }
+
+        contentAlpha.snapTo(0f)
+        contentOffsetY.snapTo(contentEnterOffsetPx)
+        launch {
+            contentAlpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = OpdsContentFadeDurationMillis),
+            )
+        }
+        launch {
+            contentOffsetY.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(
+                    durationMillis = OpdsContentEnterDurationMillis,
+                    easing = FastOutSlowInEasing,
+                ),
+            )
+        }
+    }
+
+    LazyColumn(
+        state = opdsListState,
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                alpha = contentAlpha.value
+                translationY = contentOffsetY.value
+            },
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            SourcePicker(
+                state = state,
+                enableHaptics = enableHaptics,
+                onOpenSource = onOpenSource,
+                onRemoveSource = onRemoveSource,
+                onEditCredentials = onOpenCredentialsEdit,
+            )
+        }
+
+        state.errorMessage?.let { message ->
+            item {
+                StatusMessage(
+                    text = message,
+                    isError = true,
+                )
+            }
+        }
+
+        item {
+            StatusMessageHost(text = state.statusMessage)
+        }
+
+        if (state.isLoading) {
+            item {
+                LoadingCard(strings.opdsStatusOpening)
+            }
+        }
+
+        if (catalog != null) {
+            item {
+                SearchPanel(
+                    query = state.searchInput,
+                    isSearchAvailable = hasSearch,
+                    enabled = !state.isLoading,
+                    enableHaptics = enableHaptics,
+                    onSearchChanged = onSearchChanged,
+                    onSearch = onSearch,
+                )
+            }
+
+            if (feedLinks.isNotEmpty()) {
+                item {
+                    FeedLinksRow(
+                        links = feedLinks,
+                        enabled = !state.isLoading,
+                        enableHaptics = enableHaptics,
+                        onOpenLink = onOpenLink,
+                    )
+                }
+            }
+
+            if (catalog.entries.isEmpty() && !state.isLoading) {
+                item {
+                    StatusMessage(
+                        text = strings.opdsCatalogEmpty,
+                        isError = false,
+                    )
+                }
+            }
+
+            itemsIndexed(
+                entryRows,
+                key = { _, row -> row.key },
+                contentType = { _, _ -> "entry" },
+            ) { _, row ->
+                OpdsEntryCard(
+                    entry = row.entry,
+                    enabled = !state.isLoading && !state.isDownloading,
+                    enableHaptics = enableHaptics,
+                    onOpenLink = onOpenLink,
+                    onDownload = onDownload,
+                    modifier = Modifier.animateItem(
+                        fadeInSpec = OpdsFeedFadeInSpec,
+                        fadeOutSpec = OpdsFeedFadeOutSpec,
+                        placementSpec = OpdsFeedPlacementSpec,
+                    ),
+                )
+            }
+
+            if (feedLinks.isNotEmpty()) {
+                item {
+                    FeedLinksRow(
+                        links = feedLinks,
+                        enabled = !state.isLoading,
+                        enableHaptics = enableHaptics,
+                        onOpenLink = onOpenLink,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(if (state.paging.shouldShow) 80.dp else 8.dp))
+        }
+    }
+}
+
+private data class OpdsContentMotionKey(
+    val currentUrl: String?,
+    val catalogTitle: String?,
+    val entryCount: Int,
+    val feedLinkCount: Int,
+    val isLoadingWithoutCatalog: Boolean,
+)
+
+private fun OpdsUiState.opdsContentMotionKey(feedLinkCount: Int): OpdsContentMotionKey {
+    val catalog = catalog
+    return OpdsContentMotionKey(
+        currentUrl = currentUrl,
+        catalogTitle = catalog?.title,
+        entryCount = catalog?.entries?.size ?: 0,
+        feedLinkCount = feedLinkCount,
+        isLoadingWithoutCatalog = isLoading && catalog == null,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
