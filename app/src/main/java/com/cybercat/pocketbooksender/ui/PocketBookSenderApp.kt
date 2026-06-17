@@ -11,8 +11,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -22,6 +27,8 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
@@ -41,6 +48,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,6 +77,7 @@ import kotlinx.coroutines.launch
 
 private const val NAV_ENTER_DURATION_MILLIS = 200
 private const val NAV_EXIT_DURATION_MILLIS = 80
+private val LANDSCAPE_NAVIGATION_RAIL_WIDTH = 80.dp
 
 private class NavigationClickGate(
     private val debounceMillis: Long = NAV_ENTER_DURATION_MILLIS.toLong()
@@ -153,32 +162,22 @@ fun PocketBookSenderApp(
                     destination.translatedLabel()
                 }
                 val navigationLayoutType = currentNavigationSuiteLayoutType()
-                NavigationSuiteScaffold(
-                    navigationSuiteItems = {
-                        MainDestinations.forEach { destination ->
-                            val selected = currentRoute == destination.route
-                            val label = destinationLabels.getValue(destination)
-                            item(
-                                selected = selected,
-                                onClick = {
-                                    if (navigationClickGate.shouldHandle(destination.route)) {
-                                        if (selected) {
-                                            scrollDestinationToTop(destination.route)
-                                        } else {
-                                            navController.navigateSingleTop(destination.route)
-                                        }
-                                    }
-                                },
-                                icon = { Icon(destination.icon, contentDescription = label) },
-                                label = { Text(label) }
-                            )
+                val useFullHeightNavigationRail =
+                    LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+                        navigationLayoutType == NavigationSuiteType.NavigationRail
+                val onNavigationDestinationClick: (
+                    MainDestination,
+                    Boolean
+                ) -> Unit = { destination, selected ->
+                    if (navigationClickGate.shouldHandle(destination.route)) {
+                        if (selected) {
+                            scrollDestinationToTop(destination.route)
+                        } else {
+                            navController.navigateSingleTop(destination.route)
                         }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    layoutType = navigationLayoutType,
-                    containerColor = MaterialTheme.colorScheme.background,
-                    contentColor = MaterialTheme.colorScheme.onBackground
-                ) {
+                    }
+                }
+                val content: @Composable () -> Unit = {
                     AppNavHost(
                         navController = navController,
                         appSettings = settings,
@@ -190,7 +189,78 @@ fun PocketBookSenderApp(
                         modifier = Modifier.fillMaxSize()
                     )
                 }
+                if (useFullHeightNavigationRail) {
+                    LandscapeNavigationRailScaffold(
+                        currentRoute = currentRoute,
+                        destinationLabels = destinationLabels,
+                        onDestinationClick = onNavigationDestinationClick,
+                        modifier = Modifier.fillMaxSize(),
+                        content = content
+                    )
+                } else {
+                    NavigationSuiteScaffold(
+                        navigationSuiteItems = {
+                            MainDestinations.forEach { destination ->
+                                val selected = currentRoute == destination.route
+                                val label = destinationLabels.getValue(destination)
+                                item(
+                                    selected = selected,
+                                    onClick = {
+                                        onNavigationDestinationClick(destination, selected)
+                                    },
+                                    icon = { Icon(destination.icon, contentDescription = label) },
+                                    label = { Text(label) }
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        layoutType = navigationLayoutType,
+                        containerColor = MaterialTheme.colorScheme.background,
+                        contentColor = MaterialTheme.colorScheme.onBackground,
+                        content = { content() }
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun LandscapeNavigationRailScaffold(
+    currentRoute: String?,
+    destinationLabels: Map<MainDestination, String>,
+    onDestinationClick: (MainDestination, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Row(modifier) {
+        NavigationRail(
+            modifier = Modifier
+                .width(LANDSCAPE_NAVIGATION_RAIL_WIDTH)
+                .fillMaxHeight(),
+            containerColor = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.onBackground
+        ) {
+            MainDestinations.forEach { destination ->
+                val selected = currentRoute == destination.route
+                val label = destinationLabels.getValue(destination)
+                NavigationRailItem(
+                    selected = selected,
+                    onClick = { onDestinationClick(destination, selected) },
+                    icon = { Icon(destination.icon, contentDescription = label) },
+                    label = { Text(label) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+        ) {
+            content()
         }
     }
 }

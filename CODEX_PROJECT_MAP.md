@@ -140,7 +140,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - `StatusMessageHost` preserves the last non-empty text and shows/hides it with fade, vertical expand/shrink, and a small vertical slide.
 - App shell: `app/src/main/java/com/cybercat/pocketbooksender/ui/PocketBookSenderApp.kt`.
   - `NavHost` screen transitions use fade-in plus subtle `scaleIn(0.96f)` over 200 ms without a delayed start; exits fade out in 80 ms.
-  - `NavigationSuiteScaffold` keeps the default Material 3 adaptive layout except landscape orientation, where the app forces `NavigationRail` so primary navigation stays on the left on phones.
+  - `NavigationSuiteScaffold` keeps the default Material 3 adaptive layout except landscape orientation, where the app uses a custom full-height `NavigationRail` so primary navigation stays on the left and each destination receives equal vertical hit area on phones.
   - Primary navigation uses a route-specific click gate to ignore duplicate taps to the same destination during transition startup; reselection uses `LazyListState.animateScrollToTop()`.
   - Manga download FAB enters/exits with fade plus vertical slide from the bottom.
 - Gesture helpers: `core/ui/src/main/java/com/cybercat/pocketbooksender/util/GestureHelpers.kt`.
