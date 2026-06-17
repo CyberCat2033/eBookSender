@@ -68,6 +68,8 @@ fun SendScreen(
     onDocumentsTagChanged: (String, String) -> Unit,
     onMangaSeriesChanged: (String, String) -> Unit,
     onQueuedMangaSeriesChanged: (String?, String) -> Unit,
+    onDismissVpnBypassDialog: () -> Unit,
+    onDisableVpnBypass: () -> Unit,
     onUploadAll: () -> Unit
 ) {
     val strings = LocalStrings.current
@@ -133,6 +135,14 @@ fun SendScreen(
             onApply = { oldSeries, series ->
                 onQueuedMangaSeriesChanged(oldSeries, series)
             }
+        )
+    }
+
+    if (state.showVpnBypassDialog) {
+        VpnBypassBlockedDialog(
+            enableHaptics = state.settings.enableHaptics,
+            onDisableBypassVpn = onDisableVpnBypass,
+            onDismiss = onDismissVpnBypassDialog
         )
     }
 

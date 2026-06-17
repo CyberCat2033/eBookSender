@@ -25,7 +25,60 @@ import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
+import com.cybercat.pocketbooksender.ui.LocalDismissDialogAfter
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
+
+@Composable
+fun VpnBypassBlockedDialog(
+    enableHaptics: Boolean,
+    onDisableBypassVpn: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.transferVpnBypassBlockedTitle) },
+        text = {
+            Text(
+                text = strings.transferVpnBypassBlockedBody,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            val dismissAfter = LocalDismissDialogAfter.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        HapticFeedbackConstants.CONFIRM
+                    )
+                    dismissAfter(onDisableBypassVpn)
+                }
+            ) {
+                Text(strings.transferVpnBypassDisableAction)
+            }
+        },
+        dismissButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        HapticFeedbackConstants.VIRTUAL_KEY
+                    )
+                    dismiss()
+                }
+            ) {
+                Text(strings.get("action_close"))
+            }
+        }
+    )
+}
 
 @Composable
 fun MangaBatchEditorDialog(

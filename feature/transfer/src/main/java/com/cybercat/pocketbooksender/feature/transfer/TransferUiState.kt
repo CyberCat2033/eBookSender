@@ -14,8 +14,9 @@ data class TransferUiState(
     val queue: List<UploadItem> = emptyList(),
     val settings: AppSettings = AppSettings(),
     val errorMessage: String? = null,
+    val showVpnBypassDialog: Boolean = false,
     val documentsTags: List<String> = emptyList(),
-    val mangaSeriesSuggestions: List<String> = emptyList(),
+    val mangaSeriesSuggestions: List<String> = emptyList()
 ) {
     val isConnected: Boolean = connectedDevice != null
 }

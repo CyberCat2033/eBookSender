@@ -9,6 +9,7 @@ import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.pocketbook.PocketBookRescanCoordinator
 import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.model.BookCategory
+import com.cybercat.pocketbooksender.network.isLocalNetworkBypassBlocked
 import com.cybercat.pocketbooksender.power.ScopedWakeLock
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
@@ -142,7 +143,8 @@ class TransferForegroundService : Service() {
                     transferCoordinator.emit(
                         TransferEvent.ItemFailed(
                             itemId = item.id,
-                            message = message
+                            message = message,
+                            failureReason = error?.localNetworkBypassFailureReason()
                         )
                     )
                 }
@@ -231,6 +233,13 @@ class TransferForegroundService : Service() {
         stopForeground(STOP_FOREGROUND_REMOVE)
         transferNotifications.showFinishedNotification(uploaded, failed)
     }
+
+    private fun Throwable.localNetworkBypassFailureReason(): TransferFailureReason? =
+        if (isLocalNetworkBypassBlocked()) {
+            TransferFailureReason.LocalNetworkBypassBlocked
+        } else {
+            null
+        }
 
     companion object {
         private const val EXTRA_REQUEST_ID = "request_id"

@@ -2,7 +2,7 @@ package com.cybercat.pocketbooksender.ui
 
 import com.cybercat.pocketbooksender.localization.AppStrings
 import com.cybercat.pocketbooksender.model.PocketBookDevice
-import com.cybercat.pocketbooksender.network.LocalNetworkBypassUnavailableException
+import com.cybercat.pocketbooksender.network.isLocalNetworkBypassBlocked
 import java.io.InterruptedIOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
@@ -13,29 +13,41 @@ import javax.inject.Singleton
 
 @Singleton
 class FtpErrorMapper @Inject constructor() {
-    fun mapConnectionError(error: Throwable, device: PocketBookDevice, strings: AppStrings): String {
+    fun mapConnectionError(
+        error: Throwable,
+        device: PocketBookDevice,
+        strings: AppStrings
+    ): String {
         val causes = error.causalChain()
         val reason = when {
-            causes.any { it is LocalNetworkBypassUnavailableException || it.message.isVpnBypassBlockedMessage() } ->
+            error.isLocalNetworkBypassBlocked() ->
                 strings.get("transfer_error_reason_vpn_bypass_blocked")
+
             causes.any { it is UnknownHostException } ->
                 strings.get("transfer_error_reason_host_unresolved", device.host)
-            causes.any { it is SocketTimeoutException || it is InterruptedIOException || it.message.isTimeoutMessage() } ->
+
+            causes.any {
+                it is SocketTimeoutException || it is InterruptedIOException ||
+                    it.message.isTimeoutMessage()
+            } ->
                 strings.get("transfer_error_reason_connection_timeout", device.host, device.port)
-            causes.any { it is ConnectException || it is NoRouteToHostException || it.message.isConnectionRefusedMessage() } ->
+
+            causes.any {
+                it is ConnectException || it is NoRouteToHostException ||
+                    it.message.isConnectionRefusedMessage()
+            } ->
                 strings.get("transfer_error_reason_connection_refused", device.host, device.port)
+
             else -> error.message ?: error::class.java.simpleName
         }
         return strings.get("transfer_error_cannot_connect", device.host, device.port, reason)
     }
 
-    fun mapInvalidFtpError(error: Throwable, strings: AppStrings): String {
-        return when (error.message) {
-            "FTP URL is empty" -> strings.get("transfer_error_invalid_ftp_empty")
-            "Only ftp:// links are supported" -> strings.get("transfer_error_invalid_ftp_scheme")
-            "FTP host is missing" -> strings.get("transfer_error_invalid_ftp_host")
-            else -> strings.transferErrorInvalidFtp
-        }
+    fun mapInvalidFtpError(error: Throwable, strings: AppStrings): String = when (error.message) {
+        "FTP URL is empty" -> strings.get("transfer_error_invalid_ftp_empty")
+        "Only ftp:// links are supported" -> strings.get("transfer_error_invalid_ftp_scheme")
+        "FTP host is missing" -> strings.get("transfer_error_invalid_ftp_host")
+        else -> strings.transferErrorInvalidFtp
     }
 
     private fun Throwable.causalChain(): List<Throwable> = buildList {
@@ -54,11 +66,7 @@ class FtpErrorMapper @Inject constructor() {
 
     private fun String?.isConnectionRefusedMessage(): Boolean {
         val text = this?.lowercase() ?: return false
-        return "connection refused" in text || "failed to connect" in text || "no route to host" in text
-    }
-
-    private fun String?.isVpnBypassBlockedMessage(): Boolean {
-        val text = this?.lowercase() ?: return false
-        return "binding socket to network" in text && "eperm" in text
+        return "connection refused" in text || "failed to connect" in text ||
+            "no route to host" in text
     }
 }

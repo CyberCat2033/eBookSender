@@ -248,6 +248,11 @@ class AppStrings(
     val transferErrorReasonVpnBypassBlocked: String get() = get(
         "transfer_error_reason_vpn_bypass_blocked"
     )
+    val transferVpnBypassBlockedTitle: String get() = get("transfer_vpn_bypass_blocked_title")
+    val transferVpnBypassBlockedBody: String get() = get("transfer_vpn_bypass_blocked_body")
+    val transferVpnBypassDisableAction: String get() = get(
+        "transfer_vpn_bypass_disable_action"
+    )
     val transferErrorFtpUploadFailed: String get() = get("transfer_error_ftp_upload_failed")
     val transferErrorCannotOpenFile: String get() = get("transfer_error_cannot_open_file")
 

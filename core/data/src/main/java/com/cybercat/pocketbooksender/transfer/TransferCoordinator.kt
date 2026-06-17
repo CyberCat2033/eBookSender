@@ -1,7 +1,7 @@
 package com.cybercat.pocketbooksender.transfer
 
-import com.cybercat.pocketbooksender.model.PocketBookDevice
 import com.cybercat.pocketbooksender.model.BookCategory
+import com.cybercat.pocketbooksender.model.PocketBookDevice
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
@@ -14,21 +14,18 @@ class TransferCoordinator @Inject constructor() {
     private val pendingRequest = AtomicReference<TransferRequest?>(null)
 
     private val _events = MutableSharedFlow<TransferEvent>(
-        extraBufferCapacity = 64,
+        extraBufferCapacity = 64
     )
     val events = _events.asSharedFlow()
 
-    fun submit(
-        device: PocketBookDevice,
-        items: List<TransferUploadItem>,
-    ): String {
+    fun submit(device: PocketBookDevice, items: List<TransferUploadItem>): String {
         val id = UUID.randomUUID().toString()
         pendingRequest.set(
             TransferRequest(
                 id = id,
                 device = device,
-                items = items,
-            ),
+                items = items
+            )
         )
         return id
     }
@@ -47,7 +44,7 @@ class TransferCoordinator @Inject constructor() {
 data class TransferRequest(
     val id: String,
     val device: PocketBookDevice,
-    val items: List<TransferUploadItem>,
+    val items: List<TransferUploadItem>
 )
 
 data class TransferUploadItem(
@@ -59,34 +56,25 @@ data class TransferUploadItem(
     val title: String,
     val mangaSeries: String?,
     val mangaVolume: String?,
-    val plannedPath: String,
+    val plannedPath: String
 )
 
 sealed interface TransferEvent {
-    data class ItemStarted(
-        val itemId: String,
-        val completed: Int,
-        val total: Int,
-    ) : TransferEvent
+    data class ItemStarted(val itemId: String, val completed: Int, val total: Int) : TransferEvent
 
-    data class ItemProgress(
-        val itemId: String,
-        val progress: Float,
-    ) : TransferEvent
+    data class ItemProgress(val itemId: String, val progress: Float) : TransferEvent
 
-    data class ItemUploaded(
-        val itemId: String,
-        val completed: Int,
-        val total: Int,
-    ) : TransferEvent
+    data class ItemUploaded(val itemId: String, val completed: Int, val total: Int) : TransferEvent
 
     data class ItemFailed(
         val itemId: String,
         val message: String,
+        val failureReason: TransferFailureReason? = null
     ) : TransferEvent
 
-    data class Completed(
-        val uploaded: Int,
-        val failed: Int,
-    ) : TransferEvent
+    data class Completed(val uploaded: Int, val failed: Int) : TransferEvent
+}
+
+enum class TransferFailureReason {
+    LocalNetworkBypassBlocked
 }

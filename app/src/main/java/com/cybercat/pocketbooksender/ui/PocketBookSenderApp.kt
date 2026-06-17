@@ -356,6 +356,8 @@ private fun AppNavHost(
                 onDocumentsTagChanged = transferViewModel::updateDocumentsTag,
                 onMangaSeriesChanged = transferViewModel::updateMangaSeries,
                 onQueuedMangaSeriesChanged = transferViewModel::updateQueuedMangaSeries,
+                onDismissVpnBypassDialog = transferViewModel::dismissVpnBypassDialog,
+                onDisableVpnBypass = transferViewModel::disableVpnBypassForLocalConnections,
                 onUploadAll = transferViewModel::uploadAll
             )
         }

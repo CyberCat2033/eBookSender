@@ -20,9 +20,11 @@ import com.cybercat.pocketbooksender.model.PocketBookDevice
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
+import com.cybercat.pocketbooksender.network.isLocalNetworkBypassBlocked
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import com.cybercat.pocketbooksender.transfer.TransferCoordinator
 import com.cybercat.pocketbooksender.transfer.TransferEvent
+import com.cybercat.pocketbooksender.transfer.TransferFailureReason
 import com.cybercat.pocketbooksender.transfer.TransferUploadItem
 import com.cybercat.pocketbooksender.ui.FtpErrorMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -67,6 +69,7 @@ class TransferViewModel @Inject constructor(
     private val _activeTransferItemIds = MutableStateFlow<Set<String>>(emptySet())
     private val _uploadProgressById = MutableStateFlow<Map<String, Float>>(emptyMap())
     private val _errorState = MutableStateFlow<FtpErrorState?>(null)
+    private val _showVpnBypassDialog = MutableStateFlow(false)
     private val _ftpSuggestions =
         MutableStateFlow<Pair<List<String>, List<String>>>(Pair(emptyList(), emptyList()))
     private var pendingClearQueueJob: Job? = null
@@ -82,6 +85,7 @@ class TransferViewModel @Inject constructor(
         queueManager.queue,
         settingsRepository.settings,
         _errorState,
+        _showVpnBypassDialog,
         catalogRepository.catalog,
         _ftpSuggestions,
         localizationManager.currentStrings
@@ -95,9 +99,10 @@ class TransferViewModel @Inject constructor(
         val queue = values[6] as List<UploadItem>
         val settings = values[7] as AppSettings
         val errorState = values[8] as FtpErrorState?
-        val catalog = values[9] as DeviceCatalog
-        val suggestions = values[10] as Pair<List<String>, List<String>>
-        val strings = values[11] as com.cybercat.pocketbooksender.localization.AppStrings
+        val showVpnBypassDialog = values[9] as Boolean
+        val catalog = values[10] as DeviceCatalog
+        val suggestions = values[11] as Pair<List<String>, List<String>>
+        val strings = values[12] as com.cybercat.pocketbooksender.localization.AppStrings
 
         val error = when (errorState) {
             is FtpErrorState.Connection -> ftpErrorMapper.mapConnectionError(
@@ -143,6 +148,7 @@ class TransferViewModel @Inject constructor(
             queue = queue,
             settings = settings,
             errorMessage = error,
+            showVpnBypassDialog = showVpnBypassDialog,
             documentsTags = tags,
             mangaSeriesSuggestions = series
         )
@@ -159,6 +165,7 @@ class TransferViewModel @Inject constructor(
                 if (device != null) {
                     _ftpInput.value = device.ftpUrl
                     _errorState.value = null
+                    _showVpnBypassDialog.value = false
                     refreshRemoteFolderSuggestions(device)
                 } else {
                     _ftpSuggestions.value = Pair(emptyList(), emptyList())
@@ -197,6 +204,7 @@ class TransferViewModel @Inject constructor(
         connectionManager.disconnect()
         _ftpInput.value = device.ftpUrl
         _errorState.value = null
+        _showVpnBypassDialog.value = false
 
         viewModelScope.launch {
             ftpGateway.checkConnection(device)
@@ -205,11 +213,17 @@ class TransferViewModel @Inject constructor(
                     connectionManager.connect(device)
                     _ftpInput.value = device.ftpUrl
                     _errorState.value = null
+                    _showVpnBypassDialog.value = false
                 }
                 .onFailure { error ->
                     _isConnecting.value = false
                     connectionManager.disconnect()
-                    _errorState.value = FtpErrorState.Connection(error, device)
+                    if (error.isLocalNetworkBypassBlocked()) {
+                        _showVpnBypassDialog.value = true
+                        _errorState.value = null
+                    } else {
+                        _errorState.value = FtpErrorState.Connection(error, device)
+                    }
                 }
         }
     }
@@ -217,6 +231,17 @@ class TransferViewModel @Inject constructor(
     fun disconnect() {
         _isConnecting.value = false
         connectionManager.disconnect()
+    }
+
+    fun dismissVpnBypassDialog() {
+        _showVpnBypassDialog.value = false
+    }
+
+    fun disableVpnBypassForLocalConnections() {
+        viewModelScope.launch {
+            settingsRepository.setBypassVpnForLocalConnections(false)
+            _showVpnBypassDialog.value = false
+        }
     }
 
     fun addUris(uris: List<Uri>) {
@@ -303,6 +328,7 @@ class TransferViewModel @Inject constructor(
         _uploadProgressById.value = pending.associate { item -> item.id to 0f }
         _isTransferActive.value = true
         _errorState.value = null
+        _showVpnBypassDialog.value = false
 
         val pendingIds = pending.mapTo(mutableSetOf()) { item -> item.id }
         queueManager.updateQueue { current ->
@@ -373,7 +399,12 @@ class TransferViewModel @Inject constructor(
                         }
                     }
                 }
-                _errorState.value = FtpErrorState.RawMessage(event.message)
+                if (event.failureReason == TransferFailureReason.LocalNetworkBypassBlocked) {
+                    _showVpnBypassDialog.value = true
+                    _errorState.value = null
+                } else {
+                    _errorState.value = FtpErrorState.RawMessage(event.message)
+                }
             }
 
             is TransferEvent.Completed -> {
