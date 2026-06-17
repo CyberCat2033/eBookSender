@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.opds
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.opds.DownloadOpdsEntriesUseCase
@@ -8,7 +7,6 @@ import com.cybercat.pocketbooksender.data.opds.MatchOpdsAuthSourceUseCase
 import com.cybercat.pocketbooksender.data.opds.OpdsAcquisition
 import com.cybercat.pocketbooksender.data.opds.OpdsAuthenticationRequiredException
 import com.cybercat.pocketbooksender.data.opds.OpdsCatalog
-import com.cybercat.pocketbooksender.data.opds.OpdsDownloadProgress
 import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsRepository
@@ -19,10 +17,6 @@ import com.cybercat.pocketbooksender.util.launchTemporaryStatus
 import com.cybercat.pocketbooksender.util.onFailureRethrowing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -33,21 +27,19 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class OpdsViewModel @Inject constructor(
     private val opdsRepository: OpdsRepository,
-    private val downloadOpdsEntriesUseCase: DownloadOpdsEntriesUseCase,
+    downloadOpdsEntriesUseCase: DownloadOpdsEntriesUseCase,
     private val searchOpdsCatalogUseCase: SearchOpdsCatalogUseCase,
     private val matchOpdsAuthSource: MatchOpdsAuthSourceUseCase,
-    private val queueManager: UploadQueueManager,
+    queueManager: UploadQueueManager,
     private val localizationManager: com.cybercat.pocketbooksender.localization.LocalizationManager
 ) : ViewModel() {
 
     private val mutableOpdsState = MutableStateFlow(OpdsUiState())
     private var initialCatalogLoadRequested = false
-    private var opdsDownloadJob: Job? = null
     private val authController = OpdsAuthController(
         opdsRepository = opdsRepository,
         localizationManager = localizationManager,
@@ -55,6 +47,18 @@ class OpdsViewModel @Inject constructor(
         scope = viewModelScope,
         showStatus = ::showOpdsStatus,
         loadCatalog = ::loadOpdsCatalog
+    )
+    private val downloadController = OpdsDownloadController(
+        opdsRepository = opdsRepository,
+        downloadOpdsEntriesUseCase = downloadOpdsEntriesUseCase,
+        matchOpdsAuthSource = matchOpdsAuthSource,
+        queueManager = queueManager,
+        localizationManager = localizationManager,
+        opdsState = mutableOpdsState,
+        scope = viewModelScope,
+        showStatus = ::showOpdsStatus,
+        showError = ::showOpdsError,
+        openCredentialsDialog = authController::openCredentialsDialog
     )
 
     val uiState: StateFlow<OpdsUiState> = combine(
@@ -385,233 +389,15 @@ class OpdsViewModel @Inject constructor(
     }
 
     fun downloadOpdsAcquisition(entry: OpdsEntry, acquisition: OpdsAcquisition) {
-        if (opdsDownloadJob?.isActive == true) return
-
-        val baseUrl = mutableOpdsState.value.currentUrl
-        if (baseUrl == null) {
-            mutableOpdsState.update {
-                it.copy(
-                    errorMessage = localizationManager.currentStrings.value
-                        .opdsErrorOpenCatalogFirst,
-                    statusMessage = null
-                )
-            }
-            return
-        }
-
-        opdsDownloadJob = viewModelScope.launch {
-            mutableOpdsState.update {
-                it.copy(
-                    isDownloading = true,
-                    downloadProgress = OpdsDownloadUiProgress(
-                        completedCount = 0,
-                        totalCount = 1,
-                        currentItemTitle = entry.title.ifBlank { acquisition.title.orEmpty() },
-                        currentItemAuthors = entry.authors
-                    ),
-                    errorMessage = null,
-                    statusMessage = null
-                )
-            }
-
-            try {
-                val file = opdsRepository.downloadPublication(
-                    baseUrl = baseUrl,
-                    entry = entry,
-                    acquisition = acquisition,
-                    onProgress = ::onOpdsDownloadProgress
-                )
-                queueManager.addUris(listOf(Uri.fromFile(file)))
-                mutableOpdsState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        downloadProgress = null
-                    )
-                }
-                showOpdsStatus(
-                    localizationManager.currentStrings.value.get(
-                        "opds_status_added_to_queue",
-                        file.name
-                    )
-                )
-            } catch (error: CancellationException) {
-                mutableOpdsState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        downloadProgress = null
-                    )
-                }
-                showOpdsStatus(
-                    localizationManager.currentStrings.value.get("opds_status_download_canceled")
-                )
-            } catch (error: Throwable) {
-                if (error is OpdsAuthenticationRequiredException) {
-                    val matchingSource = matchOpdsAuthSource(error)
-                    if (matchingSource != null) {
-                        mutableOpdsState.update { state ->
-                            state.copy(
-                                isDownloading = false,
-                                downloadProgress = null
-                            )
-                        }
-                        openCredentialsDialog(matchingSource)
-                        return@launch
-                    }
-                }
-                mutableOpdsState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        downloadProgress = null
-                    )
-                }
-                showOpdsError(
-                    error.message
-                        ?: localizationManager.currentStrings.value.opdsErrorCannotDownload
-                )
-            } finally {
-                opdsDownloadJob = null
-            }
-        }
+        downloadController.downloadOpdsAcquisition(entry, acquisition)
     }
 
     fun downloadOpdsEntries(entries: List<OpdsEntry>) {
-        if (opdsDownloadJob?.isActive == true) return
-
-        val baseUrl = mutableOpdsState.value.currentUrl
-        if (baseUrl == null) {
-            mutableOpdsState.update {
-                it.copy(
-                    errorMessage = localizationManager.currentStrings.value
-                        .opdsErrorOpenCatalogFirst,
-                    statusMessage = null
-                )
-            }
-            return
-        }
-
-        val downloadableCount = downloadOpdsEntriesUseCase.downloadableEntryCount(entries)
-        if (downloadableCount == 0) {
-            mutableOpdsState.update {
-                it.copy(
-                    errorMessage = localizationManager.currentStrings.value
-                        .opdsErrorNoDownloadableEntries,
-                    statusMessage = null
-                )
-            }
-            return
-        }
-
-        var addedToQueueCount = 0
-        opdsDownloadJob = viewModelScope.launch {
-            mutableOpdsState.update {
-                it.copy(
-                    isDownloading = true,
-                    downloadProgress = OpdsDownloadUiProgress(
-                        completedCount = 0,
-                        totalCount = downloadableCount
-                    ),
-                    errorMessage = null,
-                    statusMessage = null
-                )
-            }
-
-            try {
-                val result = downloadOpdsEntriesUseCase(
-                    baseUrl = baseUrl,
-                    entries = entries,
-                    onFileDownloaded = { file ->
-                        withContext(NonCancellable + Dispatchers.Main.immediate) {
-                            queueManager.addUris(listOf(Uri.fromFile(file)))
-                            addedToQueueCount += 1
-                            mutableOpdsState.update { state ->
-                                val currentProgress = state.downloadProgress
-                                state.copy(
-                                    downloadProgress = currentProgress?.copy(
-                                        completedCount = addedToQueueCount,
-                                        totalCount = downloadableCount,
-                                        bytesRead = 0L,
-                                        totalBytes = null
-                                    )
-                                )
-                            }
-                        }
-                    }
-                ).getOrThrow()
-
-                mutableOpdsState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        downloadProgress = null,
-                        errorMessage = if (result.failedCount > 0) {
-                            localizationManager.currentStrings.value.get(
-                                "opds_error_failed_to_download_entries",
-                                result.failedCount
-                            )
-                        } else {
-                            null
-                        }
-                    )
-                }
-
-                if (result.downloadedFiles.isNotEmpty()) {
-                    showOpdsStatus(
-                        localizationManager.currentStrings.value.get(
-                            "opds_status_added_to_queue_multiple",
-                            result.downloadedFiles.size
-                        )
-                    )
-                }
-            } catch (error: CancellationException) {
-                mutableOpdsState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        downloadProgress = null
-                    )
-                }
-                showOpdsStatus(opdsDownloadCanceledMessage(addedToQueueCount))
-            } catch (error: Throwable) {
-                mutableOpdsState.update { state ->
-                    state.copy(
-                        isDownloading = false,
-                        downloadProgress = null
-                    )
-                }
-                showOpdsError(
-                    error.message
-                        ?: localizationManager.currentStrings.value.opdsErrorCannotDownload
-                )
-            } finally {
-                opdsDownloadJob = null
-            }
-        }
+        downloadController.downloadOpdsEntries(entries)
     }
 
     fun cancelOpdsDownload() {
-        val job = opdsDownloadJob?.takeIf { it.isActive } ?: return
-        mutableOpdsState.update { state ->
-            state.copy(
-                statusMessage = null,
-                downloadProgress = state.downloadProgress?.copy(isCanceling = true)
-            )
-        }
-        job.cancel()
-    }
-
-    private fun onOpdsDownloadProgress(progress: OpdsDownloadProgress) {
-        mutableOpdsState.update { state ->
-            val currentProgress = state.downloadProgress ?: return@update state
-            state.copy(
-                downloadProgress = currentProgress.copy(
-                    bytesRead = progress.bytesRead,
-                    totalBytes = progress.totalBytes,
-                    currentItemTitle = progress.currentItemTitle
-                        ?: currentProgress.currentItemTitle,
-                    currentItemAuthors = progress.currentItemAuthors.ifEmpty {
-                        currentProgress.currentItemAuthors
-                    }
-                )
-            )
-        }
+        downloadController.cancelOpdsDownload()
     }
 
     private fun loadOpdsCatalog(
@@ -722,15 +508,6 @@ class OpdsViewModel @Inject constructor(
                 }
             }
         )
-    }
-
-    private fun opdsDownloadCanceledMessage(addedToQueueCount: Int): String {
-        val strings = localizationManager.currentStrings.value
-        return if (addedToQueueCount > 0) {
-            strings.get("opds_status_download_canceled_with_files", addedToQueueCount)
-        } else {
-            strings.get("opds_status_download_canceled")
-        }
     }
 
     private companion object {
