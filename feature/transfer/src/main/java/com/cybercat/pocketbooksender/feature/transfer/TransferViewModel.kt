@@ -14,13 +14,12 @@ import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.CatalogGroup
-import com.cybercat.pocketbooksender.model.DEFAULT_FTP_ROOT_PATH
 import com.cybercat.pocketbooksender.model.DeviceCatalog
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
 import com.cybercat.pocketbooksender.model.PocketBookDevice
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
-import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
+import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import com.cybercat.pocketbooksender.transfer.TransferCoordinator
 import com.cybercat.pocketbooksender.transfer.TransferEvent
@@ -189,13 +188,9 @@ class TransferViewModel @Inject constructor(
                 return
             }
 
-        val settingsRootPath = normalizeFtpRootPath(uiState.value.settings.rootPath)
+        val settingsRootPath = normalizeFtpRelativeRootPath(uiState.value.settings.rootPath)
         val device = parsedDevice.copy(
-            rootPath = if (parsedDevice.rootPath == DEFAULT_FTP_ROOT_PATH) {
-                settingsRootPath
-            } else {
-                parsedDevice.rootPath
-            }
+            relativeRootPath = settingsRootPath
         )
 
         _isConnecting.value = true

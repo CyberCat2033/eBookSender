@@ -35,7 +35,7 @@ class DeviceCatalogRepository @Inject constructor(
     private val catalogTreeBuilder: CatalogTreeBuilder,
     private val catalogFolderScanner: CatalogFolderScanner,
     private val connectionManager: ConnectionManager,
-    private val settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -57,14 +57,26 @@ class DeviceCatalogRepository @Inject constructor(
             .launchIn(scope)
 
         settingsRepository.settings
-            .map { it.rootPath to (it.booksFolderName + "/" + it.documentsFolderName + "/" + it.mangaFolderName) }
+            .map {
+                CatalogSettingsKey(
+                    relativeRootPath = it.rootPath,
+                    booksFolderName = it.booksFolderName,
+                    documentsFolderName = it.documentsFolderName,
+                    mangaFolderName = it.mangaFolderName
+                )
+            }
             .distinctUntilChanged()
             .drop(1)
-            .onEach {
+            .onEach { key ->
                 deletedPaths.clear()
                 val device = connectionManager.connectedDevice.value
                 if (device != null) {
-                    refresh(device)
+                    val updatedDevice = device.copy(relativeRootPath = key.relativeRootPath)
+                    if (updatedDevice != device) {
+                        connectionManager.connect(updatedDevice)
+                    } else {
+                        refresh(device)
+                    }
                 }
             }
             .launchIn(scope)
@@ -101,50 +113,53 @@ class DeviceCatalogRepository @Inject constructor(
                 val files = group.files.filterNot { it.path in deleted }
                 group.copy(
                     files = files,
-                    latestFile = group.latestFile?.takeIf { it.path !in deleted } ?: files.lastOrNull(),
-                    lastReadFile = group.lastReadFile?.takeIf { it.path !in deleted } ?: files.lastReadFile(),
+                    latestFile =
+                        group.latestFile?.takeIf { it.path !in deleted } ?: files.lastOrNull(),
+                    lastReadFile =
+                        group.lastReadFile?.takeIf { it.path !in deleted } ?: files.lastReadFile()
                 ).takeIf { it.files.isNotEmpty() }
-            },
+            }
         )
     }
 
-    suspend fun deleteFiles(device: PocketBookDevice, paths: List<String>) = withContext(Dispatchers.IO) {
-        val settings = settingsRepository.settings.first()
-        val safePaths = paths.map { validateCatalogDeletePath(it, settings) }.distinct()
-        if (safePaths.isEmpty()) return@withContext
+    suspend fun deleteFiles(device: PocketBookDevice, paths: List<String>) =
+        withContext(Dispatchers.IO) {
+            val settings = settingsRepository.settings.first()
+            val safePaths = paths.map { validateCatalogDeletePath(it, settings) }.distinct()
+            if (safePaths.isEmpty()) return@withContext
 
-        val selectedPathSet = safePaths.toSet()
-        val folderCandidates = _catalog.value.deleteFolderCandidates(selectedPathSet)
-        var firstError: Throwable? = null
-        val successfulPaths = mutableListOf<String>()
-        safePaths.forEach { path ->
-            ftpGateway.deleteFile(device, path)
-                .onSuccess {
-                    successfulPaths.add(path)
-                }
-                .onFailure { error ->
-                    if (firstError == null) firstError = error
-                }
+            val selectedPathSet = safePaths.toSet()
+            val folderCandidates = _catalog.value.deleteFolderCandidates(selectedPathSet)
+            var firstError: Throwable? = null
+            val successfulPaths = mutableListOf<String>()
+            safePaths.forEach { path ->
+                ftpGateway.deleteFile(device, path)
+                    .onSuccess {
+                        successfulPaths.add(path)
+                    }
+                    .onFailure { error ->
+                        if (firstError == null) firstError = error
+                    }
+            }
+
+            val successfulPathSet = successfulPaths.toSet()
+            val folderPaths = folderCandidates
+                .filter { candidate -> candidate.filePaths.all { it in successfulPathSet } }
+                .map { candidate -> validateCatalogDeleteFolderPath(candidate.path, settings) }
+                .distinct()
+                .sortedByDescending { path -> path.count { it == '/' } }
+
+            folderPaths.forEach { folderPath ->
+                ftpGateway.deleteDirectory(device, folderPath)
+                    .onFailure { error ->
+                        if (firstError == null) firstError = error
+                    }
+            }
+
+            deletedPaths.addAll(successfulPaths)
+            refresh(device)
+            firstError?.let { throw it }
         }
-
-        val successfulPathSet = successfulPaths.toSet()
-        val folderPaths = folderCandidates
-            .filter { candidate -> candidate.filePaths.all { it in successfulPathSet } }
-            .map { candidate -> validateCatalogDeleteFolderPath(candidate.path, settings) }
-            .distinct()
-            .sortedByDescending { path -> path.count { it == '/' } }
-
-        folderPaths.forEach { folderPath ->
-            ftpGateway.deleteDirectory(device, folderPath)
-                .onFailure { error ->
-                    if (firstError == null) firstError = error
-                }
-        }
-
-        deletedPaths.addAll(successfulPaths)
-        refresh(device)
-        firstError?.let { throw it }
-    }
 
     private fun validateCatalogDeletePath(path: String, settings: AppSettings): String {
         val trimmed = path.replace('\\', '/').trim()
@@ -193,7 +208,7 @@ class DeviceCatalogRepository @Inject constructor(
     }
 
     private fun DeviceCatalog.deleteFolderCandidates(
-        selectedPaths: Set<String>,
+        selectedPaths: Set<String>
     ): List<CatalogDeleteFolderCandidate> = buildList {
         fun addCandidate(groupPath: String, files: List<CatalogFile>) {
             if ('/' !in groupPath.trim('/')) return
@@ -204,7 +219,7 @@ class DeviceCatalogRepository @Inject constructor(
             add(
                 CatalogDeleteFolderCandidate(
                     path = groupPath,
-                    filePaths = filePaths,
+                    filePaths = filePaths
                 )
             )
         }
@@ -214,34 +229,42 @@ class DeviceCatalogRepository @Inject constructor(
         manga.forEach { group -> addCandidate(group.path, group.files) }
     }
 
-    suspend fun load(device: PocketBookDevice, settings: AppSettings): DeviceCatalog = withContext(Dispatchers.IO) {
-        val databaseCatalog = runCatching { loadFromPocketBookDatabase(device, settings) }
-            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
-            .getOrNull()
-        if (databaseCatalog != null && !databaseCatalog.isEmpty) {
-            databaseCatalog
-        } else {
-            loadFromFolders(device, settings)
+    suspend fun load(device: PocketBookDevice, settings: AppSettings): DeviceCatalog =
+        withContext(Dispatchers.IO) {
+            val databaseCatalog = runCatching { loadFromPocketBookDatabase(device, settings) }
+                .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
+                .getOrNull()
+            if (databaseCatalog != null && !databaseCatalog.isEmpty) {
+                databaseCatalog
+            } else {
+                loadFromFolders(device, settings)
+            }
         }
-    }
 
-    private suspend fun loadFromPocketBookDatabase(device: PocketBookDevice, settings: AppSettings): DeviceCatalog {
-        return catalogTreeBuilder.buildFromDatabaseFiles(
-            files = databaseReader.readCatalogFiles(device, settings),
-            settings = settings,
-            scannedAtMillis = System.currentTimeMillis(),
-        )
-    }
+    private suspend fun loadFromPocketBookDatabase(
+        device: PocketBookDevice,
+        settings: AppSettings
+    ): DeviceCatalog = catalogTreeBuilder.buildFromDatabaseFiles(
+        files = databaseReader.readCatalogFiles(device, settings),
+        settings = settings,
+        scannedAtMillis = System.currentTimeMillis()
+    )
 
-    private suspend fun loadFromFolders(device: PocketBookDevice, settings: AppSettings): DeviceCatalog =
-        catalogFolderScanner.scan(
-            device = device,
-            settings = settings,
-            scannedAtMillis = System.currentTimeMillis(),
-        )
+    private suspend fun loadFromFolders(
+        device: PocketBookDevice,
+        settings: AppSettings
+    ): DeviceCatalog = catalogFolderScanner.scan(
+        device = device,
+        settings = settings,
+        scannedAtMillis = System.currentTimeMillis()
+    )
 
-    private data class CatalogDeleteFolderCandidate(
-        val path: String,
-        val filePaths: Set<String>,
+    private data class CatalogDeleteFolderCandidate(val path: String, val filePaths: Set<String>)
+
+    private data class CatalogSettingsKey(
+        val relativeRootPath: String,
+        val booksFolderName: String,
+        val documentsFolderName: String,
+        val mangaFolderName: String
     )
 }

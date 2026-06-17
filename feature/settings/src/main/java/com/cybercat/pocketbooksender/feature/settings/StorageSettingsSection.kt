@@ -5,7 +5,7 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.input.ImeAction
 import com.cybercat.pocketbooksender.localization.LocalStrings
-import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
+import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
 
 @Composable
 internal fun StorageSettingsSection(
@@ -25,7 +25,7 @@ internal fun StorageSettingsSection(
             onValueChange = onRootPathChanged,
             label = strings.settingsRootPath,
             leadingIcon = Icons.Outlined.Folder,
-            validation = ::normalizeFtpRootPath
+            validation = ::normalizeFtpRelativeRootPath
         )
         ValidatedSettingsField(
             value = state.settings.booksFolderName,

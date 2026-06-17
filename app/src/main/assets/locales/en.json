@@ -15,7 +15,7 @@
 
   "settings_title": "Settings",
   "settings_storage_section": "POCKETBOOK STORAGE",
-  "settings_root_path": "Root path",
+  "settings_root_path": "Relative root path",
   "settings_books_folder": "Books folder name",
   "settings_docs_folder": "Documents folder name",
   "settings_manga_folder": "Manga folder name",

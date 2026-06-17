@@ -8,6 +8,7 @@ import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
+import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
 import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
+@Suppress("ktlint:standard:backing-property-naming")
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val connectionManager: ConnectionManager,
@@ -95,7 +97,16 @@ class SettingsViewModel @Inject constructor(
     )
 
     fun setRootPath(value: String) {
-        viewModelScope.launch { settingsRepository.setRootPath(value) }
+        viewModelScope.launch {
+            val relativeRootPath = normalizeFtpRelativeRootPath(value)
+            settingsRepository.setRootPath(relativeRootPath)
+            connectionManager.connectedDevice.value?.let { device ->
+                val updatedDevice = device.copy(relativeRootPath = relativeRootPath)
+                if (updatedDevice != device) {
+                    connectionManager.connect(updatedDevice)
+                }
+            }
+        }
     }
 
     fun setBooksFolderName(value: String) {

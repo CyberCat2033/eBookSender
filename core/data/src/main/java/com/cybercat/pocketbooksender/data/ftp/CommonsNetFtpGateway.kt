@@ -2,6 +2,8 @@ package com.cybercat.pocketbooksender.data.ftp
 
 import com.cybercat.pocketbooksender.data.network.LocalDeviceNetworkProvider
 import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
+import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
 import java.io.InputStream
 import java.io.OutputStream
 import javax.inject.Inject
@@ -13,18 +15,18 @@ import org.apache.commons.net.ftp.FTPFile
 import org.apache.commons.net.ftp.FTPReply
 
 class CommonsNetFtpGateway @Inject constructor(
-    private val localDeviceNetworkProvider: LocalDeviceNetworkProvider,
+    private val localDeviceNetworkProvider: LocalDeviceNetworkProvider
 ) : FtpGateway {
     override suspend fun checkConnection(device: PocketBookDevice): Result<FtpSessionInfo> =
         withFtpClient(device) { client ->
             runCatching {
                 client.listFiles()
                 check(FTPReply.isPositiveCompletion(client.replyCode)) {
-                    "Cannot read ${device.rootPath}: ${client.replyString}"
+                    "Cannot read ${device.workingRootPath}: ${client.replyString}"
                 }
                 FtpSessionInfo(
-                    rootPath = device.rootPath,
-                    systemType = runCatching { client.systemType }.getOrNull(),
+                    rootPath = device.workingRootPath,
+                    systemType = runCatching { client.systemType }.getOrNull()
                 )
             }
         }
@@ -33,7 +35,7 @@ class CommonsNetFtpGateway @Inject constructor(
         device: PocketBookDevice,
         remoteRelativePath: String,
         input: InputStream,
-        onProgress: ((Long) -> Unit)?,
+        onProgress: ((Long) -> Unit)?
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
             val normalized = remoteRelativePath.trimStart('/')
@@ -70,7 +72,7 @@ class CommonsNetFtpGateway @Inject constructor(
 
     override suspend fun listDirectories(
         device: PocketBookDevice,
-        remoteRelativePath: String,
+        remoteRelativePath: String
     ): Result<List<String>> = withFtpClient(device) { client ->
         runCatching {
             client.listFiles(remoteRelativePath.trimStart('/'))
@@ -83,7 +85,7 @@ class CommonsNetFtpGateway @Inject constructor(
 
     override suspend fun listEntries(
         device: PocketBookDevice,
-        remoteRelativePath: String,
+        remoteRelativePath: String
     ): Result<List<FtpEntry>> = withFtpClient(device) { client ->
         runCatching {
             val normalizedPath = remoteRelativePath.trim('/')
@@ -100,7 +102,7 @@ class CommonsNetFtpGateway @Inject constructor(
                         path = childPath,
                         isDirectory = file.isDirectory,
                         size = file.size,
-                        modifiedAtMillis = file.timestamp?.timeInMillis,
+                        modifiedAtMillis = file.timestamp?.timeInMillis
                     )
                 }
                 .sortedWith(compareBy<FtpEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
@@ -110,7 +112,7 @@ class CommonsNetFtpGateway @Inject constructor(
     override suspend fun downloadFile(
         device: PocketBookDevice,
         remoteRelativePath: String,
-        output: OutputStream,
+        output: OutputStream
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
             val normalized = remoteRelativePath.trimStart('/')
@@ -124,7 +126,7 @@ class CommonsNetFtpGateway @Inject constructor(
 
     override suspend fun deleteFile(
         device: PocketBookDevice,
-        remoteRelativePath: String,
+        remoteRelativePath: String
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
             val normalized = remoteRelativePath.toSafeRelativeFtpPath()
@@ -136,7 +138,7 @@ class CommonsNetFtpGateway @Inject constructor(
 
     override suspend fun deleteDirectory(
         device: PocketBookDevice,
-        remoteRelativePath: String,
+        remoteRelativePath: String
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
             val normalized = remoteRelativePath.toSafeRelativeFtpPath()
@@ -149,7 +151,7 @@ class CommonsNetFtpGateway @Inject constructor(
     override suspend fun rename(
         device: PocketBookDevice,
         fromPath: String,
-        toPath: String,
+        toPath: String
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
             val normalizedFrom = fromPath.toSafeRelativeFtpPath()
@@ -174,7 +176,7 @@ class CommonsNetFtpGateway @Inject constructor(
 
     private suspend fun <T> withFtpClient(
         device: PocketBookDevice,
-        block: (FTPClient) -> Result<T>,
+        block: (FTPClient) -> Result<T>
     ): Result<T> = withContext(Dispatchers.IO) {
         val client = FTPClient()
 
@@ -199,9 +201,7 @@ class CommonsNetFtpGateway @Inject constructor(
             client.setFileType(FTP.BINARY_FILE_TYPE)
             client.sendCommand("OPTS UTF8 ON")
 
-            check(client.changeWorkingDirectory(device.rootPath)) {
-                "Cannot open ${device.rootPath}: ${client.replyString}"
-            }
+            client.openWorkingRoot(device)
 
             block(client)
         } catch (error: Throwable) {
@@ -211,6 +211,21 @@ class CommonsNetFtpGateway @Inject constructor(
                 runCatching { client.logout() }
                 runCatching { client.disconnect() }
             }
+        }
+    }
+
+    private fun FTPClient.openWorkingRoot(device: PocketBookDevice) {
+        val mountRoot = normalizeFtpRootPath(device.rootPath)
+        check(changeWorkingDirectory(mountRoot)) {
+            "Cannot open $mountRoot: $replyString"
+        }
+
+        val relativeRoot = normalizeFtpRelativeRootPath(device.relativeRootPath)
+        if (relativeRoot.isBlank()) return
+
+        makeDirectories(relativeRoot)
+        check(changeWorkingDirectory(relativeRoot)) {
+            "Cannot open ${device.workingRootPath}: $replyString"
         }
     }
 
@@ -262,9 +277,7 @@ private class ProgressInputStream(
         return b
     }
 
-    override fun read(b: ByteArray): Int {
-        return read(b, 0, b.size)
-    }
+    override fun read(b: ByteArray): Int = read(b, 0, b.size)
 
     override fun read(b: ByteArray, off: Int, len: Int): Int {
         val result = delegate.read(b, off, len)

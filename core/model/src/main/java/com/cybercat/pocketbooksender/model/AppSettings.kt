@@ -1,9 +1,10 @@
 package com.cybercat.pocketbooksender.model
 
 const val DEFAULT_FTP_ROOT_PATH = "/"
+const val DEFAULT_FTP_RELATIVE_ROOT_PATH = ""
 
 data class AppSettings(
-    val rootPath: String = DEFAULT_FTP_ROOT_PATH,
+    val rootPath: String = DEFAULT_FTP_RELATIVE_ROOT_PATH,
     val booksFolderName: String = "Books",
     val documentsFolderName: String = "Documents",
     val mangaFolderName: String = "Manga",
@@ -32,6 +33,31 @@ fun normalizeFtpRootPath(value: String): String {
     if (segments.any { it == "." || it == ".." }) return DEFAULT_FTP_ROOT_PATH
 
     return "/" + segments.joinToString("/")
+}
+
+fun normalizeFtpRelativeRootPath(value: String): String {
+    val normalized = value.trim().replace('\\', '/')
+    if (normalized.isBlank()) return DEFAULT_FTP_RELATIVE_ROOT_PATH
+
+    val segments = normalized
+        .split('/')
+        .filter { it.isNotBlank() }
+    if (segments.isEmpty()) return DEFAULT_FTP_RELATIVE_ROOT_PATH
+    if (segments.any { it == "." || it == ".." }) return DEFAULT_FTP_RELATIVE_ROOT_PATH
+
+    return segments.joinToString("/")
+}
+
+fun combineFtpRootPath(rootPath: String, relativeRootPath: String): String {
+    val root = normalizeFtpRootPath(rootPath)
+    val relativeRoot = normalizeFtpRelativeRootPath(relativeRootPath)
+    if (relativeRoot.isBlank()) return root
+
+    return if (root == DEFAULT_FTP_ROOT_PATH) {
+        "$DEFAULT_FTP_ROOT_PATH$relativeRoot"
+    } else {
+        "${root.trimEnd('/')}/$relativeRoot"
+    }
 }
 
 enum class ConflictStrategy {

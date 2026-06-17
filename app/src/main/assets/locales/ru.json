@@ -15,7 +15,7 @@
 
   "settings_title": "Настройки",
   "settings_storage_section": "ХРАНИЛИЩЕ POCKETBOOK",
-  "settings_root_path": "Корневой путь",
+  "settings_root_path": "Относительный корень",
   "settings_books_folder": "Имя папки Книги",
   "settings_docs_folder": "Имя папки Документы",
   "settings_manga_folder": "Имя папки Манга",

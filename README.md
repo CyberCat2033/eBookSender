@@ -32,7 +32,7 @@ Important packages:
 
 - Scan QR with Google Code Scanner or paste an FTP link/IP manually.
 - Pressing `Connect` with an empty FTP field launches the QR scanner.
-- Pressing `Connect` with a non-empty FTP field parses the address, logs in anonymously, opens the configured root path, and runs an FTP `LIST` check before the device is considered connected.
+- Pressing `Connect` with a non-empty FTP field parses the address, logs in anonymously, opens the FTP root from the link, creates/opens the relative root path from Settings, and runs an FTP `LIST` check before the device is considered connected.
 - Accept files from Android picker.
 - Accept shared files through `ACTION_SEND` / `ACTION_SEND_MULTIPLE`.
 - Classify files by extension:
@@ -135,7 +135,7 @@ CBR handling:
   - Checks if the source folder exists on the device (using CWD and PWD). If it does not exist (e.g. for a new user), the rename operation is skipped on the device and treated as successful, allowing new folders to be created dynamically on the fly during upload.
   - Detects name conflict errors (like FTP `550`) and presents a user-friendly error message rather than a generic failure alert.
 - Persist settings in DataStore:
-  - root path
+  - relative root path for the app hierarchy under the FTP root from the link
   - default Documents tag
   - default Manga series
   - Books/Documents/Manga filename templates
@@ -147,7 +147,7 @@ CBR handling:
   - Applying a language waits until the language picker finishes its close animation, avoiding a mid-dialog UI repaint.
   - Automatically queries system locale settings to determine the interface language on first run.
   - Basic locales (`en.json`, `ru.json`) are packaged in `assets/locales/`.
-  - Community members can drop `.json` translation files into `<rootPath>/PocketBookSender/locales/` on the device.
+  - Community members can drop `.json` translation files into `<relative root path>/PocketBookSender/locales/` on the device.
   - Scans files at runtime, reads metadata (`meta_language_code` and `meta_language_name`) from inside the JSON files.
   - Prevents language collisions (groups by language code, overriding internal with external, and choosing the newest translation file).
   - Integrates with CompositionLocal `LocalStrings` for reactive runtime language switching without app restarts.

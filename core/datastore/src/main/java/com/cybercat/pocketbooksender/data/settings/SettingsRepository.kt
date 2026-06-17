@@ -7,8 +7,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.cybercat.pocketbooksender.model.AppSettings
 import com.cybercat.pocketbooksender.model.AppTheme
-import com.cybercat.pocketbooksender.model.DEFAULT_FTP_ROOT_PATH
-import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
+import com.cybercat.pocketbooksender.model.DEFAULT_FTP_RELATIVE_ROOT_PATH
+import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,8 +21,8 @@ private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 class SettingsRepository @Inject constructor(@ApplicationContext private val context: Context) {
     val settings: Flow<AppSettings> = context.settingsDataStore.data.map { preferences ->
         AppSettings(
-            rootPath = normalizeFtpRootPath(
-                preferences[ROOT_PATH] ?: DEFAULT_FTP_ROOT_PATH
+            rootPath = normalizeFtpRelativeRootPath(
+                preferences[ROOT_PATH] ?: DEFAULT_FTP_RELATIVE_ROOT_PATH
             ),
             booksFolderName = preferences[BOOKS_FOLDER_NAME] ?: "Books",
             documentsFolderName = preferences[DOCUMENTS_FOLDER_NAME] ?: "Documents",
@@ -45,7 +45,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
 
     suspend fun setRootPath(value: String) {
         context.settingsDataStore.edit { preferences ->
-            preferences[ROOT_PATH] = normalizeFtpRootPath(value)
+            preferences[ROOT_PATH] = normalizeFtpRelativeRootPath(value)
         }
     }
 

@@ -5,50 +5,55 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.model.AppSettings
+import com.cybercat.pocketbooksender.model.DEFAULT_FTP_RELATIVE_ROOT_PATH
 import com.cybercat.pocketbooksender.model.PocketBookDevice
+import com.cybercat.pocketbooksender.model.normalizeFtpRelativeRootPath
+import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val PocketBookStoragePrefix = "/mnt/ext1/"
+private const val POCKET_BOOK_STORAGE_PREFIX = "/mnt/ext1/"
 
 @Singleton
 class PocketBookDatabaseReader @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val ftpGateway: FtpGateway,
+    private val ftpGateway: FtpGateway
 ) {
     internal suspend fun readCatalogFiles(
         device: PocketBookDevice,
-        settings: AppSettings,
+        settings: AppSettings
     ): List<DbCatalogFile> {
-        val dbFile = downloadDatabaseSnapshot(device)
-        return readDatabaseFiles(dbFile, settings)
+        val dbFile = downloadDatabaseSnapshot(
+            device.copy(relativeRootPath = DEFAULT_FTP_RELATIVE_ROOT_PATH)
+        )
+        return readDatabaseFiles(dbFile, device, settings)
     }
 
     private suspend fun downloadDatabaseSnapshot(device: PocketBookDevice): File {
-        val directory = File(context.cacheDir, CacheDirectory).apply { mkdirs() }
+        val directory = File(context.cacheDir, CACHE_DIRECTORY).apply { mkdirs() }
 
-        DatabaseFiles.forEach { name ->
+        DATABASE_FILES.forEach { name ->
             File(directory, name).delete()
         }
 
-        val dbFile = File(directory, DatabaseName)
+        val dbFile = File(directory, DATABASE_NAME)
         dbFile.outputStream().use { outputStream ->
             ftpGateway.downloadFile(
                 device = device,
-                remoteRelativePath = "$RemoteDatabaseDirectory/$DatabaseName",
-                output = outputStream,
+                remoteRelativePath = "$REMOTE_DATABASE_DIRECTORY/$DATABASE_NAME",
+                output = outputStream
             ).getOrThrow()
         }
 
-        OptionalDatabaseFiles.forEach { name ->
+        OPTIONAL_DATABASE_FILES.forEach { name ->
             val file = File(directory, name)
             file.outputStream().use { outputStream ->
                 ftpGateway.downloadFile(
                     device = device,
-                    remoteRelativePath = "$RemoteDatabaseDirectory/$name",
-                    output = outputStream,
+                    remoteRelativePath = "$REMOTE_DATABASE_DIRECTORY/$name",
+                    output = outputStream
                 ).onFailure {
                     file.delete()
                 }
@@ -60,35 +65,37 @@ class PocketBookDatabaseReader @Inject constructor(
 
     private fun readDatabaseFiles(
         dbFile: File,
-        settings: AppSettings,
+        device: PocketBookDevice,
+        settings: AppSettings
     ): List<DbCatalogFile> {
         val database = SQLiteDatabase.openDatabase(
             dbFile.absolutePath,
             null,
-            SQLiteDatabase.OPEN_READONLY,
+            SQLiteDatabase.OPEN_READONLY
         )
 
         return database.use { db ->
             db.execSQL("PRAGMA query_only = ON")
+            val storageRootPrefix = device.storageRootPrefix(settings)
             val args = arrayOf(
-                "$PocketBookStoragePrefix${settings.booksFolderName}%",
-                "$PocketBookStoragePrefix${settings.documentsFolderName}%",
-                "$PocketBookStoragePrefix${settings.mangaFolderName}%",
+                "$storageRootPrefix${settings.booksFolderName}%",
+                "$storageRootPrefix${settings.documentsFolderName}%",
+                "$storageRootPrefix${settings.mangaFolderName}%"
             )
-            db.rawQuery(CatalogQuery, args).use { cursor ->
+            db.rawQuery(CATALOG_QUERY, args).use { cursor ->
                 buildList {
                     while (cursor.moveToNext()) {
-                        cursor.toDbCatalogFile()?.let(::add)
+                        cursor.toDbCatalogFile(storageRootPrefix)?.let(::add)
                     }
                 }
             }
         }
     }
 
-    private fun Cursor.toDbCatalogFile(): DbCatalogFile? {
+    private fun Cursor.toDbCatalogFile(storageRootPrefix: String): DbCatalogFile? {
         val folder = string("folder")?.trimEnd('/') ?: return null
         val fileName = string("filename")?.takeIf { it.isNotBlank() } ?: return null
-        val relativePath = normalizePath("$folder/$fileName") ?: return null
+        val relativePath = normalizePath("$folder/$fileName", storageRootPrefix) ?: return null
         val completed = int("completed") == 1
         val cpage = int("cpage")
         val npage = int("npage")
@@ -105,25 +112,25 @@ class PocketBookDatabaseReader @Inject constructor(
             readProgressPercent = readProgressPercent(
                 completed = completed,
                 cpage = cpage,
-                npage = npage,
+                npage = npage
             ),
             completed = completed,
             lastOpenedAtMillis = long("opentime")?.takeIf { it > 0 }?.secondsToMillis(),
             cpage = cpage,
             npage = npage,
-            series = string("series")?.cleanText(),
+            series = string("series")?.cleanText()
         )
     }
 
     private companion object {
-        const val CacheDirectory = "pocketbook-catalog"
-        const val RemoteDatabaseDirectory = "system/explorer-3"
-        const val DatabaseName = "explorer-3.db"
+        const val CACHE_DIRECTORY = "pocketbook-catalog"
+        const val REMOTE_DATABASE_DIRECTORY = "system/explorer-3"
+        const val DATABASE_NAME = "explorer-3.db"
 
-        val OptionalDatabaseFiles = listOf("$DatabaseName-wal", "$DatabaseName-shm")
-        val DatabaseFiles = listOf(DatabaseName) + OptionalDatabaseFiles
+        val OPTIONAL_DATABASE_FILES = listOf("$DATABASE_NAME-wal", "$DATABASE_NAME-shm")
+        val DATABASE_FILES = listOf(DATABASE_NAME) + OPTIONAL_DATABASE_FILES
 
-        val CatalogQuery = """
+        val CATALOG_QUERY = """
             SELECT
                 f.id AS file_id,
                 b.id AS book_id,
@@ -155,6 +162,17 @@ class PocketBookDatabaseReader @Inject constructor(
     }
 }
 
+private fun PocketBookDevice.storageRootPrefix(settings: AppSettings): String {
+    val mountRoot = normalizeFtpRootPath(rootPath).takeUnless { it == "/" }
+        ?: POCKET_BOOK_STORAGE_PREFIX.trimEnd('/')
+    val relativeRoot = normalizeFtpRelativeRootPath(settings.rootPath)
+    return if (relativeRoot.isBlank()) {
+        "$mountRoot/"
+    } else {
+        "$mountRoot/$relativeRoot/"
+    }
+}
+
 internal data class DbCatalogFile(
     val fileId: Long?,
     val bookId: Long?,
@@ -169,30 +187,23 @@ internal data class DbCatalogFile(
     val lastOpenedAtMillis: Long?,
     val cpage: Int?,
     val npage: Int?,
-    val series: String?,
+    val series: String?
 )
 
-private fun normalizePath(absolutePath: String): String? =
-    absolutePath
-        .removePrefix(PocketBookStoragePrefix)
-        .trim('/')
-        .takeIf { it.isNotBlank() }
+private fun normalizePath(absolutePath: String, storageRootPrefix: String): String? = absolutePath
+    .removePrefix(storageRootPrefix)
+    .trim('/')
+    .takeIf { it.isNotBlank() }
 
-private fun String?.splitAuthors(): List<String> =
-    orEmpty()
-        .split(',')
-        .mapNotNull { it.cleanText() }
+private fun String?.splitAuthors(): List<String> = orEmpty()
+    .split(',')
+    .mapNotNull { it.cleanText() }
 
-private fun String.cleanText(): String? =
-    trim()
-        .replace(Regex("\\s+"), " ")
-        .takeIf { it.isNotBlank() }
+private fun String.cleanText(): String? = trim()
+    .replace(Regex("\\s+"), " ")
+    .takeIf { it.isNotBlank() }
 
-private fun readProgressPercent(
-    completed: Boolean,
-    cpage: Int?,
-    npage: Int?,
-): Int? {
+private fun readProgressPercent(completed: Boolean, cpage: Int?, npage: Int?): Int? {
     if (completed) return 100
     val current = cpage ?: return null
     val total = npage?.takeIf { it > 0 } ?: return null
