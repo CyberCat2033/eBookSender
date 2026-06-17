@@ -4,7 +4,6 @@ import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -14,10 +13,10 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,9 +34,9 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -60,11 +59,12 @@ import com.cybercat.pocketbooksender.data.opds.OpdsEntry
 import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.OpdsSource
 import com.cybercat.pocketbooksender.localization.LocalStrings
+import com.cybercat.pocketbooksender.ui.LoadingCard
 import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
-import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.ui.StatusMessage
 import com.cybercat.pocketbooksender.ui.StatusMessageHost
-import com.cybercat.pocketbooksender.ui.LoadingCard
+import com.cybercat.pocketbooksender.ui.theme.EmphasizedEasing
+import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.launch
 
 private const val WebModeEnterDurationMillis = 220
@@ -74,17 +74,17 @@ private const val OpdsContentFadeDurationMillis = 160
 
 private val OpdsFeedFadeInSpec = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
-    stiffness = Spring.StiffnessMediumLow,
+    stiffness = Spring.StiffnessMediumLow
 )
 
 private val OpdsFeedFadeOutSpec = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
-    stiffness = Spring.StiffnessMedium,
+    stiffness = Spring.StiffnessMedium
 )
 
 private val OpdsFeedPlacementSpec = spring<IntOffset>(
     dampingRatio = Spring.DampingRatioNoBouncy,
-    stiffness = Spring.StiffnessMediumLow,
+    stiffness = Spring.StiffnessMediumLow
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -117,7 +117,7 @@ fun OpdsScreen(
     mangaFloatingActionButton: @Composable () -> Unit,
     isMangaSelectionActive: Boolean,
     mangaSelectedChapterCount: Int,
-    onClearMangaSelection: () -> Unit,
+    onClearMangaSelection: () -> Unit
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -140,7 +140,7 @@ fun OpdsScreen(
                     link.isStartLink() &&
                         !link.isRedundantStartLink(
                             currentUrl = state.currentUrl,
-                            sources = state.sources,
+                            sources = state.sources
                         )
                 }
         }
@@ -166,8 +166,15 @@ fun OpdsScreen(
             onPasswordChanged = { newSourcePassword = it },
             onDismiss = { showAddSourceDialog = false },
             onSaveSource = {
-                onSaveSource(newSourceTitle, newSourceUrl, newSourceUsername.ifBlank { null }, newSourcePassword.ifBlank { null })
-            },
+                onSaveSource(
+                    newSourceTitle,
+                    newSourceUrl,
+                    newSourceUsername.ifBlank {
+                        null
+                    },
+                    newSourcePassword.ifBlank { null }
+                )
+            }
         )
     }
 
@@ -183,8 +190,11 @@ fun OpdsScreen(
             password = state.authDialogPassword,
             onUsernameChanged = onAuthUsernameChanged,
             onPasswordChanged = onAuthPasswordChanged,
-            onDismiss = { credentialsDialogVisible = false; onDismissAuthDialog() },
-            onSave = onSaveCredentials,
+            onDismiss = {
+                credentialsDialogVisible = false
+                onDismissAuthDialog()
+            },
+            onSave = onSaveCredentials
         )
     }
 
@@ -197,21 +207,25 @@ fun OpdsScreen(
                             strings.get("generic_selected_count", mangaSelectedChapterCount)
                         } else {
                             strings.navWeb
-                        },
+                        }
                     )
                 },
                 navigationIcon = {
                     if (webMode == WebContentMode.Opds && state.canGoBack) {
                         IconButton(
                             onClick = {
-                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                )
                                 onBack()
                             },
-                            enabled = canHandleOpdsBack,
+                            enabled = canHandleOpdsBack
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = strings.get("action_back"),
+                                contentDescription = strings.get("action_back")
                             )
                         }
                     } else if (webMode == WebContentMode.Manga) {
@@ -228,15 +242,15 @@ fun OpdsScreen(
                                     view.performHapticIfAllowed(
                                         context,
                                         enableHaptics,
-                                        HapticFeedbackConstants.VIRTUAL_KEY,
+                                        HapticFeedbackConstants.VIRTUAL_KEY
                                     )
                                     onOpenLink(startLink)
                                 },
-                                enabled = !state.isLoading,
+                                enabled = !state.isLoading
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Home,
-                                    contentDescription = strings.opdsRelStart,
+                                    contentDescription = strings.opdsRelStart
                                 )
                             }
                         }
@@ -247,24 +261,27 @@ fun OpdsScreen(
                                 newSourceUsername = ""
                                 newSourcePassword = ""
                                 showAddSourceDialog = true
-                            },
+                            }
                         ) {
-                            Icon(Icons.Outlined.Add, contentDescription = strings.get("opds_action_add_source"))
+                            Icon(
+                                Icons.Outlined.Add,
+                                contentDescription = strings.get("opds_action_add_source")
+                            )
                         }
                     }
-                },
+                }
             )
         },
         floatingActionButton = {
             if (webMode == WebContentMode.Manga) {
                 mangaFloatingActionButton()
             }
-        },
+        }
     ) { innerPadding ->
         BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPadding)
         ) {
             val contentMaxWidth = if (maxWidth >= 900.dp) 980.dp else maxWidth
             Column(
@@ -272,13 +289,13 @@ fun OpdsScreen(
                     .widthIn(max = contentMaxWidth)
                     .fillMaxSize()
                     .align(Alignment.TopCenter)
-                    .padding(horizontal = adaptiveLayout.screenHorizontalPadding),
+                    .padding(horizontal = adaptiveLayout.screenHorizontalPadding)
             ) {
                 WebModeSelector(
                     selectedMode = webMode,
                     enableHaptics = enableHaptics,
                     onModeSelected = onWebModeSelected,
-                    modifier = Modifier.padding(bottom = 10.dp),
+                    modifier = Modifier.padding(bottom = 10.dp)
                 )
 
                 Box(Modifier.weight(1f)) {
@@ -286,33 +303,44 @@ fun OpdsScreen(
                         targetState = webMode,
                         modifier = Modifier.fillMaxSize(),
                         transitionSpec = {
-                            val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                            val direction = if (targetState.ordinal >
+                                initialState.ordinal
+                            ) {
+                                1
+                            } else {
+                                -1
+                            }
                             (
                                 slideInHorizontally(
                                     animationSpec = tween(
                                         durationMillis = WebModeEnterDurationMillis,
-                                        easing = FastOutSlowInEasing,
+                                        easing = EmphasizedEasing
                                     ),
-                                    initialOffsetX = { width -> direction * width / 5 },
+                                    initialOffsetX = { width -> direction * width / 5 }
                                 ) + fadeIn(
-                                    animationSpec = tween(durationMillis = WebModeEnterDurationMillis),
+                                    animationSpec = tween(
+                                        durationMillis = WebModeEnterDurationMillis
+                                    )
                                 )
-                            ).togetherWith(
+                                ).togetherWith(
                                 slideOutHorizontally(
                                     animationSpec = tween(
                                         durationMillis = WebModeExitDurationMillis,
-                                        easing = FastOutSlowInEasing,
+                                        easing = EmphasizedEasing
                                     ),
-                                    targetOffsetX = { width -> -direction * width / 8 },
+                                    targetOffsetX = { width -> -direction * width / 8 }
                                 ) + fadeOut(
-                                    animationSpec = tween(durationMillis = WebModeExitDurationMillis),
+                                    animationSpec = tween(
+                                        durationMillis = WebModeExitDurationMillis
+                                    )
                                 )
                             )
                         },
-                        label = "WebModeContentAnimation",
+                        label = "WebModeContentAnimation"
                     ) { targetMode ->
                         when (targetMode) {
                             WebContentMode.Manga -> mangaPane()
+
                             WebContentMode.Opds -> OpdsCatalogContent(
                                 state = state,
                                 opdsListState = opdsListState,
@@ -323,7 +351,7 @@ fun OpdsScreen(
                                 onSearchChanged = onSearchChanged,
                                 onSearch = onSearch,
                                 onOpenLink = onOpenLink,
-                                onDownload = onDownload,
+                                onDownload = onDownload
                             )
                         }
                     }
@@ -337,7 +365,7 @@ fun OpdsScreen(
                             onNextPage = onNextPage,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(bottom = 12.dp),
+                                .padding(bottom = 12.dp)
                         )
                     }
                 }
@@ -357,7 +385,7 @@ private fun OpdsCatalogContent(
     onSearchChanged: (String) -> Unit,
     onSearch: () -> Unit,
     onOpenLink: (OpdsLink) -> Unit,
-    onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
+    onDownload: (OpdsEntry, OpdsAcquisition) -> Unit
 ) {
     val strings = LocalStrings.current
     val density = LocalDensity.current
@@ -371,7 +399,7 @@ private fun OpdsCatalogContent(
             ?.filterNot { link ->
                 link.isRedundantStartLink(
                     currentUrl = state.currentUrl,
-                    sources = state.sources,
+                    sources = state.sources
                 )
             }
             ?: emptyList()
@@ -398,7 +426,7 @@ private fun OpdsCatalogContent(
         launch {
             contentAlpha.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = OpdsContentFadeDurationMillis),
+                animationSpec = tween(durationMillis = OpdsContentFadeDurationMillis)
             )
         }
         launch {
@@ -406,8 +434,8 @@ private fun OpdsCatalogContent(
                 targetValue = 0f,
                 animationSpec = tween(
                     durationMillis = OpdsContentEnterDurationMillis,
-                    easing = FastOutSlowInEasing,
-                ),
+                    easing = EmphasizedEasing
+                )
             )
         }
     }
@@ -420,7 +448,7 @@ private fun OpdsCatalogContent(
                 alpha = contentAlpha.value
                 translationY = contentOffsetY.value
             },
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             SourcePicker(
@@ -428,7 +456,7 @@ private fun OpdsCatalogContent(
                 enableHaptics = enableHaptics,
                 onOpenSource = onOpenSource,
                 onRemoveSource = onRemoveSource,
-                onEditCredentials = onOpenCredentialsEdit,
+                onEditCredentials = onOpenCredentialsEdit
             )
         }
 
@@ -436,7 +464,7 @@ private fun OpdsCatalogContent(
             item {
                 StatusMessage(
                     text = message,
-                    isError = true,
+                    isError = true
                 )
             }
         }
@@ -459,7 +487,7 @@ private fun OpdsCatalogContent(
                     enabled = !state.isLoading,
                     enableHaptics = enableHaptics,
                     onSearchChanged = onSearchChanged,
-                    onSearch = onSearch,
+                    onSearch = onSearch
                 )
             }
 
@@ -469,7 +497,7 @@ private fun OpdsCatalogContent(
                         links = feedLinks,
                         enabled = !state.isLoading,
                         enableHaptics = enableHaptics,
-                        onOpenLink = onOpenLink,
+                        onOpenLink = onOpenLink
                     )
                 }
             }
@@ -478,7 +506,7 @@ private fun OpdsCatalogContent(
                 item {
                     StatusMessage(
                         text = strings.opdsCatalogEmpty,
-                        isError = false,
+                        isError = false
                     )
                 }
             }
@@ -486,7 +514,7 @@ private fun OpdsCatalogContent(
             itemsIndexed(
                 entryRows,
                 key = { _, row -> row.key },
-                contentType = { _, _ -> "entry" },
+                contentType = { _, _ -> "entry" }
             ) { _, row ->
                 OpdsEntryCard(
                     entry = row.entry,
@@ -497,8 +525,8 @@ private fun OpdsCatalogContent(
                     modifier = Modifier.animateItem(
                         fadeInSpec = OpdsFeedFadeInSpec,
                         fadeOutSpec = OpdsFeedFadeOutSpec,
-                        placementSpec = OpdsFeedPlacementSpec,
-                    ),
+                        placementSpec = OpdsFeedPlacementSpec
+                    )
                 )
             }
 
@@ -509,7 +537,7 @@ private fun OpdsCatalogContent(
                         enabled = !state.isLoading,
                         enableHaptics = enableHaptics,
                         onOpenLink = onOpenLink,
-                        modifier = Modifier.padding(top = 10.dp),
+                        modifier = Modifier.padding(top = 10.dp)
                     )
                 }
             }
@@ -526,7 +554,7 @@ private data class OpdsContentMotionKey(
     val catalogTitle: String?,
     val entryCount: Int,
     val feedLinkCount: Int,
-    val isLoadingWithoutCatalog: Boolean,
+    val isLoadingWithoutCatalog: Boolean
 )
 
 private fun OpdsUiState.opdsContentMotionKey(feedLinkCount: Int): OpdsContentMotionKey {
@@ -536,7 +564,7 @@ private fun OpdsUiState.opdsContentMotionKey(feedLinkCount: Int): OpdsContentMot
         catalogTitle = catalog?.title,
         entryCount = catalog?.entries?.size ?: 0,
         feedLinkCount = feedLinkCount,
-        isLoadingWithoutCatalog = isLoading && catalog == null,
+        isLoadingWithoutCatalog = isLoading && catalog == null
     )
 }
 
@@ -546,24 +574,28 @@ private fun WebModeSelector(
     selectedMode: WebContentMode,
     enableHaptics: Boolean,
     onModeSelected: (WebContentMode) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val view = LocalView.current
     SingleChoiceSegmentedButtonRow(
         modifier = modifier
             .fillMaxWidth()
-            .height(48.dp),
+            .height(48.dp)
     ) {
         val options = listOf(
             WebContentMode.Opds to "OPDS",
-            WebContentMode.Manga to "Manga",
+            WebContentMode.Manga to "Manga"
         )
         options.forEachIndexed { index, (mode, label) ->
             SegmentedButton(
                 selected = selectedMode == mode,
                 onClick = {
-                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        HapticFeedbackConstants.VIRTUAL_KEY
+                    )
                     onModeSelected(mode)
                 },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
@@ -573,13 +605,13 @@ private fun WebModeSelector(
                             WebContentMode.Opds -> Icons.AutoMirrored.Outlined.MenuBook
                             WebContentMode.Manga -> Icons.Outlined.Image
                         },
-                        contentDescription = null,
+                        contentDescription = null
                     )
-                },
+                }
             ) {
                 Text(
                     text = label,
-                    maxLines = 1,
+                    maxLines = 1
                 )
             }
         }

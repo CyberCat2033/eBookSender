@@ -1,7 +1,6 @@
 package com.cybercat.pocketbooksender.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -34,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.cybercat.pocketbooksender.ui.theme.EmphasizedEasing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -84,7 +84,7 @@ fun AnimatedAlertDialog(
     confirmButton: @Composable (() -> Unit)? = null,
     dismissButton: @Composable (() -> Unit)? = null,
     title: @Composable (() -> Unit)? = null,
-    text: @Composable (() -> Unit)? = null,
+    text: @Composable (() -> Unit)? = null
 ) {
     val contentVisibility = remember {
         MutableTransitionState(false).apply {
@@ -109,7 +109,7 @@ fun AnimatedAlertDialog(
 
     BasicAlertDialog(
         onDismissRequest = { animatedDismiss(null) },
-        modifier = modifier,
+        modifier = modifier
     ) {
         AnimatedVisibility(
             visibleState = contentVisibility,
@@ -117,50 +117,54 @@ fun AnimatedAlertDialog(
                 initialScale = 0.96f,
                 animationSpec = tween(
                     durationMillis = EnterMs,
-                    easing = FastOutSlowInEasing,
-                ),
+                    easing = EmphasizedEasing
+                )
             ) + fadeIn(
                 animationSpec = tween(
                     durationMillis = FadeEnterMs,
-                    easing = FastOutSlowInEasing,
-                ),
+                    easing = EmphasizedEasing
+                )
             ),
             exit = scaleOut(
                 targetScale = 0.98f,
                 animationSpec = tween(
                     durationMillis = ExitMs,
-                    easing = FastOutSlowInEasing,
-                ),
+                    easing = EmphasizedEasing
+                )
             ) + fadeOut(
                 animationSpec = tween(
                     durationMillis = ExitMs,
-                    easing = FastOutSlowInEasing,
-                ),
-            ),
+                    easing = EmphasizedEasing
+                )
+            )
         ) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = AlertDialogDefaults.shape,
                 color = AlertDialogDefaults.containerColor,
-                tonalElevation = AlertDialogDefaults.TonalElevation,
+                tonalElevation = AlertDialogDefaults.TonalElevation
             ) {
                 // Provide animated dismiss to button composables via CompositionLocal.
                 CompositionLocalProvider(
                     LocalDismissDialog provides { animatedDismiss(null) },
-                    LocalDismissDialogAfter provides { afterDismiss -> animatedDismiss(afterDismiss) },
+                    LocalDismissDialogAfter provides
+                        { afterDismiss -> animatedDismiss(afterDismiss) }
                 ) {
                     Column(
                         modifier = Modifier.padding(
-                            start = 24.dp, top = 24.dp, end = 24.dp, bottom = 18.dp,
-                        ),
+                            start = 24.dp,
+                            top = 24.dp,
+                            end = 24.dp,
+                            bottom = 18.dp
+                        )
                     ) {
                         if (title != null) {
                             CompositionLocalProvider(
-                                LocalContentColor provides AlertDialogDefaults.titleContentColor,
+                                LocalContentColor provides AlertDialogDefaults.titleContentColor
                             ) {
                                 CompositionLocalProvider(
                                     LocalTextStyle provides LocalTextStyle.current
-                                        .merge(MaterialTheme.typography.headlineSmall),
+                                        .merge(MaterialTheme.typography.headlineSmall)
                                 ) {
                                     Box(Modifier.padding(bottom = 16.dp)) { title() }
                                 }
@@ -168,16 +172,16 @@ fun AnimatedAlertDialog(
                         }
                         if (text != null) {
                             CompositionLocalProvider(
-                                LocalContentColor provides AlertDialogDefaults.textContentColor,
+                                LocalContentColor provides AlertDialogDefaults.textContentColor
                             ) {
                                 CompositionLocalProvider(
                                     LocalTextStyle provides LocalTextStyle.current
-                                        .merge(MaterialTheme.typography.bodyMedium),
+                                        .merge(MaterialTheme.typography.bodyMedium)
                                 ) {
                                     Box(
                                         modifier = Modifier
                                             .weight(1f, fill = false)
-                                            .padding(bottom = 24.dp),
+                                            .padding(bottom = 24.dp)
                                     ) { text() }
                                 }
                             }
@@ -186,7 +190,7 @@ fun AnimatedAlertDialog(
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 dismissButton?.invoke()
                                 if (dismissButton != null && confirmButton != null) {

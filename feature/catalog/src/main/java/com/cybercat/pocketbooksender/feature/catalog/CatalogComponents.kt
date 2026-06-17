@@ -3,7 +3,6 @@ package com.cybercat.pocketbooksender.feature.catalog
 import android.text.format.DateUtils
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -75,6 +74,7 @@ import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
+import com.cybercat.pocketbooksender.ui.theme.EmphasizedEasing
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -147,7 +147,7 @@ internal fun SelectionSlot(visible: Boolean, checked: Boolean, onCheckedChange: 
         targetValue = if (visible) SelectionSlotWidth else 0.dp,
         animationSpec = tween(
             durationMillis = SelectionMotionDurationMillis,
-            easing = FastOutSlowInEasing
+            easing = EmphasizedEasing
         ),
         label = "SelectionSlotWidth"
     )
@@ -155,7 +155,7 @@ internal fun SelectionSlot(visible: Boolean, checked: Boolean, onCheckedChange: 
         targetValue = if (visible) 1f else 0f,
         animationSpec = tween(
             durationMillis = SelectionMotionDurationMillis,
-            easing = FastOutSlowInEasing
+            easing = EmphasizedEasing
         ),
         label = "SelectionCheckboxAlpha"
     )
@@ -163,7 +163,7 @@ internal fun SelectionSlot(visible: Boolean, checked: Boolean, onCheckedChange: 
         targetValue = if (visible) 1f else 0.86f,
         animationSpec = tween(
             durationMillis = SelectionMotionDurationMillis,
-            easing = FastOutSlowInEasing
+            easing = EmphasizedEasing
         ),
         label = "SelectionCheckboxScale"
     )
@@ -558,12 +558,12 @@ internal fun FileList(
                     shrinkTowards = Alignment.Top,
                     animationSpec = tween(
                         durationMillis = RemovalMotionDurationMillis,
-                        easing = FastOutSlowInEasing
+                        easing = EmphasizedEasing
                     )
                 ) + fadeOut(
                     animationSpec = tween(
                         durationMillis = RemovalMotionDurationMillis,
-                        easing = FastOutSlowInEasing
+                        easing = EmphasizedEasing
                     )
                 ),
                 label = "FileRemoval"
