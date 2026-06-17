@@ -2,6 +2,7 @@ package com.cybercat.pocketbooksender.ui
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,7 +86,11 @@ fun AnimatedAlertDialog(
     title: @Composable (() -> Unit)? = null,
     text: @Composable (() -> Unit)? = null,
 ) {
-    var contentVisible by remember { mutableStateOf(false) }
+    val contentVisibility = remember {
+        MutableTransitionState(false).apply {
+            targetState = true
+        }
+    }
     var dismissStarted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -95,7 +99,7 @@ fun AnimatedAlertDialog(
         if (!dismissStarted) {
             dismissStarted = true
             scope.launch {
-                contentVisible = false
+                contentVisibility.targetState = false
                 delay(ExitMs.toLong())
                 onDismissRequest()
                 afterDismiss?.invoke()
@@ -103,15 +107,12 @@ fun AnimatedAlertDialog(
         }
     }
 
-    // Trigger enter animation on first composition.
-    LaunchedEffect(Unit) { contentVisible = true }
-
     BasicAlertDialog(
         onDismissRequest = { animatedDismiss(null) },
         modifier = modifier,
     ) {
         AnimatedVisibility(
-            visible = contentVisible,
+            visibleState = contentVisibility,
             enter = scaleIn(
                 initialScale = 0.96f,
                 animationSpec = tween(

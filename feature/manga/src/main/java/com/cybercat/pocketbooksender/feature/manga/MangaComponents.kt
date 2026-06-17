@@ -1207,7 +1207,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(IntrinsicSize.Min),
