@@ -50,6 +50,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/PocketBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
 - `app/src/main/java/com/cybercat/pocketbooksender/lifecycle/AppVisibilityTracker.kt` - process importance visibility gate used by foreground services to suppress completion notifications while the UI is visible.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/LocalMetadataExtractor.kt` - local metadata extractor router and remaining FB2/EPUB/MOBI metadata parsing for queued files.
+- `app/src/main/java/com/cybercat/pocketbooksender/metadata/DocxMetadataParser.kt` - DOCX core-properties parser for basic document metadata without preview extraction.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/PdfMetadataParser.kt` - Android `PdfRenderer` first-page preview extraction.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/MangaArchiveMetadataParser.kt` - CBZ/CBR preview extraction using ZIP/RAR format detection and bounded image decoding.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/MetadataPreviewDecoder.kt` - shared bounded bitmap preview decoder for local metadata parsers.

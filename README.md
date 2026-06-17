@@ -40,10 +40,10 @@ Important packages:
 - Accept shared files through `ACTION_SEND` / `ACTION_SEND_MULTIPLE`.
 - Classify files by extension:
   - `epub`, `fb2`, `mobi`, `azw3`, etc. -> `Books`
-  - `pdf` -> `Documents`
+  - `pdf`, `djvu`, `doc`, `docx` -> `Documents`
   - `cbr`, `cbz` -> `Manga`
 - Treat wrapped book names like `Book_Name.fb2.zip` by the inner book extension instead of plain `zip`.
-- Extract metadata from supported files, including wrapped `fb2.zip` books. EPUB and FB2 extraction includes details such as title, authors, series, series index (book number), publisher, and publication year. MOBI/AZW3 extraction reads PalmDB/MOBI/EXTH metadata such as title, authors, publisher, publication year, language, and description when present.
+- Extract metadata from supported files, including wrapped `fb2.zip` books. EPUB and FB2 extraction includes details such as title, authors, series, series index (book number), publisher, and publication year. MOBI/AZW3 extraction reads PalmDB/MOBI/EXTH metadata such as title, authors, publisher, publication year, language, and description when present. DOCX extraction reads basic core properties such as title, author, description, language, and year when present.
 - Show previews in the queue when extraction is available:
   - FB2 embedded cover.
   - EPUB cover image from OPF/manifest, or a fallback large image if the book has no explicit cover metadata.

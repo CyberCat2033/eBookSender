@@ -6,12 +6,10 @@ import javax.inject.Singleton
 
 @Singleton
 class FileClassifier @Inject constructor() {
-    fun classify(fileName: String): BookCategory {
-        return when (fileName.bookExtension()) {
-            "cbr", "cbz" -> BookCategory.Manga
-            "pdf", "pdf.zip" -> BookCategory.Documents
-            else -> BookCategory.Books
-        }
+    fun classify(fileName: String): BookCategory = when {
+        fileName.contentExtension() in MangaArchiveExtensions -> BookCategory.Manga
+        fileName.contentExtension() in DocumentFileExtensions -> BookCategory.Documents
+        else -> BookCategory.Books
     }
 }
 
@@ -44,16 +42,13 @@ fun String.bookTitleWithoutExtension(): String {
     }
 }
 
-fun String.contentExtension(): String =
-    bookExtension().removeSuffix(".zip")
+fun String.contentExtension(): String = bookExtension().removeSuffix(".zip")
 
-fun String.isZipWrappedBook(): Boolean =
-    bookExtension().endsWith(".zip")
+fun String.isZipWrappedBook(): Boolean = bookExtension().endsWith(".zip")
 
-private fun String.fileNameOnly(): String =
-    substringAfterLast('/')
-        .substringAfterLast('\\')
-        .trim()
+private fun String.fileNameOnly(): String = substringAfterLast('/')
+    .substringAfterLast('\\')
+    .trim()
 
 private val ZipWrappedBookExtensions = setOf(
     "fb2",
@@ -62,6 +57,8 @@ private val ZipWrappedBookExtensions = setOf(
     "azw3",
     "pdf",
     "djvu",
+    "doc",
+    "docx",
     "txt",
-    "rtf",
+    "rtf"
 )

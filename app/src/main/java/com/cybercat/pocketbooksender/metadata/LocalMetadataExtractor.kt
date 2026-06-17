@@ -15,8 +15,9 @@ class LocalMetadataExtractor @Inject constructor(
     @ApplicationContext private val context: Context,
     private val fb2MetadataParser: Fb2MetadataParser,
     private val epubMetadataParser: EpubMetadataParser,
+    private val docxMetadataParser: DocxMetadataParser,
     private val pdfMetadataParser: PdfMetadataParser,
-    private val mangaArchiveMetadataParser: MangaArchiveMetadataParser,
+    private val mangaArchiveMetadataParser: MangaArchiveMetadataParser
 ) : MetadataExtractor {
     override suspend fun extract(sourceUri: String, displayName: String): BookMetadata =
         withContext(Dispatchers.IO) {
@@ -27,6 +28,7 @@ class LocalMetadataExtractor @Inject constructor(
                 when (displayName.contentExtension()) {
                     "fb2" -> fb2MetadataParser.extract(uri, displayName, fallbackTitle) { open(it) }
                     "epub" -> epubMetadataParser.extract(uri, fallbackTitle) { open(it) }
+                    "docx" -> docxMetadataParser.extract(uri, fallbackTitle) { open(it) }
                     "mobi", "azw3" -> extractMobi(uri, fallbackTitle)
                     "pdf" -> pdfMetadataParser.extract(uri, fallbackTitle)
                     "cbz", "cbr" -> mangaArchiveMetadataParser.extract(uri, fallbackTitle)
@@ -45,7 +47,7 @@ class LocalMetadataExtractor @Inject constructor(
             MobiMetadataParser.parse(
                 channel = input.channel,
                 declaredSize = descriptor.statSize,
-                fallbackTitle = fallbackTitle,
+                fallbackTitle = fallbackTitle
             )
         } ?: return BookMetadata(title = fallbackTitle)
 
@@ -56,7 +58,7 @@ class LocalMetadataExtractor @Inject constructor(
             preview = metadata.coverBytes?.let(MetadataPreviewDecoder::decodeBitmap),
             language = metadata.language,
             year = metadata.year,
-            publisher = metadata.publisher,
+            publisher = metadata.publisher
         )
     }
 
