@@ -1,10 +1,7 @@
 package com.cybercat.pocketbooksender.feature.settings
 
 import android.view.HapticFeedbackConstants
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
@@ -14,15 +11,12 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,30 +26,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -70,15 +54,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -86,18 +67,11 @@ import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.model.AppTheme
 import com.cybercat.pocketbooksender.model.normalizeFtpRootPath
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
-import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialogAfter
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
-
-private enum class NamingTemplateField {
-    Books,
-    Documents,
-    Manga
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -132,7 +106,7 @@ fun SettingsScreen(
     val strings = LocalStrings.current
     val adaptiveLayout = LocalAdaptiveLayoutInfo.current
     val activeFolderRename = state.activeFolderRename
-    var focusedTemplateField by remember { mutableStateOf<NamingTemplateField?>(null) }
+    var focusedNamingTemplateSlot by remember { mutableStateOf<NamingTemplateSlot?>(null) }
 
     // --- Rename warning dialog: local lifecycle for animated dismiss ---
     var showRenameWarning by remember { mutableStateOf(false) }
@@ -151,12 +125,12 @@ fun SettingsScreen(
         hadPendingRename.value = hasPending
     }
 
-    fun updateFocusedTemplateField(field: NamingTemplateField, isFocused: Boolean) {
-        focusedTemplateField =
+    fun updateFocusedNamingTemplateSlot(slot: NamingTemplateSlot, isFocused: Boolean) {
+        focusedNamingTemplateSlot =
             when {
-                isFocused -> field
-                focusedTemplateField == field -> null
-                else -> focusedTemplateField
+                isFocused -> slot
+                focusedNamingTemplateSlot == slot -> null
+                else -> focusedNamingTemplateSlot
             }
     }
 
@@ -331,12 +305,12 @@ fun SettingsScreen(
                 }
 
                 SettingsSection(title = strings.settingsNamingSection) {
-                    Text(
-                        text = strings.settingsNamingTokens,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
+                    val activeNamingTemplateSlot = focusedNamingTemplateSlot
+                    var namingTokensContainerCoordinates by remember {
+                        mutableStateOf<LayoutCoordinates?>(null)
+                    }
+                    var namingTokensTargetY by remember { mutableStateOf(0) }
+                    var namingTokensHeightPx by remember { mutableStateOf(0) }
                     val commonTokens =
                         mapOf(
                             "title" to strings.settingsNamingExampleTitle,
@@ -361,92 +335,149 @@ fun SettingsScreen(
                         state.settings.mangaFileNameTemplate
                     ) { mutableStateOf(state.settings.mangaFileNameTemplate) }
 
-                    NamingTemplateBlock(
-                        value = state.settings.bookFileNameTemplate,
-                        onValueChange = onBookFileNameTemplateChanged,
-                        label = strings.settingsNamingBooksTemplate,
-                        imeAction = ImeAction.Next,
-                        onPreviewChange = { bookTemplatePreview = it },
-                        previewLabel = strings.get(
-                            "settings_naming_preview",
-                            strings.categoryBooks
-                        ),
-                        previewTemplate = bookTemplatePreview,
-                        exampleTokens = commonTokens,
-                        folderName = state.settings.booksFolderName,
-                        onFocusChanged = { isFocused ->
-                            updateFocusedTemplateField(NamingTemplateField.Books, isFocused)
-                        },
-                        validation = { it.trim().ifBlank { "{title}" } }
-                    )
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .onGloballyPositioned { coordinates ->
+                                    namingTokensContainerCoordinates = coordinates
+                                }
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            NamingTokensAnchor(
+                                slot = NamingTemplateSlot.Books,
+                                activeSlot = activeNamingTemplateSlot,
+                                tokenHeightPx = namingTokensHeightPx,
+                                containerCoordinates = namingTokensContainerCoordinates,
+                                onPositioned = { namingTokensTargetY = it }
+                            )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
+                            NamingTemplateBlock(
+                                value = state.settings.bookFileNameTemplate,
+                                onValueChange = onBookFileNameTemplateChanged,
+                                label = strings.settingsNamingBooksTemplate,
+                                imeAction = ImeAction.Next,
+                                onPreviewChange = { bookTemplatePreview = it },
+                                previewLabel = strings.get(
+                                    "settings_naming_preview",
+                                    strings.categoryBooks
+                                ),
+                                previewTemplate = bookTemplatePreview,
+                                exampleTokens = commonTokens,
+                                folderName = state.settings.booksFolderName,
+                                onFocusChanged = { isFocused ->
+                                    updateFocusedNamingTemplateSlot(
+                                        NamingTemplateSlot.Books,
+                                        isFocused
+                                    )
+                                },
+                                validation = { it.trim().ifBlank { "{title}" } }
+                            )
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ValidatedSettingsField(
-                            value = state.settings.defaultDocumentsTag,
-                            onValueChange = onDefaultDocumentsTagChanged,
-                            label = strings.settingsNamingDocsTag,
-                            imeAction = ImeAction.Next,
-                            validation = { it.trim().ifBlank { "Untagged" } }
-                        )
-                        NamingTemplateBlock(
-                            value = state.settings.documentsFileNameTemplate,
-                            onValueChange = onDocumentsFileNameTemplateChanged,
-                            label = strings.settingsNamingDocsTemplate,
-                            imeAction = ImeAction.Next,
-                            onPreviewChange = { docsTemplatePreview = it },
-                            previewLabel = strings.get(
-                                "settings_naming_preview",
-                                strings.categoryDocuments
-                            ),
-                            previewTemplate = docsTemplatePreview,
-                            exampleTokens = commonTokens,
-                            folderName = state.settings.documentsFolderName,
-                            onFocusChanged = { isFocused ->
-                                updateFocusedTemplateField(NamingTemplateField.Documents, isFocused)
-                            },
-                            validation = { it.trim().ifBlank { "{title}" } }
-                        )
-                    }
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                NamingTokensAnchor(
+                                    slot = NamingTemplateSlot.Documents,
+                                    activeSlot = activeNamingTemplateSlot,
+                                    tokenHeightPx = namingTokensHeightPx,
+                                    containerCoordinates = namingTokensContainerCoordinates,
+                                    onPositioned = { namingTokensTargetY = it }
+                                )
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ValidatedSettingsField(
-                            value = state.settings.defaultMangaSeries,
-                            onValueChange = onDefaultMangaSeriesChanged,
-                            label = strings.settingsNamingMangaSeries,
-                            imeAction = ImeAction.Next,
-                            validation = { it.trim().ifBlank { "Unknown_Series" } }
-                        )
-                        NamingTemplateBlock(
-                            value = state.settings.mangaFileNameTemplate,
-                            onValueChange = onMangaFileNameTemplateChanged,
-                            label = strings.settingsNamingMangaTemplate,
-                            imeAction = ImeAction.Done,
-                            onPreviewChange = { mangaTemplatePreview = it },
-                            previewLabel = strings.get(
-                                "settings_naming_preview",
-                                strings.categoryManga
-                            ),
-                            previewTemplate = mangaTemplatePreview,
-                            exampleTokens = commonTokens,
-                            folderName = state.settings.mangaFolderName,
-                            onFocusChanged = { isFocused ->
-                                updateFocusedTemplateField(NamingTemplateField.Manga, isFocused)
-                            },
-                            extension = "cbz",
-                            validation = { it.trim().ifBlank { "{series}_{volume}" } }
-                        )
+                                ValidatedSettingsField(
+                                    value = state.settings.defaultDocumentsTag,
+                                    onValueChange = onDefaultDocumentsTagChanged,
+                                    label = strings.settingsNamingDocsTag,
+                                    imeAction = ImeAction.Next,
+                                    validation = { it.trim().ifBlank { "Untagged" } }
+                                )
+                                NamingTemplateBlock(
+                                    value = state.settings.documentsFileNameTemplate,
+                                    onValueChange = onDocumentsFileNameTemplateChanged,
+                                    label = strings.settingsNamingDocsTemplate,
+                                    imeAction = ImeAction.Next,
+                                    onPreviewChange = { docsTemplatePreview = it },
+                                    previewLabel = strings.get(
+                                        "settings_naming_preview",
+                                        strings.categoryDocuments
+                                    ),
+                                    previewTemplate = docsTemplatePreview,
+                                    exampleTokens = commonTokens,
+                                    folderName = state.settings.documentsFolderName,
+                                    onFocusChanged = { isFocused ->
+                                        updateFocusedNamingTemplateSlot(
+                                            NamingTemplateSlot.Documents,
+                                            isFocused
+                                        )
+                                    },
+                                    validation = { it.trim().ifBlank { "{title}" } }
+                                )
+                            }
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                NamingTokensAnchor(
+                                    slot = NamingTemplateSlot.Manga,
+                                    activeSlot = activeNamingTemplateSlot,
+                                    tokenHeightPx = namingTokensHeightPx,
+                                    containerCoordinates = namingTokensContainerCoordinates,
+                                    onPositioned = { namingTokensTargetY = it }
+                                )
+
+                                ValidatedSettingsField(
+                                    value = state.settings.defaultMangaSeries,
+                                    onValueChange = onDefaultMangaSeriesChanged,
+                                    label = strings.settingsNamingMangaSeries,
+                                    imeAction = ImeAction.Next,
+                                    validation = { it.trim().ifBlank { "Unknown_Series" } }
+                                )
+                                NamingTemplateBlock(
+                                    value = state.settings.mangaFileNameTemplate,
+                                    onValueChange = onMangaFileNameTemplateChanged,
+                                    label = strings.settingsNamingMangaTemplate,
+                                    imeAction = ImeAction.Done,
+                                    onPreviewChange = { mangaTemplatePreview = it },
+                                    previewLabel = strings.get(
+                                        "settings_naming_preview",
+                                        strings.categoryManga
+                                    ),
+                                    previewTemplate = mangaTemplatePreview,
+                                    exampleTokens = commonTokens,
+                                    folderName = state.settings.mangaFolderName,
+                                    extension = "cbz",
+                                    onFocusChanged = { isFocused ->
+                                        updateFocusedNamingTemplateSlot(
+                                            NamingTemplateSlot.Manga,
+                                            isFocused
+                                        )
+                                    },
+                                    validation = {
+                                        it.trim().ifBlank { "{series}_{volume}" }
+                                    }
+                                )
+                            }
+                        }
+
+                        if (activeNamingTemplateSlot != null) {
+                            MovingNamingTokensHint(
+                                text = strings.settingsNamingTokens,
+                                targetOffsetY = namingTokensTargetY,
+                                onHeightChanged = { namingTokensHeightPx = it }
+                            )
+                        }
                     }
                 }
 
@@ -879,20 +910,6 @@ fun SettingsScreen(
                 }
 
                 Spacer(Modifier.height(32.dp))
-            }
-            AnimatedVisibility(
-                visible = focusedTemplateField != null,
-                modifier =
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(
-                            horizontal = adaptiveLayout.screenHorizontalPadding,
-                            vertical = 8.dp
-                        ),
-                enter = slideInVertically { -it } + fadeIn(),
-                exit = slideOutVertically { -it } + fadeOut()
-            ) {
-                NamingTokensHint(strings.settingsNamingTokens)
             }
         }
     }
