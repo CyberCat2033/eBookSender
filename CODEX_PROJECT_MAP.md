@@ -203,6 +203,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - Manga motion: `feature/manga/.../MangaPane.kt`, `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`, and `MangaSubscriptionUpdatesDialog.kt`.
   - Chapter and search-result lists use `Modifier.animateItem()`.
   - Opening a selected series scrolls the list with `animateScrollToItem`.
+  - The full-screen manga login browser dialog fades/slides in and its close/back dismiss path animates out before clearing browser state.
   - Active manga download overlay enters/exits with fade plus vertical slide from the bottom and includes a localized Material 3 cancel action.
   - Manga download progress uses low-stiffness no-bounce spring `animateFloatAsState`.
   - Subscription update groups rotate chevrons with a medium spring and expand/collapse chapter lists with spring expand/shrink plus fade.

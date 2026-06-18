@@ -4,22 +4,37 @@ import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,11 +44,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,11 +64,16 @@ import com.cybercat.ebooksender.ui.AnimatedAlertDialog
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
 import com.cybercat.ebooksender.ui.LocalDismissDialog
 import com.cybercat.ebooksender.ui.LocalDismissDialogAfter
+import com.cybercat.ebooksender.ui.theme.EmphasizedEasing
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 
 internal const val HTML_EXTRACT_DELAY_MILLIS = 900L
+private const val BROWSER_DIALOG_ENTER_MILLIS = 260
+private const val BROWSER_DIALOG_EXIT_MILLIS = 220
 
 @Composable
 internal fun MangaBrowserCard(
@@ -81,6 +103,24 @@ internal fun MangaBrowserCard(
     val lifecycleOwner = LocalLifecycleOwner.current
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var showLoginDialog by remember { mutableStateOf(false) }
+    val contentVisibility = remember {
+        MutableTransitionState(false).apply {
+            targetState = true
+        }
+    }
+    var closeStarted by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    fun closeBrowserWithAnimation() {
+        if (!closeStarted) {
+            closeStarted = true
+            scope.launch {
+                contentVisibility.targetState = false
+                delay(BROWSER_DIALOG_EXIT_MILLIS.toLong())
+                onClose()
+            }
+        }
+    }
 
     LaunchedEffect(pendingLoginPost, webViewRef) {
         val loginPost = pendingLoginPost
@@ -118,116 +158,143 @@ internal fun MangaBrowserCard(
     }
 
     androidx.compose.ui.window.Dialog(
-        onDismissRequest = onClose,
+        onDismissRequest = ::closeBrowserWithAnimation,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        androidx.compose.material3.Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 14.dp, top = 16.dp, end = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = currentUrl ?: url,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (nativeLoginConfig != null) {
-                        TextButton(onClick = {
-                            view.performHapticIfAllowed(
-                                context,
-                                enableHaptics,
-                                AppHapticFeedback.Press
-                            )
-                            showLoginDialog = true
-                        }) {
-                            Text(strings.mangaBtnLogin)
-                        }
-                    } else if (!loginUrl.isNullOrBlank()) {
-                        TextButton(onClick = {
-                            view.performHapticIfAllowed(
-                                context,
-                                enableHaptics,
-                                AppHapticFeedback.Press
-                            )
-                            webViewRef?.loadUrl(loginUrl)
-                        }) {
-                            Text(strings.mangaBtnLogin)
-                        }
-                    }
-                    IconButton(onClick = {
-                        view.performHapticIfAllowed(
-                            context,
-                            enableHaptics,
-                            AppHapticFeedback.Press
-                        )
-                        onClose()
-                    }) {
-                        Icon(
-                            Icons.Outlined.Close,
-                            contentDescription = strings.get("manga_action_close_browser")
-                        )
-                    }
-                }
-
-                AndroidView(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    factory = { context ->
-                        WebView(context).apply {
-                            webViewRef = this
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.loadsImagesAutomatically = true
-                            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                            settings.useWideViewPort = true
-                            settings.loadWithOverviewMode = true
-                            userAgent?.takeIf { it.isNotBlank() }?.let { value ->
-                                settings.userAgentString = value
-                            }
-                            CookieManager.getInstance().setAcceptCookie(true)
-                            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-                            webViewClient = object : WebViewClient() {
-                                override fun onPageFinished(view: WebView, loadedUrl: String) {
-                                    super.onPageFinished(view, loadedUrl)
-                                    CookieManager.getInstance().flush()
-
-                                    view.postDelayed(
-                                        {
-                                            if (webViewRef === view) {
-                                                view.extractHtml { html ->
-                                                    onWebPageLoaded(loadedUrl, html)
-                                                }
-                                            }
-                                        },
-                                        HTML_EXTRACT_DELAY_MILLIS
-                                    )
-                                }
-                            }
-                            loadUrl(url)
-                        }
-                    },
-                    update = { webView ->
-                        if (url.isNotBlank() && webView.url != url) {
-                            webView.loadUrl(url)
-                        }
-                    },
-                    onRelease = { webView ->
-                        if (webViewRef === webView) {
-                            webViewRef = null
-                        }
-                        webView.releaseBrowser()
-                    }
+        AnimatedVisibility(
+            visibleState = contentVisibility,
+            enter = fadeIn(
+                animationSpec = tween(
+                    durationMillis = BROWSER_DIALOG_ENTER_MILLIS,
+                    easing = EmphasizedEasing
                 )
+            ) + slideInVertically(
+                animationSpec = tween(
+                    durationMillis = BROWSER_DIALOG_ENTER_MILLIS,
+                    easing = EmphasizedEasing
+                )
+            ) { height -> height / 8 },
+            exit = fadeOut(
+                animationSpec = tween(
+                    durationMillis = BROWSER_DIALOG_EXIT_MILLIS,
+                    easing = EmphasizedEasing
+                )
+            ) + slideOutVertically(
+                animationSpec = tween(
+                    durationMillis = BROWSER_DIALOG_EXIT_MILLIS,
+                    easing = EmphasizedEasing
+                )
+            ) { height -> height / 8 }
+        ) {
+            androidx.compose.material3.Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 14.dp, top = 16.dp, end = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = currentUrl ?: url,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (nativeLoginConfig != null) {
+                            TextButton(onClick = {
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    AppHapticFeedback.Press
+                                )
+                                showLoginDialog = true
+                            }) {
+                                Text(strings.mangaBtnLogin)
+                            }
+                        } else if (!loginUrl.isNullOrBlank()) {
+                            TextButton(onClick = {
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    AppHapticFeedback.Press
+                                )
+                                webViewRef?.loadUrl(loginUrl)
+                            }) {
+                                Text(strings.mangaBtnLogin)
+                            }
+                        }
+                        IconButton(onClick = {
+                            view.performHapticIfAllowed(
+                                context,
+                                enableHaptics,
+                                AppHapticFeedback.Press
+                            )
+                            closeBrowserWithAnimation()
+                        }) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = strings.get("manga_action_close_browser")
+                            )
+                        }
+                    }
+
+                    AndroidView(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        factory = { context ->
+                            WebView(context).apply {
+                                webViewRef = this
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
+                                settings.loadsImagesAutomatically = true
+                                settings.mixedContentMode =
+                                    WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                                settings.useWideViewPort = true
+                                settings.loadWithOverviewMode = true
+                                userAgent?.takeIf { it.isNotBlank() }?.let { value ->
+                                    settings.userAgentString = value
+                                }
+                                CookieManager.getInstance().setAcceptCookie(true)
+                                CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                                webViewClient = object : WebViewClient() {
+                                    override fun onPageFinished(view: WebView, loadedUrl: String) {
+                                        super.onPageFinished(view, loadedUrl)
+                                        CookieManager.getInstance().flush()
+
+                                        view.postDelayed(
+                                            {
+                                                if (webViewRef === view) {
+                                                    view.extractHtml { html ->
+                                                        onWebPageLoaded(loadedUrl, html)
+                                                    }
+                                                }
+                                            },
+                                            HTML_EXTRACT_DELAY_MILLIS
+                                        )
+                                    }
+                                }
+                                loadUrl(url)
+                            }
+                        },
+                        update = { webView ->
+                            if (url.isNotBlank() && webView.url != url) {
+                                webView.loadUrl(url)
+                            }
+                        },
+                        onRelease = { webView ->
+                            if (webViewRef === webView) {
+                                webViewRef = null
+                            }
+                            webView.releaseBrowser()
+                        }
+                    )
+                }
             }
         }
     }
@@ -289,46 +356,75 @@ internal fun MangaLoginMethodDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(strings.get("manga_login_method_body"))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = rememberChoice,
+                            role = Role.Checkbox,
+                            onValueChange = { checked ->
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    AppHapticFeedback.Press
+                                )
+                                rememberChoice = checked
+                            }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Checkbox(
                         checked = rememberChoice,
-                        onCheckedChange = { checked ->
-                            view.performHapticIfAllowed(
-                                context,
-                                enableHaptics,
-                                AppHapticFeedback.Press
-                            )
-                            rememberChoice = checked
-                        }
+                        onCheckedChange = null
                     )
                     Text(strings.get("manga_login_method_remember"))
                 }
             }
         },
-        dismissButton = {
-            val dismissAfter = LocalDismissDialogAfter.current
-            TextButton(onClick = {
-                view.performHapticIfAllowed(
-                    context,
-                    enableHaptics,
-                    AppHapticFeedback.Press
-                )
-                dismissAfter { onUseWebView(rememberChoice) }
-            }) {
-                Text(strings.get("manga_login_method_webview"))
-            }
-        },
         confirmButton = {
             val dismissAfter = LocalDismissDialogAfter.current
-            Button(onClick = {
-                view.performHapticIfAllowed(
-                    context,
-                    enableHaptics,
-                    AppHapticFeedback.Confirm
-                )
-                dismissAfter { onUseNativeForm(rememberChoice) }
-            }) {
-                Text(strings.get("manga_login_method_native"))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            AppHapticFeedback.Press
+                        )
+                        dismissAfter { onUseWebView(rememberChoice) }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(Icons.Outlined.OpenInBrowser, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(strings.get("manga_login_method_webview"))
+                }
+                Button(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            AppHapticFeedback.Confirm
+                        )
+                        dismissAfter { onUseNativeForm(rememberChoice) }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    Icon(Icons.Outlined.VpnKey, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(strings.get("manga_login_method_native"))
+                }
             }
         }
     )
