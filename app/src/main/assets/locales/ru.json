@@ -242,6 +242,7 @@
   "transfer_error_connect_before_upload": "Подключите устройство перед загрузкой",
   "transfer_error_queue_empty": "Очередь пуста",
   "transfer_error_no_pending_files": "Нет файлов для загрузки в очереди",
+  "transfer_error_upload_in_progress": "Дождитесь завершения текущей отправки или сначала отмените её",
   "transfer_error_cannot_connect": "Не удалось подключиться к %1$s:%2$d: %3$s",
   "transfer_error_reason_host_unresolved": "Не удалось разрешить хост %1$s",
   "transfer_error_reason_connection_refused": "В подключении к %1$s:%2$d отказано",

@@ -32,4 +32,6 @@ dependencies {
     implementation(project(":core:network"))
     implementation(libs.commons.net)
     implementation(libs.hilt.android)
+
+    testImplementation(libs.junit4)
 }

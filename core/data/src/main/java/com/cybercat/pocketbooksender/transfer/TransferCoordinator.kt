@@ -3,48 +3,68 @@ package com.cybercat.pocketbooksender.transfer
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.RemoteDevice
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 
 @Singleton
 class TransferCoordinator @Inject constructor() {
-    private val pendingRequest = AtomicReference<TransferRequest?>(null)
+    private val lock = Any()
+    private var pendingRequest: TransferRequest? = null
+    private var activeRequestId: String? = null
 
-    private val _events = MutableSharedFlow<TransferEvent>(
-        extraBufferCapacity = 64
-    )
-    val events = _events.asSharedFlow()
+    private val _events = Channel<TransferEvent>(capacity = Channel.UNLIMITED)
+    val events = _events.receiveAsFlow()
 
-    fun submit(device: RemoteDevice, items: List<TransferUploadItem>): String {
+    fun submit(device: RemoteDevice, items: List<TransferUploadItem>): TransferSubmitResult {
+        require(items.isNotEmpty()) { "No transfer items selected" }
         val id = UUID.randomUUID().toString()
-        pendingRequest.set(
-            TransferRequest(
+        synchronized(lock) {
+            if (pendingRequest != null || activeRequestId != null) {
+                return TransferSubmitResult.RejectedAlreadyRunning
+            }
+            pendingRequest = TransferRequest(
                 id = id,
                 device = device,
                 items = items
             )
-        )
-        return id
+        }
+        return TransferSubmitResult.Accepted(id)
     }
 
-    fun takeRequest(id: String?): TransferRequest? {
-        val current = pendingRequest.get() ?: return null
+    fun takeRequest(id: String?): TransferRequest? = synchronized(lock) {
+        val current = pendingRequest ?: return null
         if (current.id != id) return null
-        return if (pendingRequest.compareAndSet(current, null)) current else null
+        pendingRequest = null
+        activeRequestId = current.id
+        current
     }
 
-    fun cancelPendingRequest(id: String?): TransferRequest? {
-        val current = pendingRequest.get() ?: return null
+    fun cancelPendingRequest(id: String?): TransferRequest? = synchronized(lock) {
+        val current = pendingRequest ?: return null
         if (current.id != id) return null
-        return if (pendingRequest.compareAndSet(current, null)) current else null
+        pendingRequest = null
+        current
+    }
+
+    fun finishActiveRequest(id: String) {
+        synchronized(lock) {
+            if (activeRequestId == id) {
+                activeRequestId = null
+            }
+        }
     }
 
     fun emit(event: TransferEvent) {
-        _events.tryEmit(event)
+        check(_events.trySend(event).isSuccess) { "Transfer event channel is unavailable" }
     }
+}
+
+sealed interface TransferSubmitResult {
+    data class Accepted(val requestId: String) : TransferSubmitResult
+
+    data object RejectedAlreadyRunning : TransferSubmitResult
 }
 
 data class TransferRequest(

@@ -70,14 +70,9 @@ class TransferForegroundService : Service() {
 
         val request = transferCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
         if (request == null) {
-            startForeground(
-                TransferNotificationManager.FOREGROUND_NOTIFICATION_ID,
-                transferNotifications.buildProgressNotification(
-                    localizationManager.currentStrings.value.transferNotificationNothingToUpload,
-                    0,
-                    0
-                )
-            )
+            if (activeTransferJob?.isActive == true) {
+                return START_NOT_STICKY
+            }
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -97,6 +92,7 @@ class TransferForegroundService : Service() {
             try {
                 runTransfer(request)
             } finally {
+                transferCoordinator.finishActiveRequest(request.id)
                 activeRequestId = null
                 activeTransferJob = null
                 transferWakeLock.release()

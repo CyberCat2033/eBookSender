@@ -25,6 +25,7 @@ import com.cybercat.pocketbooksender.transfer.ConnectionManager
 import com.cybercat.pocketbooksender.transfer.TransferCoordinator
 import com.cybercat.pocketbooksender.transfer.TransferEvent
 import com.cybercat.pocketbooksender.transfer.TransferFailureReason
+import com.cybercat.pocketbooksender.transfer.TransferSubmitResult
 import com.cybercat.pocketbooksender.transfer.TransferUploadItem
 import com.cybercat.pocketbooksender.ui.FtpErrorMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -312,7 +313,7 @@ class TransferViewModel @Inject constructor(
             return
         }
 
-        val requestId = transferCoordinator.submit(
+        val submitResult = transferCoordinator.submit(
             device = device,
             items = pending.map { item ->
                 TransferUploadItem(
@@ -329,6 +330,19 @@ class TransferViewModel @Inject constructor(
                 )
             }
         )
+        val requestId = when (submitResult) {
+            is TransferSubmitResult.Accepted -> submitResult.requestId
+
+            TransferSubmitResult.RejectedAlreadyRunning -> {
+                _statusMessage.value = null
+                _errorState.value = FtpErrorState.RawMessage(
+                    localizationManager.currentStrings.value.get(
+                        "transfer_error_upload_in_progress"
+                    )
+                )
+                return
+            }
+        }
 
         _activeTransferItemIds.value = pending.map { it.id }.toSet()
         _currentUploadProgress.value = ActiveUploadProgress()
