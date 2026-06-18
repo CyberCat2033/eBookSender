@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 @Singleton
@@ -49,6 +51,8 @@ class UploadQueueManagerImpl @Inject constructor(
 
     private val _queue = MutableStateFlow<List<UploadItem>>(emptyList())
     override val queue: StateFlow<List<UploadItem>> = _queue.asStateFlow()
+
+    private val metadataExtractionSemaphore = Semaphore(METADATA_EXTRACTION_PARALLELISM)
 
     private var activeSettings = AppSettings()
     private var queueRestored = false
@@ -407,7 +411,10 @@ class UploadQueueManagerImpl @Inject constructor(
     }
 
     private suspend fun loadMetadata(item: UploadItem) {
-        val metadata = metadataExtractor.extract(item.sourceUri, item.originalName)
+        val metadata = metadataExtractionSemaphore.withPermit {
+            if (!shouldLoadMetadata(item.id)) return@withPermit null
+            metadataExtractor.extract(item.sourceUri, item.originalName)
+        } ?: return
         val preview = metadata.preview
 
         if (preview != null && _queue.value.any { currentItem -> currentItem.id == item.id }) {
@@ -461,6 +468,10 @@ class UploadQueueManagerImpl @Inject constructor(
         }
     }
 
+    private fun shouldLoadMetadata(itemId: String): Boolean = _queue.value.any { item ->
+        item.id == itemId && item.status != UploadStatus.Uploaded
+    }
+
     private fun replan(item: UploadItem, settings: AppSettings): UploadItem =
         item.copy(plannedPath = pathPlanner.plan(item, settings))
 
@@ -509,5 +520,9 @@ class UploadQueueManagerImpl @Inject constructor(
                 retainedSourceUris = retainedSourceUris
             )
         }
+    }
+
+    private companion object {
+        const val METADATA_EXTRACTION_PARALLELISM = 1
     }
 }

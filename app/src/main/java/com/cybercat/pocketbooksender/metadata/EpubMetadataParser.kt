@@ -82,19 +82,6 @@ class EpubMetadataParser @Inject constructor() {
         return SelectedOpf(entryName = fallbackEntryName, bytes = fallbackBytes)
     }
 
-    private fun chooseBestFallbackImageName(names: List<String>): String? {
-        if (names.isEmpty()) return null
-        val candidates = names.filter { name ->
-            val lower = name.lowercase().substringAfterLast('/')
-            lower.contains("cover") || lower.contains("front") || lower.contains("folder") ||
-                lower.contains("title")
-        }
-        if (candidates.isNotEmpty()) {
-            return candidates.sortedWith(NaturalSort.by { it }).first()
-        }
-        return names.sortedWith(NaturalSort.by { it }).first()
-    }
-
     private fun parseContainerRootfilePath(bytes: ByteArray): String? {
         val parser = newMetadataXmlParser(ByteArrayInputStream(bytes))
         while (parser.next() != XmlPullParser.END_DOCUMENT) {
@@ -291,7 +278,7 @@ class EpubMetadataParser @Inject constructor() {
 
             val explicitImages = linkedMapOf<String, ByteArray>()
             val explicitPages = linkedMapOf<String, ByteArray>()
-            val fallbackImages = linkedMapOf<String, ByteArray>()
+            var fallbackImage: NamedBytes? = null
 
             while (true) {
                 val entry = zip.nextEntry ?: break
@@ -314,18 +301,19 @@ class EpubMetadataParser @Inject constructor() {
                         explicitPages.putIfAbsent(entryName, zip.readCurrentEntry(MAX_TEXT_BYTES))
                     }
 
-                    lowerName in preferredFallbackImagePaths -> {
-                        fallbackImages.putIfAbsent(
-                            entryName,
-                            zip.readCurrentEntry(METADATA_MAX_IMAGE_BYTES)
+                    lowerName in preferredFallbackImagePaths &&
+                        shouldReplaceFallbackImage(fallbackImage?.name, entryName) -> {
+                        fallbackImage = NamedBytes(
+                            name = entryName,
+                            bytes = zip.readCurrentEntry(METADATA_MAX_IMAGE_BYTES)
                         )
                     }
 
                     (lowerName in fallbackImagePaths || lowerName.isImageName()) &&
-                        fallbackImages.size < MAX_FALLBACK_IMAGE_CANDIDATES -> {
-                        fallbackImages.putIfAbsent(
-                            entryName,
-                            zip.readCurrentEntry(METADATA_MAX_IMAGE_BYTES)
+                        shouldReplaceFallbackImage(fallbackImage?.name, entryName) -> {
+                        fallbackImage = NamedBytes(
+                            name = entryName,
+                            bytes = zip.readCurrentEntry(METADATA_MAX_IMAGE_BYTES)
                         )
                     }
 
@@ -336,7 +324,7 @@ class EpubMetadataParser @Inject constructor() {
             CoverScan(
                 explicitImages = explicitImages,
                 explicitPages = explicitPages,
-                fallbackImages = fallbackImages
+                fallbackImage = fallbackImage
             )
         }
 
@@ -359,15 +347,12 @@ class EpubMetadataParser @Inject constructor() {
             )
 
             coverScan.explicitImages.findIgnoreCase(coverImagePath)?.let { return it }
-            coverScan.fallbackImages.findIgnoreCase(coverImagePath)?.let { return it }
             openStream(uri).use { input ->
                 extractEntryBytes(input, coverImagePath, METADATA_MAX_IMAGE_BYTES)
             }?.let { return it }
         }
 
-        val bestFallbackName =
-            chooseBestFallbackImageName(coverScan.fallbackImages.keys.toList()) ?: return null
-        return coverScan.fallbackImages[bestFallbackName]
+        return coverScan.fallbackImage?.bytes
     }
 
     private fun extractCoverImageHrefFromPage(bytes: ByteArray): String? {
@@ -491,8 +476,10 @@ class EpubMetadataParser @Inject constructor() {
     private data class CoverScan(
         val explicitImages: Map<String, ByteArray>,
         val explicitPages: Map<String, ByteArray>,
-        val fallbackImages: Map<String, ByteArray>
+        val fallbackImage: NamedBytes?
     )
+
+    private data class NamedBytes(val name: String, val bytes: ByteArray)
 
     private fun Map<String, ByteArray>.findIgnoreCase(path: String): ByteArray? =
         entries.firstOrNull { (entryName, _) -> entryName.equals(path, ignoreCase = true) }?.value
@@ -501,6 +488,25 @@ class EpubMetadataParser @Inject constructor() {
         if (keys.none { it.equals(name, ignoreCase = true) }) {
             put(name, bytes)
         }
+    }
+
+    private fun shouldReplaceFallbackImage(currentName: String?, candidateName: String): Boolean {
+        if (currentName == null) return true
+
+        val candidateIsPreferred = candidateName.hasPreferredFallbackImageName()
+        val currentIsPreferred = currentName.hasPreferredFallbackImageName()
+        return when {
+            candidateIsPreferred != currentIsPreferred -> candidateIsPreferred
+            else -> NaturalSort.compare(candidateName, currentName) < 0
+        }
+    }
+
+    private fun String.hasPreferredFallbackImageName(): Boolean {
+        val name = lowercase().substringAfterLast('/')
+        return name.contains("cover") ||
+            name.contains("front") ||
+            name.contains("folder") ||
+            name.contains("title")
     }
 
     private fun String.isHtmlLikeName(): Boolean {
@@ -515,7 +521,6 @@ class EpubMetadataParser @Inject constructor() {
         const val XHTML_MEDIA_TYPE = "application/xhtml+xml"
         const val XLINK_NAMESPACE = "http://www.w3.org/1999/xlink"
         const val MAX_TEXT_BYTES = 32 * 1024 * 1024
-        const val MAX_FALLBACK_IMAGE_CANDIDATES = 20
         val WHITESPACE_REGEX = Regex("""\s+""")
     }
 }
