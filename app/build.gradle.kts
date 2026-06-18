@@ -37,17 +37,24 @@ fun gitCommand(args: List<String>, fallback: String): String = runCatching {
 }.getOrNull()?.takeIf { it.isNotEmpty() } ?: fallback
 
 /**
- * versionName из последнего тега вида `vX.Y.Z` (без ведущего `v`).
- * Фолбэк на `0.1.0` для дев-сборок без тега или вне git-репозитория.
+ * versionName из последнего релизного тега вида `vX.Y.Z` (без ведущего `v`).
+ * Фолбэк на `0.1.0` для дев-сборок без релизного тега или вне git-репозитория.
  *
- * Сначала проверяем наличие тегов через `git tag --list` (всегда exit 0),
+ * Сначала проверяем наличие релизных тегов через `git tag --list v[0-9]*` (всегда exit 0),
  * чтобы не запускать `git describe`, который падает с non-zero exit code,
  * если тегов ещё нет — это сломало бы configuration cache.
  */
 fun gitVersionName(): String {
-    val hasTags = gitCommand(listOf("tag", "--list"), fallback = "").isNotEmpty()
-    if (!hasTags) return "0.1.0"
-    return gitCommand(listOf("describe", "--tags", "--abbrev=0"), fallback = "0.1.0")
+    val releaseTagPattern = "v[0-9]*"
+    val hasReleaseTags = gitCommand(
+        listOf("tag", "--list", releaseTagPattern),
+        fallback = ""
+    ).isNotEmpty()
+    if (!hasReleaseTags) return "0.1.0"
+    return gitCommand(
+        listOf("describe", "--tags", "--match", releaseTagPattern, "--abbrev=0"),
+        fallback = "0.1.0"
+    )
         .removePrefix("v")
         .removePrefix("V")
 }

@@ -1,8 +1,8 @@
 name: Release
 
-# При пуше тега v* (например v0.2.0) собирает подписанный release-APK и
-# публикует его в GitHub Releases. Сборка и тестирование кода на main/PR —
-# в workflow ci.yml.
+# При пуше тега v* (например v0.2.0) проверяет SemVer-формат тега,
+# запускает unit-тесты, собирает подписанный release-APK и публикует его
+# в GitHub Releases. Сборка debug APK на main/PR — в workflow ci.yml.
 #
 # Требуются секреты репозитория (Settings → Secrets and variables → Actions):
 #   KEYSTORE_BASE64          — base64 релизного keystore (см. README, раздел CI/Releases)
@@ -44,6 +44,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Validate release tag
+        id: version
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag must use SemVer with a leading v, for example v0.2.0."
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests
+        run: ./gradlew test --stacktrace
+
       - name: Decode signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -63,15 +78,6 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --stacktrace
-
-      - name: Resolve release version (from tag, without leading 'v')
-        id: version
-        run: |
-          # GITHUB_REF_NAME содержит имя тега (например v0.2.0).
-          # Чистим ведущий 'v'/​'V' для красивого имени файла и Release.
-          VERSION="${GITHUB_REF_NAME#v}"
-          VERSION="${VERSION#V}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Rename APK
         id: apk

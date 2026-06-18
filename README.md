@@ -4,13 +4,13 @@
 
 ### Android-приложение для отправки книг, документов и манги на электронную читалку по FTP
 
-[![Версия](https://img.shields.io/badge/версия-0.1.0-blue.svg)](../../releases)
-[![Платформа](https://img.shields.io/badge/платформа-Android-3DDC84.svg?logo=android&logoColor=white)]()
-[![Min SDK](<https://img.shields.io/badge/min%20SDK-26%20(Android%208.0)-00B0FF.svg>)]()
-[![Target SDK](<https://img.shields.io/badge/target%20SDK-35%20(Android%2015)-34A853.svg>)]()
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF.svg?logo=kotlin&logoColor=white)]()
-[![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4.svg)]()
-[![Лицензия](https://img.shields.io/badge/лицензия-GPL--2.0-blue.svg)](LICENSE)
+[![Версия](https://img.shields.io/github/v/release/CyberCat2033/eBookSender?label=%D0%92%D0%B5%D1%80%D1%81%D0%B8%D1%8F&sort=semver)](../../releases/latest)
+[![Платформа](https://img.shields.io/badge/%D0%9F%D0%BB%D0%B0%D1%82%D1%84%D0%BE%D1%80%D0%BC%D0%B0-Android-3DDC84.svg?logo=android&logoColor=white)](https://developer.android.com/)
+[![Min SDK](https://img.shields.io/badge/Min%20SDK-26%20(Android%208.0)-00B0FF.svg)](https://developer.android.com/tools/releases/platforms#8.0)
+[![Target SDK](https://img.shields.io/badge/Target%20SDK-35%20(Android%2015)-34A853.svg)](https://developer.android.com/about/versions/15)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF.svg?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4.svg)](https://developer.android.com/compose)
+[![Лицензия](https://img.shields.io/badge/%D0%9B%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-GPL--2.0-blue.svg)](LICENSE)
 
 </div>
 
@@ -129,7 +129,7 @@
 3. Скачайте файл приложения с расширением `.apk`, например:
 
    ```text
-   ebookSender-v0.1.0.apk
+   eBookSender-vX.Y.Z.apk
    ```
 
 ### 2. Разрешите установку APK
@@ -262,13 +262,13 @@ RELEASE_KEY_PASSWORD=<пароль от ключа>
 Сборка автоматизирована через GitHub Actions (`.github/workflows/`):
 
 - **`ci.yml`** — на каждый пуш в `main` и на каждый Pull Request: собирает debug-APK и гоняет unit-тесты. APK доступен в артефактах запуска.
-- **`release.yml`** — при пуше тега `v*` (например `v0.2.0`): собирает **подписанный** release-APK и публикует его в GitHub Releases с автогенерацией списка изменений.
+- **`release.yml`** — при пуше тега `v*` (например `v0.2.0`): проверяет SemVer-формат тега, запускает unit-тесты, собирает **подписанный** release-APK и публикует его в GitHub Releases с автогенерацией списка изменений.
 
 ### Авто-версия
 
 `versionName` и `versionCode` вычисляются из git, вручную править `app/build.gradle.kts` перед релизом не нужно:
 
-- `versionName` — последний тег без ведущего `v` (`v0.2.0` → `0.2.0`). Пока тегов нет — фолбэк `0.1.0`.
+- `versionName` — последний релизный тег `v*` без ведущего `v` (`v0.2.0` → `0.2.0`). Пока релизных тегов нет — фолбэк `0.1.0`.
 - `versionCode` — число коммитов (`git rev-list --count HEAD`), монотонно растёт. Фолбэк `1` вне git.
 
 ### Как выпустить релиз
@@ -281,7 +281,9 @@ RELEASE_KEY_PASSWORD=<пароль от ключа>
    git push origin v0.2.0
    ```
 
-3. GitHub Actions соберёт подписанный APK и опубликует его на странице Releases. Имя файла: `eBookSender-v0.2.0.apk`.
+3. GitHub Actions проверит тег, прогонит unit-тесты, соберёт подписанный APK и опубликует его на странице Releases. Имя файла: `eBookSender-v0.2.0.apk`.
+
+Страница релиза будет создана с заголовком тега, например `v0.2.0`, автосгенерированным списком изменений GitHub и APK во вложениях. После публикации верхний бейдж **Версия** в README начнёт показывать этот последний релиз.
 
 ### Секреты подписи (один раз)
 
