@@ -523,7 +523,7 @@ class TransferViewModel @Inject constructor(
         progress: Float
     ) {
         if (itemIds.isEmpty()) return
-        queueManager.updateQueue { current ->
+        queueManager.updateQueue(deduplicate = false) { current ->
             var changed = false
             val updated = current.map { item ->
                 if (item.id !in itemIds) {
@@ -544,7 +544,7 @@ class TransferViewModel @Inject constructor(
 
     private fun restoreCanceledQueuedItems(itemIds: Set<String>) {
         if (itemIds.isEmpty()) return
-        queueManager.updateQueue { current ->
+        queueManager.updateQueue(deduplicate = false) { current ->
             var changed = false
             val updated = current.map { item ->
                 if (item.id !in itemIds) {

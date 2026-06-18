@@ -84,7 +84,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/DownloadCacheManager.kt` - shared app-local OPDS/manga download-cache cleanup helper used by transfer completion and queue removal.
 - `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded, supports user cancellation, and adds fully completed chapters to the upload queue.
 - `app/src/main/java/com/cybercat/pocketbooksender/power/ScopedWakeLock.kt` - small non-reference-counted wake-lock helper for strictly scoped foreground transfer/download CPU wake windows.
-- `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; coordinates queue state, persistence, serialized local metadata loading to cap batch-add memory usage, upload path replanning, and delegates app-local file/cache access.
+- `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; coordinates queue state, persistence, serialized local metadata loading to cap batch-add memory usage, upload path replanning, skips deduplication for status-only queue mutations, and delegates app-local file/cache access.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/CoverCacheManager.kt` - app-local JPEG preview cache for queued upload cover bitmaps; handles cover load/save/cleanup for `UploadQueueManagerImpl`.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/LocalFileResolver.kt` - Android `ContentResolver` boundary for queued upload source display names, file sizes, persistable read permissions, and source readability checks.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/QueueStorageRepository.kt` - app-local upload queue JSON/file persistence boundary using `UploadItemEntity` and kotlinx.serialization.
@@ -191,7 +191,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - Queue rows use `Modifier.animateItem` with `QueueFadeInSpec`, `QueueFadeOutSpec`, and `QueuePlacementSpec`.
   - `AnimatedRemovalItem` handles single-item removal and clear-queue removal with horizontal slide-out, vertical shrink, fade, and staggered clear delays.
   - Active transfer overlay enters/exits with fade plus vertical slide from the bottom and exposes a localized cancel action that stops the remaining upload queue.
-  - Foreground FTP uploads run sequentially; transfer runtime state keeps the active item id plus current progress separate from the persisted upload queue so progress ticks do not rewrite the whole queue list or JSON snapshot.
+  - Foreground FTP uploads run sequentially; transfer runtime state keeps the active item id plus current progress separate from the persisted upload queue so progress ticks do not rewrite the whole queue list or JSON snapshot, while status-only queue mutations skip full-list deduplication and cover-cache cleanup.
   - Connection panel animates icon tint over 220 ms, disconnect button alpha over 160 ms, and FTP input visibility with spring expand/shrink plus fade.
   - Upload item details use spring expand/shrink plus fade; uploaded section uses progressive tween expand/shrink plus fade based on the number of items; chevrons rotate with a medium spring.
   - Upload progress height uses `animateDpAsState`; item and overall progress bars use low-stiffness no-bounce spring `animateFloatAsState`.

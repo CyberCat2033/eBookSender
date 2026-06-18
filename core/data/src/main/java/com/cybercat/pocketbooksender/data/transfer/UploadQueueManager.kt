@@ -16,5 +16,8 @@ interface UploadQueueManager {
     fun updateDocumentsTag(id: String, tag: String)
     fun updateMangaSeries(id: String, series: String)
     fun updateQueuedMangaSeries(oldSeries: String?, series: String)
-    fun updateQueue(updateBlock: (List<UploadItem>) -> List<UploadItem>)
+    fun updateQueue(
+        deduplicate: Boolean = true,
+        updateBlock: (List<UploadItem>) -> List<UploadItem>
+    )
 }

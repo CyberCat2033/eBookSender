@@ -56,6 +56,7 @@ class UploadQueueManagerImpl @Inject constructor(
 
     private var activeSettings = AppSettings()
     private var queueRestored = false
+    private var lastCleanedQueueItemIds = emptySet<String>()
 
     init {
         scope.launch {
@@ -69,6 +70,7 @@ class UploadQueueManagerImpl @Inject constructor(
             withContext(Dispatchers.IO) {
                 queueStorageRepository.persist(_queue.value)
             }
+            lastCleanedQueueItemIds = _queue.value.queueItemIds()
             _queue.value.forEach { item ->
                 if (item.preview == null && item.status != UploadStatus.Uploaded) {
                     launch {
@@ -82,10 +84,14 @@ class UploadQueueManagerImpl @Inject constructor(
             .drop(1)
             .onEach { items ->
                 if (queueRestored) {
+                    val queueItemIds = items.queueItemIds()
                     withContext(Dispatchers.IO) {
                         queueStorageRepository.persist(items)
-                        cleanupCoverCacheFiles(items)
+                        if (queueItemIds != lastCleanedQueueItemIds) {
+                            cleanupCoverCacheFiles(items)
+                        }
                     }
+                    lastCleanedQueueItemIds = queueItemIds
                 }
             }
             .launchIn(scope)
@@ -335,9 +341,17 @@ class UploadQueueManagerImpl @Inject constructor(
         }
     }
 
-    override fun updateQueue(updateBlock: (List<UploadItem>) -> List<UploadItem>) {
+    override fun updateQueue(
+        deduplicate: Boolean,
+        updateBlock: (List<UploadItem>) -> List<UploadItem>
+    ) {
         _queue.update { current ->
-            updateBlock(current).deduplicateQueue()
+            val updated = updateBlock(current)
+            when {
+                updated === current -> current
+                deduplicate -> updated.deduplicateQueue()
+                else -> updated
+            }
         }
     }
 
@@ -494,6 +508,8 @@ class UploadQueueManagerImpl @Inject constructor(
             item.plannedPath.takeIf { it.isNotBlank() }
         )
     }.toSet()
+
+    private fun List<UploadItem>.queueItemIds(): Set<String> = mapTo(mutableSetOf()) { it.id }
 
     private fun UploadStatus.restoredAfterProcessStart(canReadSource: Boolean): UploadStatus =
         when {
