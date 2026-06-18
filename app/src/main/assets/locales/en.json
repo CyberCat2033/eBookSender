@@ -66,6 +66,11 @@
   "settings_logout_warning_title": "Log out from services?",
   "settings_logout_warning_body": "This will log you out from active services and clear saved, favorite, and subscribed manga.",
   "settings_logout_warning_confirm": "Log out",
+  "settings_reset_to_defaults": "Reset settings",
+  "settings_reset_warning_title": "Reset settings?",
+  "settings_reset_warning_body": "All settings will be restored to their defaults and you will be logged out from all services.",
+  "settings_reset_warning_confirm": "Reset",
+  "settings_reset_done": "Settings restored to defaults",
   
   "settings_dialog_title": "Device Disconnected",
   "settings_dialog_body": "You are not connected to the device. Change the local setting for '%1$s' folder to '%2$s' anyway?\n\n(This will not rename the directory on the device.)",

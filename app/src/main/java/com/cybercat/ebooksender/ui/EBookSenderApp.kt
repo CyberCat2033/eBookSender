@@ -559,7 +559,10 @@ private fun AppNavHost(
                 onCancelPendingRename = settingsViewModel::cancelPendingRename,
                 onLogoutAll = settingsViewModel::logoutAll,
                 onConfirmLogoutAll = settingsViewModel::confirmLogoutAll,
-                onDismissLogoutWarning = settingsViewModel::dismissLogoutWarning
+                onDismissLogoutWarning = settingsViewModel::dismissLogoutWarning,
+                onResetSettings = settingsViewModel::resetSettings,
+                onConfirmResetSettings = settingsViewModel::confirmResetSettings,
+                onDismissResetWarning = settingsViewModel::dismissResetWarning
             )
         }
     }

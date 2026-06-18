@@ -81,6 +81,12 @@ class AppStrings(
     val settingsLogoutWarningBody: String get() = get("settings_logout_warning_body")
     val settingsLogoutWarningConfirm: String get() = get("settings_logout_warning_confirm")
 
+    val settingsResetToDefaults: String get() = get("settings_reset_to_defaults")
+    val settingsResetWarningTitle: String get() = get("settings_reset_warning_title")
+    val settingsResetWarningBody: String get() = get("settings_reset_warning_body")
+    val settingsResetWarningConfirm: String get() = get("settings_reset_warning_confirm")
+    val settingsResetDone: String get() = get("settings_reset_done")
+
     val settingsDialogTitle: String get() = get("settings_dialog_title")
     val settingsDialogBody: String get() = get("settings_dialog_body")
     val settingsDialogConfirm: String get() = get("settings_dialog_confirm")

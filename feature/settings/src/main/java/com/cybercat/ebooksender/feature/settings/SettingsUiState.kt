@@ -7,6 +7,7 @@ data class SettingsUiState(
     val settingsStatusMessage: SettingsStatusMessage? = null,
     val pendingRename: PendingRename? = null,
     val showLogoutWarning: Boolean = false,
+    val showResetWarning: Boolean = false,
     val activeFolderRename: FolderType? = null,
     val availableLocales: List<com.cybercat.ebooksender.localization.LocaleInfo> = emptyList()
 )

@@ -37,6 +37,7 @@ class SettingsViewModel @Inject constructor(
     private val _statusMessage = MutableStateFlow<SettingsStatusMessage?>(null)
     private val _pendingRename = MutableStateFlow<PendingRename?>(null)
     private val _showLogoutWarning = MutableStateFlow(false)
+    private val _showResetWarning = MutableStateFlow(false)
     private val _activeFolderRename = MutableStateFlow<FolderType?>(null)
     private val _appearanceOverride = MutableStateFlow(AppearanceOverride())
 
@@ -88,9 +89,14 @@ class SettingsViewModel @Inject constructor(
                 availableLocales = locales
             )
         },
-        _showLogoutWarning
-    ) { state, showLogoutWarning ->
-        state.copy(showLogoutWarning = showLogoutWarning)
+        combine(_showLogoutWarning, _showResetWarning) { showLogout, showReset ->
+            showLogout to showReset
+        }
+    ) { state, (showLogoutWarning, showResetWarning) ->
+        state.copy(
+            showLogoutWarning = showLogoutWarning,
+            showResetWarning = showResetWarning
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -370,6 +376,28 @@ class SettingsViewModel @Inject constructor(
 
     fun dismissLogoutWarning() {
         _showLogoutWarning.value = false
+    }
+
+    fun resetSettings() {
+        _showResetWarning.value = true
+    }
+
+    fun confirmResetSettings() {
+        viewModelScope.launch {
+            _showResetWarning.value = false
+            settingsRepository.resetToDefaults()
+            // Clear the transient appearance override so the UI picks up the
+            // reset theme/dynamic-color defaults instead of the last in-flight pick.
+            _appearanceOverride.value = AppearanceOverride()
+            logoutUseCase.logoutAll()
+            showTemporaryStatus(
+                localizationManager.currentStrings.value.settingsResetDone
+            )
+        }
+    }
+
+    fun dismissResetWarning() {
+        _showResetWarning.value = false
     }
 
     private fun showTemporaryStatus(message: String) {

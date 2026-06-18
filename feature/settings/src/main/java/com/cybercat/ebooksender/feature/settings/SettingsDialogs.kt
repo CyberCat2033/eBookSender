@@ -140,6 +140,58 @@ internal fun SettingsLogoutWarningDialog(
 }
 
 /**
+ * Confirmation dialog shown before resetting all settings to their defaults.
+ */
+@Composable
+internal fun SettingsResetWarningDialog(
+    enableHaptics: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.settingsResetWarningTitle) },
+        text = { Text(strings.settingsResetWarningBody) },
+        confirmButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        AppHapticFeedback.LongPress
+                    )
+                    onConfirm()
+                    dismiss()
+                }
+            ) {
+                Text(strings.settingsResetWarningConfirm)
+            }
+        },
+        dismissButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        AppHapticFeedback.Press
+                    )
+                    onDismiss()
+                    dismiss()
+                }
+            ) {
+                Text(strings.settingsDialogCancel)
+            }
+        }
+    )
+}
+
+/**
  * Language picker dialog shown from the Interface section.
  */
 @Composable

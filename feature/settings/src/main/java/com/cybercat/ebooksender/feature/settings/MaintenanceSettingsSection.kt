@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +44,7 @@ internal fun MaintenanceSettingsSection(
     state: SettingsUiState,
     onClearDownloadCache: () -> Unit,
     onLogoutAll: () -> Unit,
+    onResetSettings: () -> Unit,
     onClearStatusMessage: () -> Unit
 ) {
     val context = LocalContext.current
@@ -93,6 +95,26 @@ internal fun MaintenanceSettingsSection(
                 Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(strings.settingsLogoutAll)
+            }
+
+            Button(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        state.settings.enableHaptics,
+                        AppHapticFeedback.LongPress
+                    )
+                    onResetSettings()
+                },
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Outlined.Restore, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(strings.settingsResetToDefaults)
             }
 
             val statusMessage = state.settingsStatusMessage

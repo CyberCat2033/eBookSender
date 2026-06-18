@@ -72,6 +72,15 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         }
     }
 
+    /**
+     * Restores every persisted preference to its default by clearing the DataStore.
+     * The [settings] flow maps the now-empty preferences to [AppSettings] defaults
+     * through the existing `?: default` fallbacks.
+     */
+    suspend fun resetToDefaults() {
+        context.settingsDataStore.edit { preferences -> preferences.clear() }
+    }
+
     suspend fun setUseDynamicColor(value: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[USE_DYNAMIC_COLOR] = value

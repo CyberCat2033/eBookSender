@@ -56,7 +56,10 @@ fun SettingsScreen(
     onCancelPendingRename: () -> Unit,
     onLogoutAll: () -> Unit,
     onConfirmLogoutAll: () -> Unit,
-    onDismissLogoutWarning: () -> Unit
+    onDismissLogoutWarning: () -> Unit,
+    onResetSettings: () -> Unit,
+    onConfirmResetSettings: () -> Unit,
+    onDismissResetWarning: () -> Unit
 ) {
     val strings = LocalStrings.current
     val adaptiveLayout = LocalAdaptiveLayoutInfo.current
@@ -109,6 +112,14 @@ fun SettingsScreen(
             enableHaptics = state.settings.enableHaptics,
             onConfirm = onConfirmLogoutAll,
             onDismiss = onDismissLogoutWarning
+        )
+    }
+
+    if (state.showResetWarning) {
+        SettingsResetWarningDialog(
+            enableHaptics = state.settings.enableHaptics,
+            onConfirm = onConfirmResetSettings,
+            onDismiss = onDismissResetWarning
         )
     }
 
@@ -200,6 +211,7 @@ fun SettingsScreen(
                     state = state,
                     onClearDownloadCache = onClearDownloadCache,
                     onLogoutAll = onLogoutAll,
+                    onResetSettings = onResetSettings,
                     onClearStatusMessage = onClearStatusMessage
                 )
 

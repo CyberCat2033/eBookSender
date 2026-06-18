@@ -66,6 +66,11 @@
   "settings_logout_warning_title": "Выйти из сервисов?",
   "settings_logout_warning_body": "Будет выполнен выход из активных сервисов, а сохранённая, избранная манга и подписки будут очищены.",
   "settings_logout_warning_confirm": "Выйти",
+  "settings_reset_to_defaults": "Сбросить настройки",
+  "settings_reset_warning_title": "Сбросить настройки?",
+  "settings_reset_warning_body": "Все настройки будут сброшены к значениям по умолчанию, а также будет выполнен выход из всех сервисов.",
+  "settings_reset_warning_confirm": "Сбросить",
+  "settings_reset_done": "Настройки сброшены к значениям по умолчанию",
   
   "settings_dialog_title": "Устройство отключено",
   "settings_dialog_body": "Устройство не подключено. Изменить локальную настройку папки «%1$s» на «%2$s» всё равно?\n\n(Это не переименует директорию на самом устройстве.)",
