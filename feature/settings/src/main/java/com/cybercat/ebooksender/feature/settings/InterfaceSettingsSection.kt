@@ -31,11 +31,11 @@ internal fun InterfaceSettingsSection(
     state: SettingsUiState,
     onDynamicColorChanged: (Boolean) -> Unit,
     onBypassVpnForLocalConnectionsChanged: (Boolean) -> Unit,
-    onMangaLoginModeChanged: (MangaLoginMode) -> Unit,
     onHapticFeedbackEnabledChanged: (Boolean) -> Unit,
     onWarnOnDisconnectedRenameChanged: (Boolean) -> Unit,
     onThemeChanged: (AppTheme) -> Unit,
-    onLanguageClick: () -> Unit
+    onLanguageClick: () -> Unit,
+    onMangaLoginModeClick: () -> Unit
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -68,30 +68,27 @@ internal fun InterfaceSettingsSection(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(strings.settingsMangaNativeLogin, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    strings.settingsMangaNativeLoginDesc,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Switch(
-                checked = state.settings.mangaLoginMode == MangaLoginMode.Native,
-                onCheckedChange = { checked ->
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
                     view.performHapticIfAllowed(
                         context,
                         state.settings.enableHaptics,
                         AppHapticFeedback.Press
                     )
-                    onMangaLoginModeChanged(
-                        if (checked) MangaLoginMode.Native else MangaLoginMode.WebView
-                    )
+                    onMangaLoginModeClick()
                 }
-            )
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(strings.settingsMangaLoginMode, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    state.settings.mangaLoginMode.displayName(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Row(
@@ -235,5 +232,15 @@ internal fun InterfaceSettingsSection(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun MangaLoginMode.displayName(): String {
+    val strings = LocalStrings.current
+    return when (this) {
+        MangaLoginMode.Ask -> strings.settingsMangaLoginModeAsk
+        MangaLoginMode.WebView -> strings.settingsMangaLoginModeWebView
+        MangaLoginMode.Native -> strings.settingsMangaLoginModeNative
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import com.cybercat.ebooksender.localization.LocalStrings
+import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.ui.AnimatedAlertDialog
 import com.cybercat.ebooksender.ui.LocalDismissDialog
 import com.cybercat.ebooksender.ui.LocalDismissDialogAfter
@@ -206,6 +207,71 @@ internal fun SettingsLanguageDialog(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(locale.name)
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(onClick = dismiss) {
+                Text(strings.settingsDialogCancel)
+            }
+        }
+    )
+}
+
+/**
+ * Manga login mode picker dialog shown from the Interface section.
+ */
+@Composable
+internal fun SettingsMangaLoginModeDialog(
+    state: SettingsUiState,
+    enableHaptics: Boolean,
+    onMangaLoginModeChanged: (MangaLoginMode) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    val options = listOf(MangaLoginMode.Ask, MangaLoginMode.WebView, MangaLoginMode.Native)
+
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.settingsMangaLoginModeDialogTitle) },
+        text = {
+            val dismissAfter = LocalDismissDialogAfter.current
+            val selectMode: (MangaLoginMode) -> Unit = { mode ->
+                view.performHapticIfAllowed(
+                    context,
+                    enableHaptics,
+                    AppHapticFeedback.Press
+                )
+                dismissAfter {
+                    if (mode != state.settings.mangaLoginMode) {
+                        onMangaLoginModeChanged(mode)
+                    }
+                }
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                options.forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectMode(mode) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = state.settings.mangaLoginMode == mode,
+                            onClick = { selectMode(mode) }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(mode.displayName())
                     }
                 }
             }

@@ -57,8 +57,13 @@ class AppStrings(
     val settingsHapticDesc: String get() = get("settings_haptic_desc")
     val settingsBypassVpn: String get() = get("settings_bypass_vpn")
     val settingsBypassVpnDesc: String get() = get("settings_bypass_vpn_desc")
-    val settingsMangaNativeLogin: String get() = get("settings_manga_native_login")
-    val settingsMangaNativeLoginDesc: String get() = get("settings_manga_native_login_desc")
+    val settingsMangaLoginMode: String get() = get("settings_manga_login_mode")
+    val settingsMangaLoginModeDialogTitle: String get() = get(
+        "settings_manga_login_mode_dialog_title"
+    )
+    val settingsMangaLoginModeAsk: String get() = get("settings_manga_login_mode_ask")
+    val settingsMangaLoginModeWebView: String get() = get("settings_manga_login_mode_webview")
+    val settingsMangaLoginModeNative: String get() = get("settings_manga_login_mode_native")
     val settingsWarnDisconnected: String get() = get("settings_warn_disconnected")
     val settingsWarnDisconnectedDesc: String get() = get("settings_warn_disconnected_desc")
 

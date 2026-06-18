@@ -67,6 +67,7 @@ fun SettingsScreen(
     var folderFieldResetKey by remember { mutableStateOf(0) }
     val hadPendingRename = remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+    var showMangaLoginModeDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.pendingRename) {
         val hasPending = state.pendingRename != null
@@ -117,6 +118,15 @@ fun SettingsScreen(
             enableHaptics = state.settings.enableHaptics,
             onLanguageChanged = onLanguageChanged,
             onDismiss = { showLanguageDialog = false }
+        )
+    }
+
+    if (showMangaLoginModeDialog) {
+        SettingsMangaLoginModeDialog(
+            state = state,
+            enableHaptics = state.settings.enableHaptics,
+            onMangaLoginModeChanged = onMangaLoginModeChanged,
+            onDismiss = { showMangaLoginModeDialog = false }
         )
     }
 
@@ -179,11 +189,11 @@ fun SettingsScreen(
                     state = state,
                     onDynamicColorChanged = onDynamicColorChanged,
                     onBypassVpnForLocalConnectionsChanged = onBypassVpnForLocalConnectionsChanged,
-                    onMangaLoginModeChanged = onMangaLoginModeChanged,
                     onHapticFeedbackEnabledChanged = onHapticFeedbackEnabledChanged,
                     onWarnOnDisconnectedRenameChanged = onWarnOnDisconnectedRenameChanged,
                     onThemeChanged = onThemeChanged,
-                    onLanguageClick = { showLanguageDialog = true }
+                    onLanguageClick = { showLanguageDialog = true },
+                    onMangaLoginModeClick = { showMangaLoginModeDialog = true }
                 )
 
                 MaintenanceSettingsSection(

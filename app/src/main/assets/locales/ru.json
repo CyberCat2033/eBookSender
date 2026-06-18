@@ -45,8 +45,11 @@
   "settings_haptic_desc": "Вибрировать при взаимодействиях",
   "settings_bypass_vpn": "Обход VPN для локального устройства",
   "settings_bypass_vpn_desc": "Использовать локальный Wi-Fi/Ethernet маршрут для FTP и запросов обновления библиотеки устройства",
-  "settings_manga_native_login": "Форма приложения для входа в мангу",
-  "settings_manga_native_login_desc": "Открывать форму eBookSender для входа в Com-X вместо страницы WebView",
+  "settings_manga_login_mode": "Способ входа в мангу",
+  "settings_manga_login_mode_dialog_title": "Выберите способ входа в мангу",
+  "settings_manga_login_mode_ask": "Спрашивать",
+  "settings_manga_login_mode_webview": "WebView",
+  "settings_manga_login_mode_native": "Форма приложения",
   "settings_warn_disconnected": "Предупреждать при отключении",
   "settings_warn_disconnected_desc": "Предупреждать при переименовании папок без подключения",
   

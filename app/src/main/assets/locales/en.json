@@ -45,8 +45,11 @@
   "settings_haptic_desc": "Vibrate on interactions",
   "settings_bypass_vpn": "Bypass VPN for local device",
   "settings_bypass_vpn_desc": "Use the local Wi-Fi/Ethernet route for FTP and device library refresh requests",
-  "settings_manga_native_login": "Use app form for manga login",
-  "settings_manga_native_login_desc": "Open the app login form for Com-X instead of the WebView page",
+  "settings_manga_login_mode": "Manga login method",
+  "settings_manga_login_mode_dialog_title": "Choose manga login method",
+  "settings_manga_login_mode_ask": "Ask every time",
+  "settings_manga_login_mode_webview": "WebView",
+  "settings_manga_login_mode_native": "App form",
   "settings_warn_disconnected": "Warn on disconnected rename",
   "settings_warn_disconnected_desc": "Warn when changing folder names while disconnected",
   
