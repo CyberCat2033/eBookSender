@@ -7,10 +7,12 @@ import com.cybercat.ebooksender.data.manga.MangaSeriesDetails
 import com.cybercat.ebooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.ebooksender.data.manga.MangaSourceSummary
 import com.cybercat.ebooksender.data.manga.MangaSubscriptionCheckResult
+import com.cybercat.ebooksender.model.MangaLoginMode
 
 data class MangaUiState(
     val sources: List<MangaSourceSummary> = emptyList(),
     val selectedSourceId: String = "",
+    val mangaLoginMode: MangaLoginMode = MangaLoginMode.Ask,
     val searchInput: String = "",
     val isLoading: Boolean = false,
     val isDownloading: Boolean = false,
@@ -34,7 +36,7 @@ data class MangaUiState(
     val statusMessage: String? = null,
     val errorMessage: String? = null,
     val isAuthorized: Boolean = false,
-    val pendingLoginPost: MangaPendingLoginPost? = null,
+    val pendingLoginPost: MangaPendingLoginPost? = null
 ) {
     val selectedChapters: List<MangaChapter> =
         chapters.filter { chapter -> chapter.chapterId in selectedChapterIds }
@@ -56,13 +58,10 @@ data class MangaDownloadUiProgress(
     val title: String,
     val detail: String,
     val currentChapterTitle: String?,
-    val progress: Float?,
+    val progress: Float?
 )
 
-data class MangaPendingLoginPost(
-    val url: String,
-    val postBody: ByteArray,
-) {
+data class MangaPendingLoginPost(val url: String, val postBody: ByteArray) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false

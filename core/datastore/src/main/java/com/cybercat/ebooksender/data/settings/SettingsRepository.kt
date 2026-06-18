@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.cybercat.ebooksender.model.AppSettings
 import com.cybercat.ebooksender.model.AppTheme
 import com.cybercat.ebooksender.model.DEFAULT_FTP_RELATIVE_ROOT_PATH
+import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.model.normalizeFtpRelativeRootPath
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -35,6 +36,10 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             useDynamicColor = preferences[USE_DYNAMIC_COLOR] ?: true,
             enableHaptics = preferences[ENABLE_HAPTICS] ?: true,
             bypassVpnForLocalConnections = preferences[BYPASS_VPN_FOR_LOCAL_CONNECTIONS] ?: false,
+            mangaLoginMode =
+                preferences[MANGA_LOGIN_MODE]
+                    ?.let { runCatching { MangaLoginMode.valueOf(it) }.getOrNull() }
+                    ?: MangaLoginMode.Ask,
             theme =
                 preferences[THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() }
                     ?: AppTheme.System,
@@ -82,6 +87,12 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     suspend fun setBypassVpnForLocalConnections(value: Boolean) {
         context.settingsDataStore.edit { preferences ->
             preferences[BYPASS_VPN_FOR_LOCAL_CONNECTIONS] = value
+        }
+    }
+
+    suspend fun setMangaLoginMode(value: MangaLoginMode) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[MANGA_LOGIN_MODE] = value.name
         }
     }
 
@@ -147,6 +158,7 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
         val ENABLE_HAPTICS = booleanPreferencesKey("enable_haptics")
         val BYPASS_VPN_FOR_LOCAL_CONNECTIONS =
             booleanPreferencesKey("bypass_vpn_for_local_connections")
+        val MANGA_LOGIN_MODE = stringPreferencesKey("manga_login_mode")
         val THEME = stringPreferencesKey("theme")
         val WARN_ON_DISCONNECTED_RENAME = booleanPreferencesKey("warn_on_disconnected_rename")
         val LANGUAGE_CODE = stringPreferencesKey("language_code")

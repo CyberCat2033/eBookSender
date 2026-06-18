@@ -8,6 +8,7 @@ import com.cybercat.ebooksender.data.settings.SettingsRepository
 import com.cybercat.ebooksender.data.transfer.UploadQueueManager
 import com.cybercat.ebooksender.model.AppSettings
 import com.cybercat.ebooksender.model.AppTheme
+import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.model.normalizeFtpRelativeRootPath
 import com.cybercat.ebooksender.transfer.ConnectionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -292,6 +293,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setBypassVpnForLocalConnections(value: Boolean) {
         viewModelScope.launch { settingsRepository.setBypassVpnForLocalConnections(value) }
+    }
+
+    fun setMangaLoginMode(value: MangaLoginMode) {
+        viewModelScope.launch { settingsRepository.setMangaLoginMode(value) }
     }
 
     fun setTheme(value: AppTheme) {

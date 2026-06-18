@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.model.AppTheme
+import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
 
@@ -30,6 +31,7 @@ internal fun InterfaceSettingsSection(
     state: SettingsUiState,
     onDynamicColorChanged: (Boolean) -> Unit,
     onBypassVpnForLocalConnectionsChanged: (Boolean) -> Unit,
+    onMangaLoginModeChanged: (MangaLoginMode) -> Unit,
     onHapticFeedbackEnabledChanged: (Boolean) -> Unit,
     onWarnOnDisconnectedRenameChanged: (Boolean) -> Unit,
     onThemeChanged: (AppTheme) -> Unit,
@@ -61,6 +63,33 @@ internal fun InterfaceSettingsSection(
                         AppHapticFeedback.Press
                     )
                     onDynamicColorChanged(it)
+                }
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(strings.settingsMangaNativeLogin, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    strings.settingsMangaNativeLoginDesc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = state.settings.mangaLoginMode == MangaLoginMode.Native,
+                onCheckedChange = { checked ->
+                    view.performHapticIfAllowed(
+                        context,
+                        state.settings.enableHaptics,
+                        AppHapticFeedback.Press
+                    )
+                    onMangaLoginModeChanged(
+                        if (checked) MangaLoginMode.Native else MangaLoginMode.WebView
+                    )
                 }
             )
         }

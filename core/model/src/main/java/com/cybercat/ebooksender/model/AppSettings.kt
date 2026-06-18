@@ -17,6 +17,7 @@ data class AppSettings(
     val useDynamicColor: Boolean = true,
     val enableHaptics: Boolean = true,
     val bypassVpnForLocalConnections: Boolean = false,
+    val mangaLoginMode: MangaLoginMode = MangaLoginMode.Ask,
     val theme: AppTheme = AppTheme.System,
     val warnOnDisconnectedRename: Boolean = true,
     val languageCode: String = "system"
@@ -71,4 +72,10 @@ enum class AppTheme {
     Light,
     Dark,
     System
+}
+
+enum class MangaLoginMode {
+    Ask,
+    WebView,
+    Native
 }

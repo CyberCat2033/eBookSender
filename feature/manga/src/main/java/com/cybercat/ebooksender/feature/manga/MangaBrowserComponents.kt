@@ -43,7 +43,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cybercat.ebooksender.data.manga.MangaNativeLoginConfig
 import com.cybercat.ebooksender.localization.LocalStrings
+import com.cybercat.ebooksender.ui.AnimatedAlertDialog
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
+import com.cybercat.ebooksender.ui.LocalDismissDialog
+import com.cybercat.ebooksender.ui.LocalDismissDialogAfter
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
 import org.json.JSONArray
@@ -59,6 +62,7 @@ internal fun MangaBrowserCard(
     loginUrl: String?,
     nativeLoginConfig: MangaNativeLoginConfig?,
     pendingLoginPost: MangaPendingLoginPost?,
+    showNativeLoginOnStart: Boolean,
     enableHaptics: Boolean,
     onClose: () -> Unit,
     onWebPageLoaded: (String, String) -> Unit,
@@ -68,6 +72,7 @@ internal fun MangaBrowserCard(
         password: String,
         doNotRemember: Boolean
     ) -> Unit,
+    onNativeLoginStartConsumed: () -> Unit,
     onLoginPostExecuted: () -> Unit
 ) {
     val context = LocalContext.current
@@ -77,10 +82,19 @@ internal fun MangaBrowserCard(
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var showLoginDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(pendingLoginPost) {
-        if (pendingLoginPost != null) {
-            webViewRef?.postUrl(pendingLoginPost.url, pendingLoginPost.postBody)
+    LaunchedEffect(pendingLoginPost, webViewRef) {
+        val loginPost = pendingLoginPost
+        val webView = webViewRef
+        if (loginPost != null && webView != null) {
+            webView.postUrl(loginPost.url, loginPost.postBody)
             onLoginPostExecuted()
+        }
+    }
+
+    LaunchedEffect(showNativeLoginOnStart, nativeLoginConfig) {
+        if (showNativeLoginOnStart && nativeLoginConfig != null) {
+            showLoginDialog = true
+            onNativeLoginStartConsumed()
         }
     }
 
@@ -231,6 +245,93 @@ internal fun MangaBrowserCard(
             }
         )
     }
+}
+
+@Composable
+internal fun MangaLoginMethodDialog(
+    enableHaptics: Boolean,
+    onDismiss: () -> Unit,
+    onUseWebView: (rememberChoice: Boolean) -> Unit,
+    onUseNativeForm: (rememberChoice: Boolean) -> Unit
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    var rememberChoice by remember { mutableStateOf(false) }
+
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            val dismiss = LocalDismissDialog.current
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = strings.get("manga_login_method_title"),
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        AppHapticFeedback.Press
+                    )
+                    dismiss()
+                }) {
+                    Icon(
+                        Icons.Outlined.Close,
+                        contentDescription = strings.get("action_close")
+                    )
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(strings.get("manga_login_method_body"))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = rememberChoice,
+                        onCheckedChange = { checked ->
+                            view.performHapticIfAllowed(
+                                context,
+                                enableHaptics,
+                                AppHapticFeedback.Press
+                            )
+                            rememberChoice = checked
+                        }
+                    )
+                    Text(strings.get("manga_login_method_remember"))
+                }
+            }
+        },
+        dismissButton = {
+            val dismissAfter = LocalDismissDialogAfter.current
+            TextButton(onClick = {
+                view.performHapticIfAllowed(
+                    context,
+                    enableHaptics,
+                    AppHapticFeedback.Press
+                )
+                dismissAfter { onUseWebView(rememberChoice) }
+            }) {
+                Text(strings.get("manga_login_method_webview"))
+            }
+        },
+        confirmButton = {
+            val dismissAfter = LocalDismissDialogAfter.current
+            Button(onClick = {
+                view.performHapticIfAllowed(
+                    context,
+                    enableHaptics,
+                    AppHapticFeedback.Confirm
+                )
+                dismissAfter { onUseNativeForm(rememberChoice) }
+            }) {
+                Text(strings.get("manga_login_method_native"))
+            }
+        }
+    )
 }
 
 @Composable

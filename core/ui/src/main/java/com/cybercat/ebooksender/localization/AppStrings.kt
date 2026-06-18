@@ -57,6 +57,8 @@ class AppStrings(
     val settingsHapticDesc: String get() = get("settings_haptic_desc")
     val settingsBypassVpn: String get() = get("settings_bypass_vpn")
     val settingsBypassVpnDesc: String get() = get("settings_bypass_vpn_desc")
+    val settingsMangaNativeLogin: String get() = get("settings_manga_native_login")
+    val settingsMangaNativeLoginDesc: String get() = get("settings_manga_native_login_desc")
     val settingsWarnDisconnected: String get() = get("settings_warn_disconnected")
     val settingsWarnDisconnectedDesc: String get() = get("settings_warn_disconnected_desc")
 

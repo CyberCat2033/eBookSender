@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.model.AppTheme
+import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.ui.LocalAdaptiveLayoutInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +46,7 @@ fun SettingsScreen(
     onDynamicColorChanged: (Boolean) -> Unit,
     onHapticFeedbackEnabledChanged: (Boolean) -> Unit,
     onBypassVpnForLocalConnectionsChanged: (Boolean) -> Unit,
+    onMangaLoginModeChanged: (MangaLoginMode) -> Unit,
     onClearDownloadCache: () -> Unit,
     onClearStatusMessage: () -> Unit,
     onThemeChanged: (AppTheme) -> Unit,
@@ -177,6 +179,7 @@ fun SettingsScreen(
                     state = state,
                     onDynamicColorChanged = onDynamicColorChanged,
                     onBypassVpnForLocalConnectionsChanged = onBypassVpnForLocalConnectionsChanged,
+                    onMangaLoginModeChanged = onMangaLoginModeChanged,
                     onHapticFeedbackEnabledChanged = onHapticFeedbackEnabledChanged,
                     onWarnOnDisconnectedRenameChanged = onWarnOnDisconnectedRenameChanged,
                     onThemeChanged = onThemeChanged,

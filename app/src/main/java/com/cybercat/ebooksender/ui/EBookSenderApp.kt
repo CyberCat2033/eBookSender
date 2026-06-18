@@ -448,6 +448,7 @@ private fun AppNavHost(
                         onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
                         onRefreshAuthState = mangaViewModel::refreshMangaAuthState,
                         onCancelDownload = mangaViewModel::cancelMangaDownload,
+                        onMangaLoginModeChanged = mangaViewModel::setMangaLoginMode,
                         onNativeLoginSubmit = mangaViewModel::performNativeLogin,
                         onLoginPostExecuted = mangaViewModel::clearPendingLoginPost
                     )
@@ -548,6 +549,7 @@ private fun AppNavHost(
                 onHapticFeedbackEnabledChanged = settingsViewModel::setEnableHaptics,
                 onBypassVpnForLocalConnectionsChanged =
                     settingsViewModel::setBypassVpnForLocalConnections,
+                onMangaLoginModeChanged = settingsViewModel::setMangaLoginMode,
                 onClearDownloadCache = settingsViewModel::clearDownloadCache,
                 onClearStatusMessage = settingsViewModel::clearStatusMessage,
                 onThemeChanged = settingsViewModel::setTheme,

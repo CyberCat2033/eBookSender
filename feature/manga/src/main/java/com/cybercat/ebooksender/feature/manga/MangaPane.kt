@@ -37,6 +37,7 @@ import com.cybercat.ebooksender.data.manga.MangaChapter
 import com.cybercat.ebooksender.data.manga.MangaSeriesBookmark
 import com.cybercat.ebooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.ebooksender.localization.LocalStrings
+import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.ui.LoadingCard
 import com.cybercat.ebooksender.ui.StatusMessageHost
 import com.cybercat.ebooksender.util.AppHapticFeedback
@@ -73,6 +74,7 @@ fun MangaPane(
     onCloseSubscriptionUpdates: () -> Unit,
     onRefreshAuthState: () -> Unit,
     onCancelDownload: () -> Unit,
+    onMangaLoginModeChanged: (MangaLoginMode) -> Unit,
     onNativeLoginSubmit: (
         targetUrl: String,
         username: String,
@@ -91,6 +93,9 @@ fun MangaPane(
     var handledSeriesScrollRequest by rememberSaveable {
         mutableStateOf(state.selectedSeriesScrollRequest)
     }
+    var showLoginMethodDialog by rememberSaveable { mutableStateOf(false) }
+    var openNativeLoginAfterBrowser by rememberSaveable { mutableStateOf(false) }
+    val selectedSource = state.sources.firstOrNull { source -> source.id == state.selectedSourceId }
     val chapterTargets = remember(state.chapters) {
         state.chapters.mapIndexed { index, chapter ->
             chapterItemKey(chapter) to ChapterPointerTarget(
@@ -140,6 +145,28 @@ fun MangaPane(
         edgeSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { 84.dp.toPx() }
     )
 
+    fun openWebViewLogin() {
+        onOpenBrowser()
+    }
+
+    fun openNativeLogin() {
+        openNativeLoginAfterBrowser = true
+        onOpenBrowser()
+    }
+
+    fun handleLoginClick() {
+        if (selectedSource?.nativeLoginConfig == null) {
+            openWebViewLogin()
+            return
+        }
+
+        when (state.mangaLoginMode) {
+            MangaLoginMode.Ask -> showLoginMethodDialog = true
+            MangaLoginMode.WebView -> openWebViewLogin()
+            MangaLoginMode.Native -> openNativeLogin()
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -166,7 +193,7 @@ fun MangaPane(
                         state = state,
                         onSearchChanged = onSearchChanged,
                         onSearch = onSearch,
-                        onOpenBrowser = onOpenBrowser,
+                        onOpenBrowser = ::handleLoginClick,
                         enableHaptics = enableHaptics
                     )
 
@@ -290,6 +317,21 @@ fun MangaPane(
         }
     }
 
+    if (showLoginMethodDialog && selectedSource?.nativeLoginConfig != null) {
+        MangaLoginMethodDialog(
+            enableHaptics = enableHaptics,
+            onDismiss = { showLoginMethodDialog = false },
+            onUseWebView = { rememberChoice ->
+                if (rememberChoice) onMangaLoginModeChanged(MangaLoginMode.WebView)
+                openWebViewLogin()
+            },
+            onUseNativeForm = { rememberChoice ->
+                if (rememberChoice) onMangaLoginModeChanged(MangaLoginMode.Native)
+                openNativeLogin()
+            }
+        )
+    }
+
     if (state.subscriptionUpdatesVisible && state.subscriptionUpdates.isNotEmpty()) {
         MangaSubscriptionUpdatesDialog(
             updates = state.subscriptionUpdates,
@@ -304,10 +346,6 @@ fun MangaPane(
     }
 
     if (state.browserVisible) {
-        val selectedSource = state.sources.firstOrNull { source ->
-            source.id ==
-                state.selectedSourceId
-        }
         MangaBrowserCard(
             url = state.browserUrl,
             currentUrl = state.currentWebUrl,
@@ -316,10 +354,12 @@ fun MangaPane(
             loginUrl = selectedSource?.loginUrl,
             nativeLoginConfig = selectedSource?.nativeLoginConfig,
             pendingLoginPost = state.pendingLoginPost,
+            showNativeLoginOnStart = openNativeLoginAfterBrowser,
             enableHaptics = enableHaptics,
             onClose = onCloseBrowser,
             onWebPageLoaded = onWebPageLoaded,
             onNativeLoginSubmit = onNativeLoginSubmit,
+            onNativeLoginStartConsumed = { openNativeLoginAfterBrowser = false },
             onLoginPostExecuted = onLoginPostExecuted
         )
     }

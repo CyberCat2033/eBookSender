@@ -7,7 +7,9 @@ import com.cybercat.ebooksender.data.manga.CheckMangaSubscriptionsUseCase
 import com.cybercat.ebooksender.data.manga.MangaDownloadCoordinator
 import com.cybercat.ebooksender.data.manga.MangaDownloadLauncher
 import com.cybercat.ebooksender.data.manga.MangaRepository
+import com.cybercat.ebooksender.data.settings.SettingsRepository
 import com.cybercat.ebooksender.localization.LocalizationManager
+import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.util.launchTemporaryStatus
 import com.cybercat.ebooksender.util.onFailureRethrowing
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class MangaViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
+    private val settingsRepository: SettingsRepository,
     private val checkMangaSubscriptionsUseCase: CheckMangaSubscriptionsUseCase,
     private val catalogRepository: DeviceCatalogRepository,
     private val downloadCoordinator: MangaDownloadCoordinator,
@@ -59,7 +62,7 @@ class MangaViewModel @Inject constructor(
         showStatus = ::showMangaStatus
     )
 
-    val uiState: StateFlow<MangaUiState> = combine(
+    private val mangaContentState = combine(
         mangaRepository.downloadedStableKeys,
         mangaRepository.downloadedChapters,
         mangaRepository.savedSeries,
@@ -81,6 +84,13 @@ class MangaViewModel @Inject constructor(
             savedSeries = saved,
             lastReadChapterText = lastRead
         )
+    }
+
+    val uiState: StateFlow<MangaUiState> = combine(
+        mangaContentState,
+        settingsRepository.settings
+    ) { mangaState, settings ->
+        mangaState.copy(mangaLoginMode = settings.mangaLoginMode)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -107,6 +117,10 @@ class MangaViewModel @Inject constructor(
     fun selectMangaSource(sourceId: String) = searchController.selectSource(sourceId)
 
     fun openMangaBrowser(url: String? = null) = browserController.openBrowser(url)
+
+    fun setMangaLoginMode(mode: MangaLoginMode) {
+        viewModelScope.launch { settingsRepository.setMangaLoginMode(mode) }
+    }
 
     fun closeMangaBrowser() = browserController.closeBrowser()
 
