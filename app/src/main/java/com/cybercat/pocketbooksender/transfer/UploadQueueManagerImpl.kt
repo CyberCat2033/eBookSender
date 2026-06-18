@@ -2,8 +2,10 @@ package com.cybercat.pocketbooksender.transfer
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.data.transfer.UploadQueueManager
+import com.cybercat.pocketbooksender.di.ApplicationScope
 import com.cybercat.pocketbooksender.domain.FileClassifier
 import com.cybercat.pocketbooksender.domain.MangaTitleParser
 import com.cybercat.pocketbooksender.domain.PathPlanner
@@ -20,9 +22,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,10 +36,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Singleton
 class UploadQueueManagerImpl @Inject constructor(
     @ApplicationContext private val context: Context,
+    @ApplicationScope private val scope: CoroutineScope,
     private val metadataExtractor: MetadataExtractor,
     private val classifier: FileClassifier,
     private val pathPlanner: PathPlanner,
@@ -47,8 +51,6 @@ class UploadQueueManagerImpl @Inject constructor(
     private val mangaTitleParser: MangaTitleParser,
     private val queueStorageRepository: QueueStorageRepository
 ) : UploadQueueManager {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-
     private val _queue = MutableStateFlow<List<UploadItem>>(emptyList())
     override val queue: StateFlow<List<UploadItem>> = _queue.asStateFlow()
 
@@ -60,40 +62,14 @@ class UploadQueueManagerImpl @Inject constructor(
 
     init {
         scope.launch {
-            val restoredQueueState = withContext(Dispatchers.IO) {
-                restorePersistedQueue()
-            }
-            _queue.update { current ->
-                (restoredQueueState.items + current).deduplicateQueue()
-            }
-            queueRestored = true
-            withContext(Dispatchers.IO) {
-                queueStorageRepository.persist(_queue.value)
-                cleanupCoverCacheFiles(_queue.value)
-            }
-            lastCleanedQueueItemIds = _queue.value.queueItemIds()
-            val itemIdsNeedingMetadataReload = restoredQueueState.metadataReloadItemIds
-            _queue.value
-                .filter { item -> item.id in itemIdsNeedingMetadataReload }
-                .forEach { item ->
-                    launch {
-                        loadMetadata(item)
-                    }
-                }
+            restorePersistedQueueState()
         }
 
         _queue
             .drop(1)
             .onEach { items ->
                 if (queueRestored) {
-                    val queueItemIds = items.queueItemIds()
-                    withContext(Dispatchers.IO) {
-                        queueStorageRepository.persist(items)
-                        if (queueItemIds != lastCleanedQueueItemIds) {
-                            cleanupCoverCacheFiles(items)
-                        }
-                    }
-                    lastCleanedQueueItemIds = queueItemIds
+                    persistQueueSnapshot(items)
                 }
             }
             .launchIn(scope)
@@ -390,6 +366,57 @@ class UploadQueueManagerImpl @Inject constructor(
         )
     }
 
+    private suspend fun restorePersistedQueueState() {
+        val restoredQueueState = try {
+            withTimeoutOrNull(QUEUE_RESTORE_TIMEOUT_MILLIS) {
+                withContext(Dispatchers.IO) {
+                    restorePersistedQueue()
+                }
+            } ?: run {
+                Log.w(
+                    TAG,
+                    "Timed out restoring upload queue after ${QUEUE_RESTORE_TIMEOUT_MILLIS}ms"
+                )
+                RestoredQueueState.empty()
+            }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            Log.e(TAG, "Failed to restore persisted upload queue", error)
+            RestoredQueueState.empty()
+        }
+
+        _queue.update { current ->
+            (restoredQueueState.items + current).deduplicateQueue()
+        }
+        queueRestored = true
+        persistQueueSnapshot(_queue.value)
+
+        val itemIdsNeedingMetadataReload = restoredQueueState.metadataReloadItemIds
+        _queue.value
+            .filter { item -> item.id in itemIdsNeedingMetadataReload }
+            .forEach { item ->
+                scope.launch {
+                    loadMetadata(item)
+                }
+            }
+    }
+
+    private suspend fun persistQueueSnapshot(items: List<UploadItem>) {
+        val queueItemIds = items.queueItemIds()
+        try {
+            withContext(Dispatchers.IO) {
+                queueStorageRepository.persist(items)
+                if (queueItemIds != lastCleanedQueueItemIds) {
+                    cleanupCoverCacheFiles(items)
+                }
+            }
+            lastCleanedQueueItemIds = queueItemIds
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            Log.e(TAG, "Failed to persist upload queue snapshot", error)
+        }
+    }
+
     private fun createUploadItem(uri: Uri, displayName: String, settings: AppSettings): UploadItem {
         val extension = displayName.bookExtension().ifBlank { "bin" }
         val title = displayName.bookTitleWithoutExtension()
@@ -540,19 +567,33 @@ class UploadQueueManagerImpl @Inject constructor(
         if (removedItems.isEmpty()) return
 
         scope.launch {
-            downloadCacheManager.deleteDownloadSources(
-                sourceUris = removedItems.map { item -> item.sourceUri },
-                retainedSourceUris = retainedSourceUris
-            )
+            try {
+                downloadCacheManager.deleteDownloadSources(
+                    sourceUris = removedItems.map { item -> item.sourceUri },
+                    retainedSourceUris = retainedSourceUris
+                )
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                Log.e(TAG, "Failed to delete cached download sources", error)
+            }
         }
     }
 
     private companion object {
         const val METADATA_EXTRACTION_PARALLELISM = 1
+        const val QUEUE_RESTORE_TIMEOUT_MILLIS = 5_000L
+        const val TAG = "UploadQueueManager"
     }
 }
 
 private data class RestoredQueueState(
     val items: List<UploadItem>,
     val metadataReloadItemIds: Set<String>
-)
+) {
+    companion object {
+        fun empty(): RestoredQueueState = RestoredQueueState(
+            items = emptyList(),
+            metadataReloadItemIds = emptySet()
+        )
+    }
+}

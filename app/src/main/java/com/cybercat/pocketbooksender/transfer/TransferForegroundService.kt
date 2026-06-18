@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.IBinder
+import android.util.Log
 import com.cybercat.pocketbooksender.data.device.DeviceLibraryRefresher
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.model.BookCategory
+import com.cybercat.pocketbooksender.model.RemoteDevice
 import com.cybercat.pocketbooksender.network.isLocalNetworkBypassBlocked
 import com.cybercat.pocketbooksender.power.ScopedWakeLock
 import dagger.hilt.android.AndroidEntryPoint
@@ -24,6 +26,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 @AndroidEntryPoint
 class TransferForegroundService : Service() {
@@ -196,7 +199,7 @@ class TransferForegroundService : Service() {
         } finally {
             withContext(NonCancellable) {
                 if (uploaded > 0) {
-                    deviceLibraryRefresher.refreshAndWait(request.device)
+                    refreshLibraryAfterTransfer(request.device)
                 }
                 if (canceled) {
                     transferCoordinator.emit(
@@ -272,6 +275,30 @@ class TransferForegroundService : Service() {
         }
     }
 
+    private suspend fun refreshLibraryAfterTransfer(device: RemoteDevice) {
+        val refreshResult = withTimeoutOrNull(DEVICE_LIBRARY_REFRESH_TIMEOUT_MILLIS) {
+            deviceLibraryRefresher.refreshAndWait(device)
+        }
+
+        when {
+            refreshResult == null -> {
+                Log.w(
+                    TAG,
+                    "Timed out refreshing device library after transfer after " +
+                        "${DEVICE_LIBRARY_REFRESH_TIMEOUT_MILLIS}ms"
+                )
+            }
+
+            refreshResult.isFailure -> {
+                Log.w(
+                    TAG,
+                    "Device library refresh failed after transfer",
+                    refreshResult.exceptionOrNull()
+                )
+            }
+        }
+    }
+
     private fun notifyProgress(text: String, completed: Int, total: Int) {
         transferNotifications.notifyProgress(text, completed, total)
     }
@@ -298,6 +325,8 @@ class TransferForegroundService : Service() {
         private const val ACTION_CANCEL_TRANSFER =
             "com.cybercat.pocketbooksender.transfer.CANCEL_TRANSFER"
         private const val TRANSFER_WAKE_LOCK_TIMEOUT_MILLIS = 60 * 60 * 1000L
+        private const val DEVICE_LIBRARY_REFRESH_TIMEOUT_MILLIS = 12_000L
+        private const val TAG = "TransferForegroundSvc"
 
         fun createIntent(context: Context, requestId: String): Intent =
             Intent(context, TransferForegroundService::class.java)

@@ -48,6 +48,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/localization/LocalizationManager.kt` - runtime localization loading.
 - `app/src/main/java/com/cybercat/pocketbooksender/ui/PocketBookSenderApp.kt` - Compose app shell and navigation integration.
 - `app/src/main/java/com/cybercat/pocketbooksender/PocketBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
+- `app/src/main/java/com/cybercat/pocketbooksender/di/AppCoroutineModule.kt` - Hilt module that provides the shared application-lifetime coroutine scope and exception handler for singleton background managers and repositories.
 - `app/src/main/java/com/cybercat/pocketbooksender/di/MangaDataModule.kt` - Hilt binding module that exposes `MangaRepository` as the shared `MangaSeriesPageLoader` port for manga use cases.
 - `app/src/main/java/com/cybercat/pocketbooksender/lifecycle/AppVisibilityTracker.kt` - process importance visibility gate used by foreground services to suppress completion notifications while the UI is visible.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/LocalMetadataExtractor.kt` - local metadata extractor router and remaining FB2/EPUB/MOBI metadata parsing for queued files.
@@ -99,6 +100,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/network/LocalDeviceNetworkProvider.kt` - Android network route helper for optional VPN bypass on local FTP and device library-refresh requests, including a bind probe before using a direct Wi-Fi/Ethernet route.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSelectionKeys.kt` - shared stable manga selection keys used by subscription update UI and background download completion.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaArchiveHelper.kt` - packaging tool for creating CBZ/ZIP files from downloaded manga page images.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/di/ApplicationScope.kt` - qualifier for the shared application-lifetime coroutine scope injected into singleton managers and repositories.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaAdapter.kt` - Com-X source adapter; owns the `HtmlMangaSourceAdapter` contract and delegates HTTP/session work plus HTML parsing.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxMangaHttpClient.kt` - Com-X HTTP facade for text fetching and image downloads; delegates session, connection, Guard, and archive responsibilities to focused helpers.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHttpConnectionFactory.kt` - shared Com-X `HttpURLConnection` setup for headers, timeouts, user agent, referer, and cookies.

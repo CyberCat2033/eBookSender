@@ -3,6 +3,7 @@ package com.cybercat.pocketbooksender.data.catalog
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
 import com.cybercat.pocketbooksender.data.ftp.toSafeRelativeFtpPath
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
+import com.cybercat.pocketbooksender.di.ApplicationScope
 import com.cybercat.pocketbooksender.domain.AllSupportedExtensions
 import com.cybercat.pocketbooksender.domain.contentExtension
 import com.cybercat.pocketbooksender.model.AppSettings
@@ -15,7 +16,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,14 +32,13 @@ import kotlinx.coroutines.withContext
 
 @Singleton
 class DeviceCatalogRepository @Inject constructor(
+    @ApplicationScope private val scope: CoroutineScope,
     private val ftpGateway: FtpGateway,
     private val pocketBookCatalogSource: PocketBookCatalogSource,
     private val catalogFolderScanner: CatalogFolderScanner,
     private val connectionManager: ConnectionManager,
     private val settingsRepository: SettingsRepository
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-
     private val _catalog = MutableStateFlow(DeviceCatalog())
     val catalog: StateFlow<DeviceCatalog> = _catalog.asStateFlow()
 
