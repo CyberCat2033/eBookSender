@@ -9,6 +9,7 @@ interface UploadQueueManager {
     val queue: StateFlow<List<UploadItem>>
     fun addUris(uris: List<Uri>)
     fun addPreparedItems(items: List<UploadItem>)
+    fun prioritizeMetadata(itemIds: List<String>)
     fun removeItem(id: String)
     fun clearQueue()
     fun removeDownloadCacheItems(): Int

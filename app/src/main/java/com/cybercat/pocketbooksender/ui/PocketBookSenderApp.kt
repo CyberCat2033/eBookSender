@@ -354,6 +354,7 @@ private fun AppNavHost(
                 onQrScanned = transferViewModel::connectTo,
                 onDisconnect = transferViewModel::disconnect,
                 onAddUris = transferViewModel::addUris,
+                onVisibleQueueChanged = transferViewModel::prioritizeVisibleQueueItems,
                 onRemoveItem = transferViewModel::removeItem,
                 onClearQueue = transferViewModel::clearQueueAfterDelay,
                 onCategoryChanged = transferViewModel::updateCategory,

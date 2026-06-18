@@ -36,6 +36,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,7 @@ import com.cybercat.pocketbooksender.ui.StatusMessageHost
 import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +67,7 @@ fun SendScreen(
     onQrScanned: (String) -> Unit,
     onDisconnect: () -> Unit,
     onAddUris: (List<Uri>) -> Unit,
+    onVisibleQueueChanged: (List<String>) -> Unit,
     onRemoveItem: (String) -> Unit,
     onClearQueue: (delayMillis: Long) -> Unit,
     onCategoryChanged: (String, BookCategory) -> Unit,
@@ -99,9 +102,10 @@ fun SendScreen(
                 emptyList()
             } else {
                 activeQueue.filterNot { item -> item.id in visuallyRemovedActiveItemIds }
-            }
         }
+    }
     val activeRows = remember(activeQueue) { activeQueue.withStableLazyKeys() }
+    val activeRowsByKey = remember(activeRows) { activeRows.associateBy(QueueRow::key) }
     val activeMangaQueue = remember(displayedActiveQueue) {
         displayedActiveQueue.filter { it.category == BookCategory.Manga }
     }
@@ -153,6 +157,21 @@ fun SendScreen(
 
     LaunchedEffect(activeItemIds) {
         visuallyRemovedActiveItemIds = visuallyRemovedActiveItemIds intersect activeItemIds
+    }
+
+    LaunchedEffect(listState, activeRowsByKey) {
+        snapshotFlow {
+            listState.layoutInfo.visibleItemsInfo.mapNotNull { itemInfo ->
+                val key = itemInfo.key as? String ?: return@mapNotNull null
+                activeRowsByKey[key]?.item?.id
+            }
+        }
+            .distinctUntilChanged()
+            .collect { visibleItemIds ->
+                if (visibleItemIds.isNotEmpty()) {
+                    onVisibleQueueChanged(visibleItemIds)
+                }
+            }
     }
 
     LaunchedEffect(state.queue.isEmpty()) {

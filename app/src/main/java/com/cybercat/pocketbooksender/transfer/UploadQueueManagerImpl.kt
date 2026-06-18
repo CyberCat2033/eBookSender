@@ -22,6 +22,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,11 @@ class UploadQueueManagerImpl @Inject constructor(
     override val queue: StateFlow<List<UploadItem>> = _queue.asStateFlow()
 
     private val metadataExtractionSemaphore = Semaphore(METADATA_EXTRACTION_PARALLELISM)
+    private val metadataQueueLock = Any()
+    private val pendingMetadataItemIds = ArrayDeque<String>()
+    private val queuedMetadataItemIds = mutableSetOf<String>()
+    private val runningMetadataItemIds = mutableSetOf<String>()
+    private var metadataQueueSignal = CompletableDeferred<Unit>()
 
     private var activeSettings = AppSettings()
     private var queueRestored = false
@@ -63,6 +69,11 @@ class UploadQueueManagerImpl @Inject constructor(
     init {
         scope.launch {
             restorePersistedQueueState()
+        }
+        repeat(METADATA_EXTRACTION_PARALLELISM) {
+            scope.launch {
+                processMetadataQueue()
+            }
         }
 
         _queue
@@ -152,11 +163,7 @@ class UploadQueueManagerImpl @Inject constructor(
             (current + newItems).deduplicateQueue()
         }
 
-        newItems.forEach { item ->
-            scope.launch {
-                loadMetadata(item)
-            }
-        }
+        enqueueMetadataLoads(newItems.map(UploadItem::id))
     }
 
     override fun addPreparedItems(items: List<UploadItem>) {
@@ -180,11 +187,37 @@ class UploadQueueManagerImpl @Inject constructor(
             (current + newItems).deduplicateQueue()
         }
 
-        newItems.forEach { item ->
-            scope.launch {
-                loadMetadata(item)
+        enqueueMetadataLoads(newItems.map(UploadItem::id))
+    }
+
+    override fun prioritizeMetadata(itemIds: List<String>) {
+        if (itemIds.isEmpty()) return
+
+        val signal = synchronized(metadataQueueLock) {
+            val prioritizedIds = itemIds.filter { itemId ->
+                itemId !in runningMetadataItemIds && shouldLoadMetadata(itemId)
+            }
+            if (prioritizedIds.isEmpty()) {
+                null
+            } else {
+                val currentPendingIds = pendingMetadataItemIds.toList()
+                pendingMetadataItemIds.clear()
+
+                prioritizedIds.forEach { itemId ->
+                    if (queuedMetadataItemIds.add(itemId)) {
+                        pendingMetadataItemIds.addLast(itemId)
+                    }
+                }
+                currentPendingIds.forEach { itemId ->
+                    if (itemId !in prioritizedIds) {
+                        pendingMetadataItemIds.addLast(itemId)
+                    }
+                }
+                metadataQueueSignal
             }
         }
+
+        signal?.complete(Unit)
     }
 
     override fun removeItem(id: String) {
@@ -392,13 +425,7 @@ class UploadQueueManagerImpl @Inject constructor(
         persistQueueSnapshot(_queue.value)
 
         val itemIdsNeedingMetadataReload = restoredQueueState.metadataReloadItemIds
-        _queue.value
-            .filter { item -> item.id in itemIdsNeedingMetadataReload }
-            .forEach { item ->
-                scope.launch {
-                    loadMetadata(item)
-                }
-            }
+        enqueueMetadataLoads(itemIdsNeedingMetadataReload)
     }
 
     private suspend fun persistQueueSnapshot(items: List<UploadItem>) {
@@ -517,6 +544,63 @@ class UploadQueueManagerImpl @Inject constructor(
 
     private fun shouldLoadMetadata(itemId: String): Boolean = _queue.value.any { item ->
         item.id == itemId && item.status != UploadStatus.Uploaded
+    }
+
+    private fun enqueueMetadataLoads(itemIds: Iterable<String>) {
+        val signal = synchronized(metadataQueueLock) {
+            var enqueued = false
+            itemIds.forEach { itemId ->
+                if (
+                    itemId !in queuedMetadataItemIds &&
+                    itemId !in runningMetadataItemIds &&
+                    shouldLoadMetadata(itemId)
+                ) {
+                    pendingMetadataItemIds.addLast(itemId)
+                    queuedMetadataItemIds += itemId
+                    enqueued = true
+                }
+            }
+            if (enqueued) {
+                metadataQueueSignal
+            } else {
+                null
+            }
+        }
+
+        signal?.complete(Unit)
+    }
+
+    private suspend fun processMetadataQueue() {
+        while (true) {
+            val (itemId, signal) = synchronized(metadataQueueLock) {
+                val nextItemId = pendingMetadataItemIds.removeFirstOrNull()
+                if (nextItemId != null) {
+                    queuedMetadataItemIds.remove(nextItemId)
+                    runningMetadataItemIds += nextItemId
+                    nextItemId to metadataQueueSignal
+                } else {
+                    if (metadataQueueSignal.isCompleted) {
+                        metadataQueueSignal = CompletableDeferred()
+                    }
+                    null to metadataQueueSignal
+                }
+            }
+
+            if (itemId == null) {
+                signal.await()
+                continue
+            }
+
+            try {
+                _queue.value.firstOrNull { item -> item.id == itemId }?.let { item ->
+                    loadMetadata(item)
+                }
+            } finally {
+                synchronized(metadataQueueLock) {
+                    runningMetadataItemIds.remove(itemId)
+                }
+            }
+        }
     }
 
     private fun replan(item: UploadItem, settings: AppSettings): UploadItem =

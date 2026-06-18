@@ -251,6 +251,10 @@ class TransferViewModel @Inject constructor(
         queueManager.addUris(uris)
     }
 
+    fun prioritizeVisibleQueueItems(itemIds: List<String>) {
+        queueManager.prioritizeMetadata(itemIds)
+    }
+
     fun removeItem(id: String) {
         queueManager.removeItem(id)
     }
