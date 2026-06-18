@@ -9,6 +9,8 @@ import java.io.FileOutputStream
 object UploadPreviewCache {
     const val DEFAULT_REQUEST_WIDTH = 160
     const val DEFAULT_REQUEST_HEIGHT = 220
+    @Volatile
+    private var legacyCachesCleaned = false
 
     fun memoryKey(itemId: String): String = "upload-preview:$itemId"
 
@@ -105,10 +107,17 @@ object UploadPreviewCache {
         File(context.filesDir, COVER_CACHE_DIR_NAME).apply { mkdirs() }
 
     private fun cleanupLegacyCaches(context: Context) {
-        LEGACY_COVER_CACHE_DIR_NAMES.forEach { dirName ->
-            runCatching {
-                File(context.filesDir, dirName).deleteRecursively()
+        if (legacyCachesCleaned) return
+
+        synchronized(this) {
+            if (legacyCachesCleaned) return
+
+            LEGACY_COVER_CACHE_DIR_NAMES.forEach { dirName ->
+                runCatching {
+                    File(context.filesDir, dirName).deleteRecursively()
+                }
             }
+            legacyCachesCleaned = true
         }
     }
 

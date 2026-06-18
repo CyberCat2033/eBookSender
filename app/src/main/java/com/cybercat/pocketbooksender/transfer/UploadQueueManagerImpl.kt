@@ -580,7 +580,7 @@ class UploadQueueManagerImpl @Inject constructor(
     }
 
     private companion object {
-        const val METADATA_EXTRACTION_PARALLELISM = 1
+        const val METADATA_EXTRACTION_PARALLELISM = 3
         const val QUEUE_RESTORE_TIMEOUT_MILLIS = 5_000L
         const val TAG = "UploadQueueManager"
     }
