@@ -1,8 +1,9 @@
 name: Release
 
 # При пуше тега v* (например v0.2.0) проверяет SemVer-формат тега,
-# запускает unit-тесты, собирает подписанный release-APK и публикует его
-# в GitHub Releases. Сборка debug APK на main/PR — в workflow ci.yml.
+# запускает unit-тесты, собирает подписанные release-APK для ARM ABI
+# и universal APK, затем публикует их в GitHub Releases.
+# Сборка debug APK на main/PR — в workflow ci.yml.
 #
 # Требуются секреты репозитория (Settings → Secrets and variables → Actions):
 #   KEYSTORE_BASE64          — base64 релизного keystore (см. README, раздел CI/Releases)
@@ -77,21 +78,32 @@ jobs:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --stacktrace
+        run: ./gradlew :app:assembleRelease -PenableAbiSplits=true --stacktrace
 
-      - name: Rename APK
-        id: apk
+      - name: Prepare release APKs
+        id: apks
         run: |
-          APK_NAME="eBookSender-v${{ steps.version.outputs.version }}.apk"
-          cp app/build/outputs/apk/release/app-release.apk "$APK_NAME"
-          echo "name=$APK_NAME" >> "$GITHUB_OUTPUT"
+          VERSION="${{ steps.version.outputs.version }}"
+          OUTPUT_DIR="app/build/outputs/apk/release"
+          ARTIFACT_DIR="release-artifacts"
+          mkdir -p "$ARTIFACT_DIR"
+
+          cp "$OUTPUT_DIR/app-universal-release.apk" "$ARTIFACT_DIR/eBookSender-v${VERSION}-universal.apk"
+          cp "$OUTPUT_DIR/app-arm64-v8a-release.apk" "$ARTIFACT_DIR/eBookSender-v${VERSION}-arm64-v8a.apk"
+          cp "$OUTPUT_DIR/app-armeabi-v7a-release.apk" "$ARTIFACT_DIR/eBookSender-v${VERSION}-armeabi-v7a.apk"
+
+          {
+            echo "files<<EOF"
+            find "$ARTIFACT_DIR" -name '*.apk' -type f | sort
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: v${{ steps.version.outputs.version }}
           tag_name: ${{ github.ref_name }}
-          files: ${{ steps.apk.outputs.name }}
+          files: ${{ steps.apks.outputs.files }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           # generate_release_notes: GitHub сам соберёт список PR/коммитов

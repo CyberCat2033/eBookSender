@@ -24,6 +24,10 @@ val releaseStoreFile = releaseSigningProperty("RELEASE_STORE_FILE") ?: "release.
 val releaseStorePassword = releaseSigningProperty("RELEASE_STORE_PASSWORD")
 val releaseKeyAlias = releaseSigningProperty("RELEASE_KEY_ALIAS")
 val releaseKeyPassword = releaseSigningProperty("RELEASE_KEY_PASSWORD")
+val enableAbiSplits = providers.gradleProperty("enableAbiSplits")
+    .map(String::toBoolean)
+    .orElse(false)
+val releaseAbiFilters = listOf("arm64-v8a", "armeabi-v7a")
 
 /**
  * Запускает `git` с аргументами [args] в корне проекта и возвращает stdout,
@@ -79,6 +83,15 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    splits {
+        abi {
+            isEnable = enableAbiSplits.get()
+            reset()
+            include(*releaseAbiFilters.toTypedArray())
+            isUniversalApk = true
+        }
     }
 
     signingConfigs {
