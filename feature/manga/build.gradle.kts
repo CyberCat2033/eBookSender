@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.cybercat.pocketbooksender.feature.manga"
+    namespace = "com.cybercat.ebooksender.feature.manga"
     compileSdk = 36
 
     defaultConfig {

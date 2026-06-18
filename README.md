@@ -1,4 +1,4 @@
-# PocketBook Sender Android App
+# eBookSender Android App
 
 Android client for sending books to FTP-capable reading devices, with PocketBook as the primary
 optimized platform.
@@ -10,7 +10,7 @@ Current status: usable Compose MVP with QR/manual connection input, real FTP ava
 ```text
 android/
   app/
-    src/main/java/com/cybercat/pocketbooksender/
+    src/main/java/com/cybercat/ebooksender/
 ```
 
 The first iteration is intentionally a single Android module with package boundaries. If the app grows, split these packages into Gradle modules matching `ANDROID_APP_BRIEF.md`.
@@ -150,7 +150,7 @@ CBR handling:
   - Applying a language waits until the language picker finishes its close animation, avoiding a mid-dialog UI repaint.
   - Automatically queries system locale settings to determine the interface language on first run.
   - Basic locales (`en.json`, `ru.json`) are packaged in `assets/locales/`.
-  - Community members can drop `.json` translation files into `<relative root path>/PocketBookSender/locales/` on the device.
+  - Community members can drop `.json` translation files into `eBookSender/locales/` on the device.
   - Scans files at runtime, reads metadata (`meta_language_code` and `meta_language_name`) from inside the JSON files.
   - Prevents language collisions (groups by language code, overriding internal with external, and choosing the newest translation file).
   - Integrates with CompositionLocal `LocalStrings` for reactive runtime language switching without app restarts.

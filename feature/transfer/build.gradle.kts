@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.cybercat.pocketbooksender.feature.transfer"
+    namespace = "com.cybercat.ebooksender.feature.transfer"
     compileSdk = 36
 
     defaultConfig {

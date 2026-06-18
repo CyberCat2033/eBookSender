@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PocketBookSender"
+rootProject.name = "EBookSender"
 include(
     ":app",
     ":core:model",

@@ -1,0 +1,243 @@
+package com.cybercat.ebooksender.feature.transfer
+
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
+import com.cybercat.ebooksender.localization.LocalStrings
+import com.cybercat.ebooksender.model.UploadItem
+import com.cybercat.ebooksender.ui.AnimatedAlertDialog
+import com.cybercat.ebooksender.ui.AppOutlinedTextField
+import com.cybercat.ebooksender.ui.LocalDismissDialog
+import com.cybercat.ebooksender.ui.LocalDismissDialogAfter
+import com.cybercat.ebooksender.util.AppHapticFeedback
+import com.cybercat.ebooksender.util.performHapticIfAllowed
+
+@Composable
+fun VpnBypassBlockedDialog(
+    enableHaptics: Boolean,
+    onDisableBypassVpn: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.transferVpnBypassBlockedTitle) },
+        text = {
+            Text(
+                text = strings.transferVpnBypassBlockedBody,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            val dismissAfter = LocalDismissDialogAfter.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        AppHapticFeedback.Confirm
+                    )
+                    dismissAfter(onDisableBypassVpn)
+                }
+            ) {
+                Text(strings.transferVpnBypassDisableAction)
+            }
+        },
+        dismissButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        AppHapticFeedback.Press
+                    )
+                    dismiss()
+                }
+            ) {
+                Text(strings.get("action_close"))
+            }
+        }
+    )
+}
+
+@Composable
+fun MangaBatchEditorDialog(
+    activeMangaQueue: List<UploadItem>,
+    suggestions: List<String>,
+    enableHaptics: Boolean,
+    onDismiss: () -> Unit,
+    onApply: (String?, String) -> Unit
+) {
+    val uniqueSeries = remember(activeMangaQueue) {
+        activeMangaQueue.mapNotNull { item -> item.mangaSeries?.takeIf(String::isNotBlank) }
+            .distinctBy { it.lowercase() }
+    }
+
+    var targetSeries by remember { mutableStateOf<String?>(uniqueSeries.firstOrNull()) }
+    var series by remember(targetSeries) { mutableStateOf(targetSeries ?: "") }
+
+    val context = LocalContext.current
+    val view = LocalView.current
+    val strings = LocalStrings.current
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.sendRenameMangaTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (uniqueSeries.size > 1) {
+                    Text(
+                        text = strings.mangaUpdatesSelectSeriesToRename,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = targetSeries == null,
+                            onClick = {
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    AppHapticFeedback.Press
+                                )
+                                targetSeries = null
+                            },
+                            label = { Text(strings.mangaUpdatesAllSeries) }
+                        )
+                        uniqueSeries.forEach { s ->
+                            FilterChip(
+                                selected = targetSeries == s,
+                                onClick = {
+                                    view.performHapticIfAllowed(
+                                        context,
+                                        enableHaptics,
+                                        AppHapticFeedback.Press
+                                    )
+                                    targetSeries = s
+                                },
+                                label = { Text(s) }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = if (targetSeries == null) {
+                        strings.get("send_batch_rename_desc", activeMangaQueue.size)
+                    } else {
+                        val countForTarget = activeMangaQueue.count {
+                            it.mangaSeries?.equals(targetSeries, ignoreCase = true) ==
+                                true
+                        }
+                        strings.get("manga_updates_rename_desc", countForTarget, targetSeries ?: "")
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MangaSeriesRenamePanel(
+                    selectedSeries = series,
+                    suggestions = suggestions,
+                    onSeriesChanged = { series = it },
+                    onSuggestionSelected = { suggestion ->
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            AppHapticFeedback.Press
+                        )
+                        series = suggestion
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        AppHapticFeedback.Confirm
+                    )
+                    onApply(targetSeries, series.trim())
+                    dismiss()
+                },
+                enabled = series.isNotBlank()
+            ) {
+                Text(strings.sendRenameMangaApply)
+            }
+        },
+        dismissButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(onClick = {
+                view.performHapticIfAllowed(
+                    context,
+                    enableHaptics,
+                    AppHapticFeedback.Press
+                )
+                dismiss()
+            }) {
+                Text(strings.sendRenameMangaCancel)
+            }
+        }
+    )
+}
+
+@Composable
+internal fun MangaSeriesRenamePanel(
+    selectedSeries: String,
+    suggestions: List<String>,
+    onSeriesChanged: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onSuggestionSelected: (String) -> Unit = onSeriesChanged
+) {
+    val strings = LocalStrings.current
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        AppOutlinedTextField(
+            value = selectedSeries,
+            onValueChange = onSeriesChanged,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text(strings.sendRenameMangaSeries) }
+        )
+
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            suggestions
+                .filter { it.isNotBlank() }
+                .distinctBy { it.lowercase() }
+                .forEach { suggestion ->
+                    FilterChip(
+                        selected = selectedSeries.equals(suggestion, ignoreCase = true),
+                        onClick = { onSuggestionSelected(suggestion) },
+                        label = { Text(suggestion) }
+                    )
+                }
+        }
+    }
+}

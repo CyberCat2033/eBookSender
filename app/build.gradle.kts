@@ -27,11 +27,11 @@ val releaseKeyAlias = releaseSigningProperty("RELEASE_KEY_ALIAS")
 val releaseKeyPassword = releaseSigningProperty("RELEASE_KEY_PASSWORD")
 
 android {
-    namespace = "com.cybercat.pocketbooksender"
+    namespace = "com.cybercat.ebooksender"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.cybercat.pocketbooksender"
+        applicationId = "com.cybercat.ebooksender"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

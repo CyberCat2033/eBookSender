@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.cybercat.pocketbooksender.feature.opds"
+    namespace = "com.cybercat.ebooksender.feature.opds"
     compileSdk = 36
 
     defaultConfig {
