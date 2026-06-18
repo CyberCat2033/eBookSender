@@ -107,8 +107,9 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxHtmlParser.kt` - Com-X HTML parser facade; keeps guard detection while delegating search, series-page, and reader-page extraction.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxSeriesPageParser.kt` - Com-X series page parser for series details and chapter-list extraction from `window.__DATA__` or reader links.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxSearchParser.kt` - Com-X search parser for readed blocks, poster links, and JSON-LD search-result fallbacks.
-- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxReaderPageParser.kt` - Com-X reader-page parser for chapter image extraction from `window.__DATA__`, image tags, `srcset`, and script URLs.
-- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxParsingHelpers.kt` - shared Com-X parser helpers for URL ownership/normalization, title cleanup, JSON field/window-data extraction, and image URL handling.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxReaderPageParser.kt` - Com-X reader-page parser for chapter image extraction from `window.__DATA__`, nested script JSON objects, image tags, and `srcset`.
+- `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxParsingHelpers.kt` - shared Com-X parser helpers for URL ownership/normalization, title cleanup, JSON field extraction, structured script JSON extraction, and image URL handling.
+- `core/network/src/test/java/com/cybercat/pocketbooksender/data/manga/ComxParserTest.kt` - JVM unit tests for resilient Com-X series and reader-page parsing without network access.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/FtpErrorMapper.kt` - mapper class translating FTP connection errors and URL parsing failures to localized user-facing strings.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/BitmapCache.kt` - shared preview bitmap cache with disk persistence and expiring in-memory entries for remote covers and extracted previews.
 - `core/domain/src/main/java/com/cybercat/pocketbooksender/domain/MangaTitleParser.kt` - pure domain parser that derives manga series/volume hints from local file names before metadata extraction.
@@ -220,6 +221,10 @@ Use the checked-in Gradle wrapper from the Android project root.
 
 ```sh
 GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:compileDebugKotlin
+```
+
+```sh
+GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :core:network:testDebugUnitTest
 ```
 
 ```sh

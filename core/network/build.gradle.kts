@@ -32,4 +32,7 @@ dependencies {
     implementation(project(":core:common"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.hilt.android)
+
+    testImplementation(libs.junit4)
+    testImplementation(libs.json)
 }

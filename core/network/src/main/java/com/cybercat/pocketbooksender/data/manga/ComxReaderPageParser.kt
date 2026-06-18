@@ -8,12 +8,17 @@ import org.jsoup.nodes.Document
 
 class ComxReaderPageParser @Inject constructor() {
     fun parseChapterPages(url: String, html: String): List<MangaPage> {
-        val dataPages = parseReaderDataPages(url, extractComxWindowData(html))
+        val document = Jsoup.parse(html, url)
+        val dataPages = parseReaderDataPages(url, extractComxWindowData(document))
         if (dataPages.isNotEmpty()) {
             return dataPages
         }
 
-        val document = Jsoup.parse(html, url)
+        val scriptDataPages = parseScriptReaderDataPages(url, document)
+        if (scriptDataPages.isNotEmpty()) {
+            return scriptDataPages
+        }
+
         val urls = linkedImageUrls(document)
             .distinctBy { it.normalizeUrlKey() }
             .filter(::isReaderImageUrl)
@@ -62,6 +67,14 @@ class ComxReaderPageParser @Inject constructor() {
             .toList()
     }
 
+    private fun parseScriptReaderDataPages(url: String, document: Document): List<MangaPage> =
+        extractComxScriptJsonObjects(document)
+            .asSequence()
+            .flatMap { data -> parseReaderDataPages(url, data).asSequence() }
+            .distinctBy { page -> page.imageUrl.normalizeUrlKey() }
+            .mapIndexed { index, page -> page.copy(index = index) }
+            .toList()
+
     private fun linkedImageUrls(document: Document): List<String> {
         val urls = mutableListOf<String>()
         document.select("img, source").forEach { element ->
@@ -78,15 +91,6 @@ class ComxReaderPageParser @Inject constructor() {
                         runCatching { URI(document.baseUri()).resolve(raw).toString() }.getOrNull()
                     }
                 }
-        }
-
-        document.select("script").forEach { script ->
-            ComxImageUrlRegex.findAll(script.data()).forEach { match ->
-                urls += match.value
-                    .replace("\\/", "/")
-                    .replace("\\u0026", "&")
-                    .replace("&amp;", "&")
-            }
         }
 
         return urls

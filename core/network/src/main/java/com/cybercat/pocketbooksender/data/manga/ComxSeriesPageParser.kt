@@ -8,7 +8,7 @@ import org.jsoup.nodes.Document
 class ComxSeriesPageParser @Inject constructor() {
     fun parseSeriesPage(url: String, html: String): MangaSeriesPage? {
         val document = Jsoup.parse(html, url)
-        val data = extractComxWindowData(html)
+        val data = extractComxWindowData(document)
         val details = parseSeriesDetails(url, document, data)
         val chapters = parseDataChapters(details.seriesId, details.title, data)
             .ifEmpty { parseReaderLinks(details.seriesId, details.title, document) }
@@ -21,7 +21,9 @@ class ComxSeriesPageParser @Inject constructor() {
     }
 
     fun parseSeriesDetails(url: String, html: String): MangaSeriesDetails =
-        parseSeriesDetails(url, Jsoup.parse(html, url), extractComxWindowData(html))
+        Jsoup.parse(html, url).let { document ->
+            parseSeriesDetails(url, document, extractComxWindowData(document))
+        }
 
     private fun parseSeriesDetails(
         url: String,

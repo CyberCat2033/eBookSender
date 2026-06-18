@@ -24,8 +24,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PictureAsPdf
@@ -445,7 +445,7 @@ private fun UploadItem.typeDetail(): String? = when (category) {
 private fun BookCategory.iconFor(extension: String): ImageVector = when {
     this == BookCategory.Manga -> Icons.Outlined.Image
     extension == "pdf" -> Icons.Outlined.PictureAsPdf
-    this == BookCategory.Documents -> Icons.Outlined.Code
+    this == BookCategory.Documents -> Icons.Outlined.Description
     else -> Icons.AutoMirrored.Outlined.MenuBook
 }
 

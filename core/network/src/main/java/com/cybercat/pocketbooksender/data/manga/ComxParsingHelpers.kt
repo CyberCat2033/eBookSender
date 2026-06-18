@@ -4,6 +4,8 @@ import java.net.URI
 import java.net.URLDecoder
 import org.json.JSONArray
 import org.json.JSONObject
+import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 internal fun ownsComxUrl(url: String): Boolean = runCatching {
@@ -145,48 +147,19 @@ internal fun JSONObject.optFiniteDouble(key: String): Double? {
     return value.takeIf { !it.isNaN() && it.isFinite() }
 }
 
-internal fun extractComxWindowData(html: String): JSONObject? {
-    val markerIndex = html.indexOf("window.__DATA__")
-    if (markerIndex < 0) return null
+internal fun extractComxWindowData(html: String): JSONObject? =
+    extractComxWindowData(Jsoup.parse(html))
 
-    val start = html.indexOf('{', markerIndex)
-    if (start < 0) return null
+internal fun extractComxWindowData(document: Document): JSONObject? = document.scriptSources()
+    .mapNotNull { script -> script.extractAssignedJsonObject(COMX_WINDOW_DATA_PROPERTY) }
+    .firstOrNull()
 
-    var depth = 0
-    var inString = false
-    var escape = false
-
-    for (index in start until html.length) {
-        val char = html[index]
-        if (inString) {
-            if (escape) {
-                escape = false
-            } else if (char == '\\') {
-                escape = true
-            } else if (char == '"') {
-                inString = false
-            }
-            continue
-        }
-
-        when (char) {
-            '"' -> inString = true
-
-            '{' -> depth += 1
-
-            '}' -> {
-                depth -= 1
-                if (depth == 0) {
-                    return runCatching {
-                        JSONObject(html.substring(start, index + 1))
-                    }.getOrNull()
-                }
-            }
-        }
-    }
-
-    return null
-}
+internal fun extractComxScriptJsonObjects(document: Document): List<JSONObject> =
+    document.scriptSources()
+        .filter { script -> script.containsLikelyComxReaderData() }
+        .flatMap { script -> script.extractJsonValues() }
+        .flatMap { value -> value.flattenJsonObjects() }
+        .toList()
 
 internal fun titleFromUrl(url: String): String =
     URLDecoder.decode(url.substringBefore('?').substringAfterLast('/'), Charsets.UTF_8.name())
@@ -196,9 +169,6 @@ internal fun titleFromUrl(url: String): String =
 
 internal fun firstNonBlank(vararg values: String?): String =
     values.firstOrNull { !it.isNullOrBlank() }.orEmpty().trim()
-
-internal val ComxImageUrlRegex: Regex =
-    Regex("""https?:\\?/\\?/[^\s"'<>]+?\.(?:jpe?g|png|webp|gif)(?:\?[^\s"'<>]*)?""")
 
 internal val ComxIgnoredImageMarkers = listOf(
     "avatar",
@@ -214,6 +184,8 @@ internal val ComxIgnoredImageMarkers = listOf(
 
 private val ComxImageExtensions = setOf("jpg", "jpeg", "png", "webp", "gif")
 
+private const val COMX_WINDOW_DATA_PROPERTY = "__DATA__"
+
 private val ComxIgnoredTitles = setOf(
     "Com-X .life",
     "Войти",
@@ -226,3 +198,210 @@ private val ComxIgnoredTitles = setOf(
 )
 
 private val ComxNumberRegex = Regex("""\d+([.,]\d+)?""")
+
+private fun Document.scriptSources(): Sequence<String> = select("script").asSequence()
+    .map { script -> script.data().ifBlank { script.html() } }
+    .filter { script -> script.isNotBlank() }
+
+private fun String.extractAssignedJsonObject(target: String): JSONObject? {
+    var searchStart = 0
+    while (searchStart < length) {
+        val assignmentIndex = indexOfAssignmentOutsideJavaScript(searchStart) ?: return null
+        val leftHandSide = assignmentLeftHandSide(assignmentIndex)
+        if (leftHandSide.referencesAssignmentTarget(target)) {
+            parseJsonObjectAfterAssignment(assignmentIndex)?.let { return it }
+        }
+        searchStart = assignmentIndex + 1
+    }
+    return null
+}
+
+private fun String.parseJsonObjectAfterAssignment(assignmentIndex: Int): JSONObject? {
+    val start = indexOfAssignedObjectStart(assignmentIndex + 1) ?: return null
+    val end = findBalancedJsonValueEnd(start) ?: return null
+    return parseJsonValue(substring(start, end + 1)) as? JSONObject
+}
+
+private fun String.extractJsonValues(): Sequence<Any> = sequence {
+    var searchStart = 0
+    while (searchStart < length) {
+        val start = indexOfJsonValueStartOutsideJavaScript(searchStart) ?: break
+        val end = findBalancedJsonValueEnd(start)
+        if (end == null) {
+            searchStart = start + 1
+            continue
+        }
+
+        parseJsonValue(substring(start, end + 1))?.let { value ->
+            yield(value)
+            searchStart = end + 1
+        } ?: run {
+            searchStart = start + 1
+        }
+    }
+}
+
+private fun parseJsonValue(rawValue: String): Any? {
+    val trimmed = rawValue.trim()
+    if (trimmed.isBlank()) return null
+    return runCatching {
+        if (trimmed.startsWith("{")) {
+            JSONObject(trimmed)
+        } else {
+            JSONArray(trimmed)
+        }
+    }.getOrNull()
+}
+
+private fun Any.flattenJsonObjects(): Sequence<JSONObject> = sequence {
+    when (this@flattenJsonObjects) {
+        is JSONObject -> {
+            yield(this@flattenJsonObjects)
+            keys().asSequence().forEach { key ->
+                opt(key)?.let { value -> yieldAll(value.flattenJsonObjects()) }
+            }
+        }
+
+        is JSONArray -> {
+            for (index in 0 until length()) {
+                opt(index)?.let { value -> yieldAll(value.flattenJsonObjects()) }
+            }
+        }
+    }
+}
+
+private fun String.containsLikelyComxReaderData(): Boolean {
+    val lower = lowercase()
+    return lower.contains("images") ||
+        lower.contains("comix/") ||
+        ComxImageExtensions.any { extension -> lower.contains(".$extension") }
+}
+
+private fun String.indexOfAssignedObjectStart(startIndex: Int): Int? {
+    var index = startIndex.coerceAtLeast(0)
+    while (index < length) {
+        when {
+            this[index].isWhitespace() -> index += 1
+
+            startsWith("//", index) -> {
+                index = indexOf('\n', index + 2).takeIf { it >= 0 } ?: return null
+            }
+
+            startsWith("/*", index) -> {
+                index = indexOf("*/", index + 2).takeIf { it >= 0 }?.plus(2) ?: return null
+            }
+
+            this[index] == '{' -> return index
+
+            else -> return null
+        }
+    }
+    return null
+}
+
+private fun String.indexOfAssignmentOutsideJavaScript(startIndex: Int): Int? =
+    scanOutsideJavaScript(startIndex) { index, char ->
+        char == '=' && isPlainAssignmentAt(index)
+    }
+
+private fun String.indexOfJsonValueStartOutsideJavaScript(startIndex: Int): Int? =
+    scanOutsideJavaScript(startIndex) { _, char -> char == '{' || char == '[' }
+
+private inline fun String.scanOutsideJavaScript(
+    startIndex: Int,
+    predicate: (index: Int, char: Char) -> Boolean
+): Int? {
+    var index = startIndex.coerceAtLeast(0)
+    while (index < length) {
+        val char = this[index]
+        when {
+            char == '"' || char == '\'' || char == '`' -> index = skipQuotedJavaScript(index, char)
+            startsWith("//", index) -> index = skipLineComment(index)
+            startsWith("/*", index) -> index = skipBlockComment(index)
+            predicate(index, char) -> return index
+            else -> index += 1
+        }
+    }
+    return null
+}
+
+private fun String.skipQuotedJavaScript(startIndex: Int, quote: Char): Int {
+    var index = startIndex + 1
+    var escaped = false
+    while (index < length) {
+        val char = this[index]
+        when {
+            escaped -> escaped = false
+            char == '\\' -> escaped = true
+            char == quote -> return index + 1
+        }
+        index += 1
+    }
+    return length
+}
+
+private fun String.skipLineComment(startIndex: Int): Int =
+    indexOf('\n', startIndex + 2).takeIf { it >= 0 } ?: length
+
+private fun String.skipBlockComment(startIndex: Int): Int =
+    indexOf("*/", startIndex + 2).takeIf { it >= 0 }?.plus(2) ?: length
+
+private fun String.isPlainAssignmentAt(index: Int): Boolean {
+    val previous = getOrNull(index - 1)
+    val next = getOrNull(index + 1)
+    return previous !in AssignmentOperatorPrefixes &&
+        next != '=' &&
+        next != '>'
+}
+
+private fun String.assignmentLeftHandSide(assignmentIndex: Int): String {
+    var start = assignmentIndex - 1
+    while (start >= 0 && this[start] != ';') {
+        start -= 1
+    }
+    return substring(start + 1, assignmentIndex)
+}
+
+private fun String.referencesAssignmentTarget(target: String): Boolean {
+    val compact = filterNot { it.isWhitespace() }
+    return compact == target ||
+        compact.endsWith(".$target") ||
+        compact.endsWith("[\"$target\"]") ||
+        compact.endsWith("['$target']") ||
+        compact.endsWith("var$target") ||
+        compact.endsWith("let$target") ||
+        compact.endsWith("const$target")
+}
+
+private fun String.findBalancedJsonValueEnd(startIndex: Int): Int? {
+    val stack = ArrayDeque<Char>()
+    var index = startIndex
+    while (index < length) {
+        when (val char = this[index]) {
+            '"', '\'' -> index = skipQuotedJavaScript(index, char)
+
+            '{', '[' -> {
+                stack.addLast(char)
+                index += 1
+            }
+
+            '}' -> {
+                if (stack.removeLastOrNull() != '{') return null
+                if (stack.isEmpty()) return index
+                index += 1
+            }
+
+            ']' -> {
+                if (stack.removeLastOrNull() != '[') return null
+                if (stack.isEmpty()) return index
+                index += 1
+            }
+
+            else -> index += 1
+        }
+    }
+    return null
+}
+
+private val AssignmentOperatorPrefixes =
+    setOf('=', '!', '<', '>', '+', '-', '*', '/', '%', '&', '|', '^')
