@@ -16,15 +16,47 @@ val localProperties = Properties().apply {
     }
 }
 
-fun releaseSigningProperty(name: String): String? =
-    localProperties.getProperty(name)
-        ?: providers.gradleProperty(name).orNull
-        ?: providers.environmentVariable(name).orNull
+fun releaseSigningProperty(name: String): String? = localProperties.getProperty(name)
+    ?: providers.gradleProperty(name).orNull
+    ?: providers.environmentVariable(name).orNull
 
 val releaseStoreFile = releaseSigningProperty("RELEASE_STORE_FILE") ?: "release.keystore"
 val releaseStorePassword = releaseSigningProperty("RELEASE_STORE_PASSWORD")
 val releaseKeyAlias = releaseSigningProperty("RELEASE_KEY_ALIAS")
 val releaseKeyPassword = releaseSigningProperty("RELEASE_KEY_PASSWORD")
+
+/**
+ * Запускает `git` с аргументами [args] в корне проекта и возвращает stdout,
+ * либо [fallback], если git недоступен (например, при сборке из исходников без .git).
+ */
+fun gitCommand(args: List<String>, fallback: String): String = runCatching {
+    providers.exec {
+        commandLine("git", *args.toTypedArray())
+        workingDir = rootProject.projectDir
+    }.standardOutput.asText.get().trim()
+}.getOrNull()?.takeIf { it.isNotEmpty() } ?: fallback
+
+/**
+ * versionName из последнего тега вида `vX.Y.Z` (без ведущего `v`).
+ * Фолбэк на `0.1.0` для дев-сборок без тега или вне git-репозитория.
+ *
+ * Сначала проверяем наличие тегов через `git tag --list` (всегда exit 0),
+ * чтобы не запускать `git describe`, который падает с non-zero exit code,
+ * если тегов ещё нет — это сломало бы configuration cache.
+ */
+fun gitVersionName(): String {
+    val hasTags = gitCommand(listOf("tag", "--list"), fallback = "").isNotEmpty()
+    if (!hasTags) return "0.1.0"
+    return gitCommand(listOf("describe", "--tags", "--abbrev=0"), fallback = "0.1.0")
+        .removePrefix("v")
+        .removePrefix("V")
+}
+
+/**
+ * Монотонно растущий versionCode из числа коммитов текущей ветки.
+ * Фолбэк на `1`, чтобы дев-сборки без git оставались инсталлируемыми.
+ */
+fun gitVersionCode(): String = gitCommand(listOf("rev-list", "--count", "HEAD"), fallback = "1")
 
 android {
     namespace = "com.cybercat.ebooksender"
@@ -34,8 +66,8 @@ android {
         applicationId = "com.cybercat.ebooksender"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = gitVersionCode().toInt()
+        versionName = gitVersionName()
     }
 
     buildFeatures {
@@ -55,7 +87,10 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             signingConfig = signingConfigs.getByName("release")
         }
         debug {

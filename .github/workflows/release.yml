@@ -1,0 +1,92 @@
+name: Release
+
+# При пуше тега v* (например v0.2.0) собирает подписанный release-APK и
+# публикует его в GitHub Releases. Сборка и тестирование кода на main/PR —
+# в workflow ci.yml.
+#
+# Требуются секреты репозитория (Settings → Secrets and variables → Actions):
+#   KEYSTORE_BASE64          — base64 релизного keystore (см. README, раздел CI/Releases)
+#   RELEASE_STORE_PASSWORD   — пароль от keystore
+#   RELEASE_KEY_ALIAS        — алиас ключа подписи
+#   RELEASE_KEY_PASSWORD     — пароль от ключа
+# Имена env-переменных совпадают с теми, что читаются в app/build.gradle.kts.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # нужно для создания GitHub Release и загрузки ассетов
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false # не отменяем релизный билд — пусть дойдёт до конца
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # нужен авто-версиированию (versionName/versionCode из git)
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          # Восстанавливаем релизный keystore в корень репозитория.
+          # app/build.gradle.kts по умолчанию ожидает release.keystore там.
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+          # Подстраховка: роняем шаг, если декодированный файл пуст или слишком мал.
+          if [ ! -s release.keystore ]; then
+            echo "::error::Decoded keystore is empty. Check KEYSTORE_BASE64 secret."
+            exit 1
+          fi
+
+      - name: Assemble signed release APK
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - name: Resolve release version (from tag, without leading 'v')
+        id: version
+        run: |
+          # GITHUB_REF_NAME содержит имя тега (например v0.2.0).
+          # Чистим ведущий 'v'/​'V' для красивого имени файла и Release.
+          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION#V}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Rename APK
+        id: apk
+        run: |
+          APK_NAME="eBookSender-v${{ steps.version.outputs.version }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+          echo "name=$APK_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          files: ${{ steps.apk.outputs.name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          # generate_release_notes: GitHub сам соберёт список PR/коммитов
+          # с прошлого релиза по этот тег.

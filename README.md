@@ -250,9 +250,57 @@ RELEASE_KEY_PASSWORD=<пароль от ключа>
 ### Тесты
 
 ```sh
-./gradlew :core:network:testDebugUnitTest
-./gradlew :core:data:testDebugUnitTest
+./gradlew test
 ```
+
+Запускает unit-тесты всех модулей (включая `core:network` и `core:data`).
+
+---
+
+## CI/CD и релизы
+
+Сборка автоматизирована через GitHub Actions (`.github/workflows/`):
+
+- **`ci.yml`** — на каждый пуш в `main` и на каждый Pull Request: собирает debug-APK и гоняет unit-тесты. APK доступен в артефактах запуска.
+- **`release.yml`** — при пуше тега `v*` (например `v0.2.0`): собирает **подписанный** release-APK и публикует его в GitHub Releases с автогенерацией списка изменений.
+
+### Авто-версия
+
+`versionName` и `versionCode` вычисляются из git, вручную править `app/build.gradle.kts` перед релизом не нужно:
+
+- `versionName` — последний тег без ведущего `v` (`v0.2.0` → `0.2.0`). Пока тегов нет — фолбэк `0.1.0`.
+- `versionCode` — число коммитов (`git rev-list --count HEAD`), монотонно растёт. Фолбэк `1` вне git.
+
+### Как выпустить релиз
+
+1. Убедись, что секреты подписи добавлены в репозиторий (см. ниже) — это делается один раз.
+2. На собранном и проверенном коммите создай тег и отправь его:
+
+   ```sh
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+3. GitHub Actions соберёт подписанный APK и опубликует его на странице Releases. Имя файла: `eBookSender-v0.2.0.apk`.
+
+### Секреты подписи (один раз)
+
+В **Settings → Secrets and variables → Actions** добавь четыре секрета:
+
+| Секрет | Описание |
+| --- | --- |
+| `KEYSTORE_BASE64` | Релизный keystore, закодированный в base64 |
+| `RELEASE_STORE_PASSWORD` | Пароль от keystore |
+| `RELEASE_KEY_ALIAS` | Алиас ключа подписи |
+| `RELEASE_KEY_PASSWORD` | Пароль от ключа |
+
+Получить base64 от `release.keystore`:
+
+```sh
+base64 -w 0 release.keystore
+```
+
+> Keystore **не хранится** в репозитории (исключён в `.gitignore`) и пробрасывается в CI только через секреты.
 
 ---
 

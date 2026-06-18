@@ -31,7 +31,9 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `.editorconfig` - ktlint formatting settings for Kotlin/KTS files, including Android Studio style and Compose `@Composable` naming compatibility.
 - `gradle/libs.versions.toml` - dependency and plugin versions.
 - `build.gradle.kts` - root Gradle plugin declarations.
-- `app/build.gradle.kts` - app configuration and dependencies.
+- `app/build.gradle.kts` - app configuration and dependencies. Auto-versioning reads `versionName`/`versionCode` from git (latest `v*` tag and commit count via `providers.exec`); falls back to `0.1.0`/`1` when there are no tags or outside a git repo. Release signing reads `RELEASE_STORE_FILE`/`RELEASE_STORE_PASSWORD`/`RELEASE_KEY_ALIAS`/`RELEASE_KEY_PASSWORD` from `local.properties`, Gradle properties, or environment variables.
+- `.github/workflows/ci.yml` - CI: builds debug APK and runs unit tests on every push to `main` and every PR.
+- `.github/workflows/release.yml` - Release: on a pushed `v*` tag, decodes `KEYSTORE_BASE64` into `release.keystore`, builds a signed release APK, renames it to `eBookSender-v<version>.apk`, and publishes it to GitHub Releases. Requires repo secrets `KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`.
 - `app/src/main/java/com/cybercat/ebooksender/` and matching `core/*` + `feature/*` package trees - primary source roots after the package rename from `com.cybercat.pocketbooksender`.
 - `core/model/src/main/java/com/cybercat/ebooksender/model/AppSettings.kt` - persisted user settings model, shared FTP mount/relative-root path normalization, folder/template preferences, theme/haptics, localization, and local-device VPN-bypass behavior.
 - `core/model/src/main/java/com/cybercat/ebooksender/model/RemoteDevice.kt` - connected remote FTP device model, detected `DeviceProfile`, profile-derived capabilities, working-root path, and display FTP URL.
@@ -232,7 +234,7 @@ GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:compileDebugKotlin
 ```
 
 ```sh
-GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :core:network:testDebugUnitTest
+GRADLE_USER_HOME=/tmp/gradle-home ./gradlew test
 ```
 
 ```sh
