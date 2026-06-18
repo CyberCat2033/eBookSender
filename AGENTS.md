@@ -90,6 +90,8 @@ These instructions define the required working rules for Codex in this repositor
   GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:compileDebugKotlin
   ```
 
+- In this environment, Gradle does not run reliably inside the sandbox because it fails to determine a usable wildcard IP for file locking. Run `./gradlew` commands with `sandbox_permissions: "require_escalated"` immediately instead of first retrying after a sandbox failure.
+
 - For broader Android changes, run:
 
   ```sh
