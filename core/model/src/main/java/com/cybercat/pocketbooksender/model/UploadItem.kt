@@ -1,7 +1,5 @@
 package com.cybercat.pocketbooksender.model
 
-import android.graphics.Bitmap
-
 data class UploadItem(
     val id: String,
     val sourceUri: String,
@@ -19,10 +17,9 @@ data class UploadItem(
     val seriesIndex: String? = null,
     val publisher: String? = null,
     val coverUri: String? = null,
-    val preview: Bitmap? = null,
     val plannedPath: String,
     val status: UploadStatus = UploadStatus.Pending,
-    val progress: Float = 0f,
+    val progress: Float = 0f
 )
 
 enum class UploadStatus {
@@ -31,5 +28,5 @@ enum class UploadStatus {
     Uploading,
     Uploaded,
     Failed,
-    Skipped,
+    Skipped
 }

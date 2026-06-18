@@ -9,7 +9,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Image as ComposeImage
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,9 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +58,7 @@ import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
+import com.cybercat.pocketbooksender.ui.UploadPreviewCover
 import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
@@ -377,28 +375,11 @@ private fun DocumentsTagEditor(
 
 @Composable
 private fun BookCover(item: UploadItem) {
-    Surface(
-        modifier = Modifier.size(width = 58.dp, height = 78.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.small
-    ) {
-        val preview = item.preview
-        if (preview != null) {
-            ComposeImage(
-                bitmap = preview.asImageBitmap(),
-                contentDescription = item.title,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Icon(
-                imageVector = item.category.iconFor(item.extension),
-                contentDescription = null,
-                modifier = Modifier.padding(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
+    UploadPreviewCover(
+        itemId = item.id,
+        title = item.title,
+        placeholderIcon = item.category.iconFor(item.extension)
+    )
 }
 
 @Composable

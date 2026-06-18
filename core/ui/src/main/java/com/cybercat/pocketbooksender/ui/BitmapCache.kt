@@ -85,9 +85,11 @@ object BitmapCache {
         }
     }
 
-    private fun putInMemory(key: String, bitmap: Bitmap) = synchronized(memoryCacheLock) {
-        trimExpiredMemoryEntriesLocked()
-        memoryCache.put(key, BitmapMemoryEntry(bitmap = bitmap))
+    fun putInMemory(key: String, bitmap: Bitmap) {
+        synchronized(memoryCacheLock) {
+            trimExpiredMemoryEntriesLocked()
+            memoryCache.put(key, BitmapMemoryEntry(bitmap = bitmap))
+        }
     }
 
     private fun trimExpiredMemoryEntriesLocked(nowMillis: Long = System.currentTimeMillis()) {

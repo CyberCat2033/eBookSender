@@ -15,6 +15,7 @@ import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.model.toDomain
+import com.cybercat.pocketbooksender.util.UploadPreviewCache
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
@@ -41,7 +42,6 @@ class UploadQueueManagerImpl @Inject constructor(
     private val classifier: FileClassifier,
     private val pathPlanner: PathPlanner,
     private val settingsRepository: SettingsRepository,
-    private val coverCacheManager: CoverCacheManager,
     private val downloadCacheManager: DownloadCacheManager,
     private val localFileResolver: LocalFileResolver,
     private val mangaTitleParser: MangaTitleParser,
@@ -60,24 +60,26 @@ class UploadQueueManagerImpl @Inject constructor(
 
     init {
         scope.launch {
-            val restoredQueue = withContext(Dispatchers.IO) {
+            val restoredQueueState = withContext(Dispatchers.IO) {
                 restorePersistedQueue()
             }
             _queue.update { current ->
-                (restoredQueue + current).deduplicateQueue()
+                (restoredQueueState.items + current).deduplicateQueue()
             }
             queueRestored = true
             withContext(Dispatchers.IO) {
                 queueStorageRepository.persist(_queue.value)
+                cleanupCoverCacheFiles(_queue.value)
             }
             lastCleanedQueueItemIds = _queue.value.queueItemIds()
-            _queue.value.forEach { item ->
-                if (item.preview == null && item.status != UploadStatus.Uploaded) {
+            val itemIdsNeedingMetadataReload = restoredQueueState.metadataReloadItemIds
+            _queue.value
+                .filter { item -> item.id in itemIdsNeedingMetadataReload }
+                .forEach { item ->
                     launch {
                         loadMetadata(item)
                     }
                 }
-            }
         }
 
         _queue
@@ -355,8 +357,9 @@ class UploadQueueManagerImpl @Inject constructor(
         }
     }
 
-    private fun restorePersistedQueue(): List<UploadItem> {
-        return queueStorageRepository.restore()
+    private fun restorePersistedQueue(): RestoredQueueState {
+        val metadataReloadItemIds = mutableSetOf<String>()
+        val items = queueStorageRepository.restore()
             .mapNotNull { entity ->
                 val item = entity.toDomain(
                     fallbackId = { UUID.randomUUID().toString() },
@@ -366,17 +369,13 @@ class UploadQueueManagerImpl @Inject constructor(
                 ) ?: return@mapNotNull null
                 if (item.status == UploadStatus.Uploaded) return@mapNotNull null
                 val canReadSource = localFileResolver.canRead(Uri.parse(item.sourceUri))
-                val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
-
-                val previewBitmap = if (restoredStatus != UploadStatus.Uploaded) {
-                    coverCacheManager.load(item.id)
-                } else {
-                    null
+                if (item.status == UploadStatus.Preparing && canReadSource) {
+                    metadataReloadItemIds += item.id
                 }
+                val restoredStatus = item.status.restoredAfterProcessStart(canReadSource)
 
                 replan(
                     item.copy(
-                        preview = previewBitmap,
                         status = restoredStatus,
                         progress = if (restoredStatus == UploadStatus.Uploaded) 1f else 0f
                     ),
@@ -384,6 +383,11 @@ class UploadQueueManagerImpl @Inject constructor(
                 )
             }
             .deduplicateQueue()
+
+        return RestoredQueueState(
+            items = items,
+            metadataReloadItemIds = metadataReloadItemIds.intersect(items.queueItemIds())
+        )
     }
 
     private fun createUploadItem(uri: Uri, displayName: String, settings: AppSettings): UploadItem {
@@ -433,7 +437,11 @@ class UploadQueueManagerImpl @Inject constructor(
 
         if (preview != null && _queue.value.any { currentItem -> currentItem.id == item.id }) {
             withContext(Dispatchers.IO) {
-                coverCacheManager.save(item.id, preview)
+                UploadPreviewCache.save(
+                    context = context,
+                    itemId = item.id,
+                    preview = preview
+                )
             }
         }
 
@@ -467,13 +475,11 @@ class UploadQueueManagerImpl @Inject constructor(
                         seriesIndex = metadata.seriesIndex,
                         publisher = metadata.publisher,
                         coverUri = metadata.coverUri,
-                        preview = preview,
                         status = UploadStatus.Pending
                     )
                     replan(updated, activeSettings)
                 } else {
                     currentItem.copy(
-                        preview = preview ?: currentItem.preview,
                         coverUri = metadata.coverUri ?: currentItem.coverUri
                     )
                 }
@@ -521,7 +527,10 @@ class UploadQueueManagerImpl @Inject constructor(
         }
 
     private fun cleanupCoverCacheFiles(items: List<UploadItem>) {
-        coverCacheManager.cleanup(items.map { it.id }.toSet())
+        UploadPreviewCache.cleanup(
+            context = context,
+            activeItemIds = items.map { it.id }.toSet()
+        )
     }
 
     private fun deleteDownloadCacheSources(
@@ -542,3 +551,8 @@ class UploadQueueManagerImpl @Inject constructor(
         const val METADATA_EXTRACTION_PARALLELISM = 1
     }
 }
+
+private data class RestoredQueueState(
+    val items: List<UploadItem>,
+    val metadataReloadItemIds: Set<String>
+)

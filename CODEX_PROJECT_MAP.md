@@ -35,7 +35,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/model/src/main/java/com/cybercat/pocketbooksender/model/AppSettings.kt` - persisted user settings model, shared FTP mount/relative-root path normalization, folder/template preferences, theme/haptics, localization, and local-device VPN-bypass behavior.
 - `core/model/src/main/java/com/cybercat/pocketbooksender/model/RemoteDevice.kt` - connected remote FTP device model, detected `DeviceProfile`, profile-derived capabilities, working-root path, and display FTP URL.
 - `core/common/src/main/java/com/cybercat/pocketbooksender/network/LocalNetworkBypassUnavailableException.kt` - shared warning error for Android/VPN policies that block optional local-route bypass.
-- `core/model/src/main/java/com/cybercat/pocketbooksender/model/UploadItemEntity.kt` - serializable app-local upload queue persistence entity and mappers; runtime-only fields such as upload progress and `Bitmap` previews are not persisted.
+- `core/model/src/main/java/com/cybercat/pocketbooksender/model/UploadItemEntity.kt` - serializable app-local upload queue persistence entity and mappers; runtime-only fields such as upload progress are not persisted, and queue cover previews live in a shared disk cache keyed by upload item id.
 - `app/src/main/AndroidManifest.xml` - Android components, permissions, intent filters, and services.
 - `app/src/main/assets/locales/en.json` - bundled English localization.
 - `app/src/main/assets/locales/ru.json` - bundled Russian localization.
@@ -84,10 +84,10 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/DownloadCacheManager.kt` - shared app-local OPDS/manga download-cache cleanup helper used by transfer completion and queue removal.
 - `app/src/main/java/com/cybercat/pocketbooksender/manga/MangaDownloadForegroundService.kt` - foreground manga chapter download service that keeps downloads running while the app is backgrounded, supports user cancellation, and adds fully completed chapters to the upload queue.
 - `app/src/main/java/com/cybercat/pocketbooksender/power/ScopedWakeLock.kt` - small non-reference-counted wake-lock helper for strictly scoped foreground transfer/download CPU wake windows.
-- `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; coordinates queue state, persistence, serialized local metadata loading to cap batch-add memory usage, upload path replanning, skips deduplication for status-only queue mutations, and delegates app-local file/cache access.
-- `app/src/main/java/com/cybercat/pocketbooksender/transfer/CoverCacheManager.kt` - app-local JPEG preview cache for queued upload cover bitmaps; handles cover load/save/cleanup for `UploadQueueManagerImpl`.
+- `app/src/main/java/com/cybercat/pocketbooksender/transfer/UploadQueueManagerImpl.kt` - upload queue manager; coordinates queue state, persistence, serialized local metadata loading to cap batch-add memory usage, writes extracted previews into the shared disk cache instead of retaining `Bitmap`s in queue state, replans upload paths, skips deduplication for status-only queue mutations, and delegates app-local file/cache access.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/LocalFileResolver.kt` - Android `ContentResolver` boundary for queued upload source display names, file sizes, persistable read permissions, and source readability checks.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/QueueStorageRepository.kt` - app-local upload queue JSON/file persistence boundary using `UploadItemEntity` and kotlinx.serialization.
+- `core/common/src/main/java/com/cybercat/pocketbooksender/util/UploadPreviewCache.kt` - shared app-local JPEG preview cache for queued upload covers; saves sampled previews under app files storage, reloads them with bounded decode, and cleans up orphaned entries by upload item id.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadCoordinator.kt` - app/feature boundary for foreground manga download requests and progress/completion events.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaChapterDownloader.kt` - manga chapter download pipeline; owns archive/page fallback, retry/timeouts, concurrency limits, network availability checks, CBZ creation, download history item construction, and partial completed-batch reporting on cancellation.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadModels.kt` - shared manga download request/result/progress models used by the downloader, foreground service, coordinator, and feature UI.
@@ -113,7 +113,8 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/manga/ComxParsingHelpers.kt` - shared Com-X parser helpers for URL ownership/normalization, title cleanup, JSON field extraction, structured script JSON extraction, and image URL handling.
 - `core/network/src/test/java/com/cybercat/pocketbooksender/data/manga/ComxParserTest.kt` - JVM unit tests for resilient Com-X series and reader-page parsing without network access.
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/FtpErrorMapper.kt` - mapper class translating FTP connection errors and URL parsing failures to localized user-facing strings.
-- `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/BitmapCache.kt` - shared preview bitmap cache with disk persistence and expiring in-memory entries for remote covers and extracted previews.
+- `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/BitmapCache.kt` - shared preview bitmap cache with disk persistence for remote covers and expiring in-memory entries reused by remote and queued-upload cover rendering.
+- `core/ui/src/main/java/com/cybercat/pocketbooksender/ui/UploadPreviewCover.kt` - shared lazy Compose cover loader for queued upload items; reads disk-cached local previews by upload item id and only materializes visible cover bitmaps into bounded memory cache.
 - `core/domain/src/main/java/com/cybercat/pocketbooksender/domain/MangaTitleParser.kt` - pure domain parser that derives manga series/volume hints from local file names before metadata extraction.
 
 ## Search and edit workflow
@@ -192,6 +193,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
   - `AnimatedRemovalItem` handles single-item removal and clear-queue removal with horizontal slide-out, vertical shrink, fade, and staggered clear delays.
   - Active transfer overlay enters/exits with fade plus vertical slide from the bottom and exposes a localized cancel action that stops the remaining upload queue.
   - Foreground FTP uploads run sequentially; transfer runtime state keeps the active item id plus current progress separate from the persisted upload queue so progress ticks do not rewrite the whole queue list or JSON snapshot, while status-only queue mutations skip full-list deduplication and cover-cache cleanup.
+  - Queue cover thumbnails load lazily from `UploadPreviewCache` through `UploadPreviewCover`, so visible rows can display previews without retaining every extracted `Bitmap` inside queue state or ViewModel state.
   - Connection panel animates icon tint over 220 ms, disconnect button alpha over 160 ms, and FTP input visibility with spring expand/shrink plus fade.
   - Upload item details use spring expand/shrink plus fade; uploaded section uses progressive tween expand/shrink plus fade based on the number of items; chevrons rotate with a medium spring.
   - Upload progress height uses `animateDpAsState`; item and overall progress bars use low-stiffness no-bounce spring `animateFloatAsState`.
