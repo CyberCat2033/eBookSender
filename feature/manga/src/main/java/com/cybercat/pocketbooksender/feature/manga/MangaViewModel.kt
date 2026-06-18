@@ -3,6 +3,7 @@ package com.cybercat.pocketbooksender.feature.manga
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.pocketbooksender.data.catalog.DeviceCatalogRepository
+import com.cybercat.pocketbooksender.data.manga.CheckMangaSubscriptionsUseCase
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadCoordinator
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadLauncher
 import com.cybercat.pocketbooksender.data.manga.MangaRepository
@@ -24,6 +25,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class MangaViewModel @Inject constructor(
     private val mangaRepository: MangaRepository,
+    private val checkMangaSubscriptionsUseCase: CheckMangaSubscriptionsUseCase,
     private val catalogRepository: DeviceCatalogRepository,
     private val downloadCoordinator: MangaDownloadCoordinator,
     private val downloadLauncher: MangaDownloadLauncher,
@@ -48,7 +50,7 @@ class MangaViewModel @Inject constructor(
         refreshAuthState = browserController::refreshAuthState
     )
     private val downloadController = MangaDownloadController(
-        mangaRepository = mangaRepository,
+        checkMangaSubscriptionsUseCase = checkMangaSubscriptionsUseCase,
         downloadCoordinator = downloadCoordinator,
         downloadLauncher = downloadLauncher,
         localizationManager = localizationManager,

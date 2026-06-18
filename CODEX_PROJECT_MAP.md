@@ -48,6 +48,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/ui/src/main/java/com/cybercat/pocketbooksender/localization/LocalizationManager.kt` - runtime localization loading.
 - `app/src/main/java/com/cybercat/pocketbooksender/ui/PocketBookSenderApp.kt` - Compose app shell and navigation integration.
 - `app/src/main/java/com/cybercat/pocketbooksender/PocketBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
+- `app/src/main/java/com/cybercat/pocketbooksender/di/MangaDataModule.kt` - Hilt binding module that exposes `MangaRepository` as the shared `MangaSeriesPageLoader` port for manga use cases.
 - `app/src/main/java/com/cybercat/pocketbooksender/lifecycle/AppVisibilityTracker.kt` - process importance visibility gate used by foreground services to suppress completion notifications while the UI is visible.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/LocalMetadataExtractor.kt` - local metadata extractor router and remaining FB2/EPUB/MOBI metadata parsing for queued files.
 - `app/src/main/java/com/cybercat/pocketbooksender/metadata/DocxMetadataParser.kt` - DOCX core-properties parser for basic document metadata without preview extraction.
@@ -90,6 +91,7 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadCoordinator.kt` - app/feature boundary for foreground manga download requests and progress/completion events.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaChapterDownloader.kt` - manga chapter download pipeline; owns archive/page fallback, retry/timeouts, concurrency limits, network availability checks, CBZ creation, download history item construction, and partial completed-batch reporting on cancellation.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaDownloadModels.kt` - shared manga download request/result/progress models used by the downloader, foreground service, coordinator, and feature UI.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/CheckMangaSubscriptionsUseCase.kt` - manga subscription-check interactor; reads subscribed series and download history, opens saved series through `MangaSeriesPageLoader`, marks successful checks, and derives new chapters.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSourceRegistry.kt` - sorted source adapter registry that exposes `MangaSourceSummary` data and resolves source adapters by id for repository/downloader callers.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/manga/MangaSeriesRecoveryHeuristics.kt` - pure manga-series recovery helpers for ranking moved-series search candidates and normalizing saved-series identity keys.
 - `app/src/main/java/com/cybercat/pocketbooksender/di/MangaSourceModule.kt` - collects every installed manga source adapter into a Hilt set of `HtmlMangaSourceAdapter` using multibindings.

@@ -20,7 +20,7 @@ class MangaRepository @Inject constructor(
     private val bookmarkDao: MangaSeriesBookmarkDao,
     private val sourceRegistry: MangaSourceRegistry,
     private val chapterDownloader: MangaChapterDownloader
-) {
+) : MangaSeriesPageLoader {
     private val searchCache = ExpiringLruCache<String, List<MangaSeriesSearchResult>>(
         ttlMillis = SEARCH_CACHE_TTL_MILLIS,
         maxSize = SEARCH_CACHE_MAX_ENTRIES
@@ -83,7 +83,7 @@ class MangaRepository @Inject constructor(
         return results
     }
 
-    suspend fun openSeries(sourceId: String, seriesId: String): MangaSeriesPage {
+    override suspend fun openSeries(sourceId: String, seriesId: String): MangaSeriesPage {
         val key = "$sourceId:${seriesId.mangaSeriesCacheKey()}"
         seriesCache.get(key)?.let { cachedPage ->
             saveSeriesSnapshot(cachedPage.details)
@@ -170,31 +170,6 @@ class MangaRepository @Inject constructor(
                 bookmarkDao.upsert(
                     series.toBookmarkEntity(favorite = false, subscribed = subscribed, now = now)
                 )
-            }
-        }
-
-    suspend fun checkSubscriptions(): List<MangaSubscriptionCheckResult> =
-        withContext(Dispatchers.IO) {
-            val downloadedStableKeys = historyDao.downloadedStableKeys().toSet()
-            val checkedAtMillis = System.currentTimeMillis()
-            bookmarkDao.subscribedSeries().mapNotNull { saved ->
-                runCatching {
-                    val page = openSeries(saved.sourceId, saved.seriesId)
-                    bookmarkDao.markChecked(
-                        page.details.sourceId,
-                        page.details.seriesId,
-                        checkedAtMillis
-                    )
-                    val newChapters = page.chapters.filter { chapter ->
-                        chapter.stableKey !in downloadedStableKeys
-                    }
-                    MangaSubscriptionCheckResult(page = page, newChapters = newChapters)
-                }.getOrElse { error ->
-                    if (error is MangaAuthenticationExpiredException) {
-                        throw error
-                    }
-                    null
-                }
             }
         }
 

@@ -1,11 +1,11 @@
 package com.cybercat.pocketbooksender.feature.manga
 
+import com.cybercat.pocketbooksender.data.manga.CheckMangaSubscriptionsUseCase
 import com.cybercat.pocketbooksender.data.manga.MangaChapterDownloadTarget
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadCoordinator
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadEvent
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadLauncher
 import com.cybercat.pocketbooksender.data.manga.MangaDownloadRequestKind
-import com.cybercat.pocketbooksender.data.manga.MangaRepository
 import com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult
 import com.cybercat.pocketbooksender.localization.LocalizationManager
 import com.cybercat.pocketbooksender.util.onFailureRethrowing
@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 internal class MangaDownloadController(
-    private val mangaRepository: MangaRepository,
+    private val checkMangaSubscriptionsUseCase: CheckMangaSubscriptionsUseCase,
     private val downloadCoordinator: MangaDownloadCoordinator,
     private val downloadLauncher: MangaDownloadLauncher,
     private val localizationManager: LocalizationManager,
@@ -39,7 +39,7 @@ internal class MangaDownloadController(
 
         scope.launch {
             runCatching {
-                mangaRepository.checkSubscriptions()
+                checkMangaSubscriptionsUseCase()
             }.onSuccess { results ->
                 val updatesWithNews = results.filter { it.newChapters.isNotEmpty() }
                 if (updatesWithNews.isEmpty()) {
