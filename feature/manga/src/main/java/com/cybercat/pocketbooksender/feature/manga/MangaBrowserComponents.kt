@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.manga
 
-import android.view.HapticFeedbackConstants
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -45,10 +44,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cybercat.pocketbooksender.data.manga.MangaNativeLoginConfig
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import org.json.JSONArray
 
-internal const val HtmlExtractDelayMillis = 900L
+internal const val HTML_EXTRACT_DELAY_MILLIS = 900L
 
 @Composable
 internal fun MangaBrowserCard(
@@ -131,7 +131,7 @@ internal fun MangaBrowserCard(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY
+                                AppHapticFeedback.Press
                             )
                             showLoginDialog = true
                         }) {
@@ -142,7 +142,7 @@ internal fun MangaBrowserCard(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY
+                                AppHapticFeedback.Press
                             )
                             webViewRef?.loadUrl(loginUrl)
                         }) {
@@ -153,7 +153,7 @@ internal fun MangaBrowserCard(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         onClose()
                     }) {
@@ -195,7 +195,7 @@ internal fun MangaBrowserCard(
                                                 }
                                             }
                                         },
-                                        HtmlExtractDelayMillis
+                                        HTML_EXTRACT_DELAY_MILLIS
                                     )
                                 }
                             }

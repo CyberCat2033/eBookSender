@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.settings
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +23,7 @@ import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialogAfter
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
 /**
@@ -58,7 +58,7 @@ internal fun SettingsRenameWarningDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.CONFIRM
+                        AppHapticFeedback.Confirm
                     )
                     onConfirm()
                     dismiss()
@@ -74,7 +74,7 @@ internal fun SettingsRenameWarningDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onCancel()
                     dismiss()
@@ -110,7 +110,7 @@ internal fun SettingsLogoutWarningDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.LONG_PRESS
+                        AppHapticFeedback.LongPress
                     )
                     onConfirm()
                     dismiss()
@@ -126,7 +126,7 @@ internal fun SettingsLogoutWarningDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onDismiss()
                     dismiss()
@@ -161,7 +161,7 @@ internal fun SettingsLanguageDialog(
                 view.performHapticIfAllowed(
                     context,
                     enableHaptics,
-                    HapticFeedbackConstants.VIRTUAL_KEY
+                    AppHapticFeedback.Press
                 )
                 dismissAfter {
                     if (languageCode != state.settings.languageCode) {

@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.opds
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -72,6 +71,7 @@ import com.cybercat.pocketbooksender.data.opds.OpdsSource
 import com.cybercat.pocketbooksender.localization.AppStrings
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
 @Composable
@@ -98,7 +98,7 @@ internal fun SourcePicker(
                 view.performHapticIfAllowed(
                     context,
                     enableHaptics,
-                    HapticFeedbackConstants.VIRTUAL_KEY
+                    AppHapticFeedback.Press
                 )
                 expanded = true
             },
@@ -137,7 +137,7 @@ internal fun SourcePicker(
                                     view.performHapticIfAllowed(
                                         context,
                                         enableHaptics,
-                                        HapticFeedbackConstants.VIRTUAL_KEY
+                                        AppHapticFeedback.Press
                                     )
                                     expanded = false
                                     onEditCredentials(source)
@@ -153,7 +153,7 @@ internal fun SourcePicker(
                                     view.performHapticIfAllowed(
                                         context,
                                         enableHaptics,
-                                        HapticFeedbackConstants.REJECT
+                                        AppHapticFeedback.Reject
                                     )
                                     expanded = false
                                     onRemoveSource(source.id)
@@ -170,7 +170,7 @@ internal fun SourcePicker(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         expanded = false
                         onOpenSource(source.url)
@@ -217,7 +217,7 @@ internal fun SearchPanel(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY
+                                AppHapticFeedback.Press
                             )
                             onSearchChanged("")
                         }) {
@@ -234,7 +234,7 @@ internal fun SearchPanel(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.CONFIRM
+                        AppHapticFeedback.Confirm
                     )
                     onSearch()
                 },
@@ -284,7 +284,7 @@ internal fun FeedLinksRow(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onOpenLink(link)
                 }
@@ -337,7 +337,7 @@ internal fun OpdsPaginationBar(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         onPreviousPage()
                     },
@@ -369,7 +369,7 @@ internal fun OpdsPaginationBar(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         onNextPage()
                     },
@@ -478,7 +478,7 @@ internal fun OpdsDownloadProgressOverlay(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.REJECT
+                            AppHapticFeedback.Reject
                         )
                         onCancel()
                     },

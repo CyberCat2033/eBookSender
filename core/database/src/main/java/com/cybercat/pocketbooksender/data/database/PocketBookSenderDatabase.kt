@@ -14,10 +14,10 @@ import com.cybercat.pocketbooksender.data.database.entity.OpdsSourceEntity
     entities = [
         OpdsSourceEntity::class,
         MangaChapterHistoryEntity::class,
-        MangaSeriesBookmarkEntity::class,
+        MangaSeriesBookmarkEntity::class
     ],
-    version = 6,
-    exportSchema = false,
+    version = 7,
+    exportSchema = false
 )
 @TypeConverters(AppTypeConverters::class)
 abstract class PocketBookSenderDatabase : RoomDatabase() {

@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.settings
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
@@ -60,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlin.math.roundToInt
 
@@ -92,7 +92,7 @@ internal fun ValidatedSettingsField(
 
     fun commitChange(clearFocus: Boolean) {
         if (!canCommitChange) return
-        view.performHapticIfAllowed(context, true, HapticFeedbackConstants.CONFIRM)
+        view.performHapticIfAllowed(context, true, AppHapticFeedback.Confirm)
         onValueChange(validation(textFieldValue.text))
         if (clearFocus) focusManager.clearFocus()
     }

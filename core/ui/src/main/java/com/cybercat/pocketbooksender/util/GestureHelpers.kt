@@ -1,7 +1,7 @@
 package com.cybercat.pocketbooksender.util
 
 import android.content.Context
-import android.view.HapticFeedbackConstants
+import android.os.SystemClock
 import android.view.View
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -15,14 +15,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import android.os.SystemClock
+import androidx.compose.ui.input.pointer.positionChange
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -38,7 +37,7 @@ suspend fun PointerInputScope.detectDragGesturesAfterQuickLongPress(
     onDragStart: (Offset) -> Unit,
     onDrag: (PointerInputChange, Offset) -> Unit,
     onDragEnd: () -> Unit,
-    onDragCancel: () -> Unit,
+    onDragCancel: () -> Unit
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
@@ -94,7 +93,7 @@ fun calculateAutoScrollDelta(
     viewportHeight: Float,
     edgeSizePx: Float,
     maxSpeed: Float = 120f,
-    minSpeed: Float = 5f,
+    minSpeed: Float = 5f
 ): Float {
     if (viewportHeight <= 0f) return 0f
 
@@ -105,12 +104,14 @@ fun calculateAutoScrollDelta(
             val speed = (maxSpeed * ratio * ratio).coerceIn(minSpeed, maxSpeed)
             -speed
         }
+
         currentY > viewportHeight - edgeSizePx -> {
             val distance = currentY - (viewportHeight - edgeSizePx)
             val ratio = distance / edgeSizePx
             val speed = (maxSpeed * ratio * ratio).coerceIn(minSpeed, maxSpeed)
             speed
         }
+
         else -> 0f
     }
 }
@@ -154,7 +155,11 @@ class DragSelectionState<T>(
             anchorIndex = getTargetIndex(target)
             appliedSelection.clear()
             onDragStarted()
-            hapticView.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.LONG_PRESS, ignoreDnd = true)
+            hapticView.performHapticIfAllowed(
+                context,
+                enableHaptics,
+                AppHapticFeedback.DragStart
+            )
             applySelectionAt(currentY)
             startAutoScroll()
         }
@@ -195,7 +200,11 @@ class DragSelectionState<T>(
             if (currentSelected != desiredSelected) {
                 appliedSelection[id] = desiredSelected
                 onSetSelected(id, desiredSelected)
-                hapticView.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CLOCK_TICK, ignoreDnd = true)
+                hapticView.performHapticIfAllowed(
+                    context,
+                    enableHaptics,
+                    AppHapticFeedback.DragTick
+                )
             }
         }
     }
@@ -240,7 +249,19 @@ fun <T> rememberDragSelectionState(
     onDragStarted: () -> Unit = {}
 ): DragSelectionState<T> {
     val scope = rememberCoroutineScope()
-    return remember(lazyListState, hapticView, context, enableHaptics, getTargetAt, getTargetIndex, getTargetId, getInitialSelection, getAllTargets, onSetSelected, edgeSizePx) {
+    return remember(
+        lazyListState,
+        hapticView,
+        context,
+        enableHaptics,
+        getTargetAt,
+        getTargetIndex,
+        getTargetId,
+        getInitialSelection,
+        getAllTargets,
+        onSetSelected,
+        edgeSizePx
+    ) {
         DragSelectionState(
             scope = scope,
             lazyListState = lazyListState,
@@ -275,15 +296,13 @@ class ClickSuppressionState {
 }
 
 @Composable
-fun rememberClickSuppressionState(): ClickSuppressionState {
-    return remember { ClickSuppressionState() }
-}
+fun rememberClickSuppressionState(): ClickSuppressionState = remember { ClickSuppressionState() }
 
 fun Modifier.pointerInputDragSelection(
     dragSelectionState: DragSelectionState<*>,
     clickSuppressionState: ClickSuppressionState? = null,
     enabled: Boolean = true,
-    vararg keys: Any?,
+    vararg keys: Any?
 ): Modifier = this.pointerInput(keys = keys) {
     if (!enabled) return@pointerInput
     detectDragGesturesAfterQuickLongPress(

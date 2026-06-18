@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.transfer
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -62,6 +61,7 @@ import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadItem
 import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
 @Composable
@@ -117,7 +117,7 @@ fun UploadItemRow(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.REJECT
+                                AppHapticFeedback.Reject
                             )
                             onRemove()
                         },
@@ -140,7 +140,7 @@ fun UploadItemRow(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                     },
                     settings = settings
@@ -168,7 +168,7 @@ fun UploadItemRow(
                                 view.performHapticIfAllowed(
                                     context,
                                     enableHaptics,
-                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                    AppHapticFeedback.Press
                                 )
                                 onCategoryChanged(cat)
                             },

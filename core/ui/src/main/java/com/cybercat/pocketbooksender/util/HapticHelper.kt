@@ -20,7 +20,7 @@ object HapticHelper {
         return if (nm != null) {
             val filter = nm.currentInterruptionFilter
             filter != NotificationManager.INTERRUPTION_FILTER_ALL &&
-                    filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN
+                filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN
         } else {
             false
         }
@@ -33,6 +33,31 @@ object HapticHelper {
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         return audio?.ringerMode == AudioManager.RINGER_MODE_SILENT
     }
+}
+
+enum class AppHapticFeedback(
+    internal val feedbackConstant: Int,
+    internal val ignoreDnd: Boolean = false
+) {
+    Press(HapticFeedbackConstants.VIRTUAL_KEY),
+    Confirm(HapticFeedbackConstants.CONFIRM),
+    Reject(HapticFeedbackConstants.REJECT),
+    LongPress(HapticFeedbackConstants.LONG_PRESS),
+    DragStart(HapticFeedbackConstants.LONG_PRESS, ignoreDnd = true),
+    DragTick(HapticFeedbackConstants.CLOCK_TICK, ignoreDnd = true)
+}
+
+fun View.performHapticIfAllowed(
+    context: Context,
+    enableHaptics: Boolean,
+    feedback: AppHapticFeedback
+) {
+    performHapticIfAllowed(
+        context = context,
+        enableHaptics = enableHaptics,
+        feedbackConstant = feedback.feedbackConstant,
+        ignoreDnd = feedback.ignoreDnd
+    )
 }
 
 /**
@@ -48,6 +73,6 @@ fun View.performHapticIfAllowed(
     if (!enableHaptics) return
     if (!ignoreDnd && HapticHelper.isDoNotDisturbActive(context)) return
     if (!ignoreDnd && HapticHelper.isSilentModeActive(context)) return
-    
+
     performHapticFeedback(feedbackConstant)
 }

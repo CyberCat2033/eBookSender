@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.settings
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.model.AppTheme
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
 @Composable
@@ -58,7 +58,7 @@ internal fun InterfaceSettingsSection(
                     view.performHapticIfAllowed(
                         context,
                         state.settings.enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onDynamicColorChanged(it)
                 }
@@ -83,7 +83,7 @@ internal fun InterfaceSettingsSection(
                     view.performHapticIfAllowed(
                         context,
                         state.settings.enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onBypassVpnForLocalConnectionsChanged(it)
                 }
@@ -105,7 +105,7 @@ internal fun InterfaceSettingsSection(
             Switch(
                 checked = state.settings.enableHaptics,
                 onCheckedChange = {
-                    view.performHapticIfAllowed(context, true, HapticFeedbackConstants.VIRTUAL_KEY)
+                    view.performHapticIfAllowed(context, true, AppHapticFeedback.Press)
                     onHapticFeedbackEnabledChanged(it)
                 }
             )
@@ -129,7 +129,7 @@ internal fun InterfaceSettingsSection(
                     view.performHapticIfAllowed(
                         context,
                         state.settings.enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onWarnOnDisconnectedRenameChanged(it)
                 }
@@ -149,7 +149,7 @@ internal fun InterfaceSettingsSection(
                     view.performHapticIfAllowed(
                         context,
                         state.settings.enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onLanguageClick()
                 }
@@ -192,7 +192,7 @@ internal fun InterfaceSettingsSection(
                             view.performHapticIfAllowed(
                                 context,
                                 state.settings.enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY
+                                AppHapticFeedback.Press
                             )
                             onThemeChanged(option)
                         },

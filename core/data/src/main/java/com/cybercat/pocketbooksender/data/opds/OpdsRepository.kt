@@ -24,7 +24,8 @@ class OpdsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val parser: OpdsParser,
     private val httpClient: OpdsHttpClient,
-    private val sourceDao: OpdsSourceDao
+    private val sourceDao: OpdsSourceDao,
+    private val credentialsStore: OpdsSecureCredentialsStore
 ) {
     private val catalogCache = ExpiringLruCache<String, OpdsCatalog>(
         ttlMillis = CATALOG_CACHE_TTL_MILLIS,
@@ -36,20 +37,11 @@ class OpdsRepository @Inject constructor(
     }
 
     suspend fun hasSavedCredentials(): Boolean = withContext(Dispatchers.IO) {
-        sourceDao.getAllSources().any { entity ->
-            entity.username != null || entity.password != null
-        }
+        credentialsStore.hasAny()
     }
 
     suspend fun logoutAll(): Boolean = withContext(Dispatchers.IO) {
-        val allSources = sourceDao.getAllSources()
-        var clearedAny = false
-        allSources.forEach { entity ->
-            if (entity.username != null || entity.password != null) {
-                sourceDao.upsert(entity.copy(username = null, password = null))
-                clearedAny = true
-            }
-        }
+        val clearedAny = credentialsStore.clearAll()
         if (clearedAny) {
             clearCache()
         }
@@ -61,12 +53,13 @@ class OpdsRepository @Inject constructor(
             entities
                 .filter(OpdsSourceEntity::enabled)
                 .map { entity ->
+                    val credentials = credentialsStore.read(entity.id)
                     OpdsSource(
                         id = entity.id,
                         title = entity.title,
                         url = entity.url,
-                        username = entity.username,
-                        password = entity.password
+                        username = credentials?.username,
+                        password = credentials?.password
                     )
                 }
                 .distinctBy { source -> source.url.trimEnd('/').lowercase() }
@@ -100,22 +93,27 @@ class OpdsRepository @Inject constructor(
             runCatching { java.net.URL(normalizedUrl).host.removePrefix("www.") }
                 .getOrDefault("OPDS")
         }
+        val sourceId = UUID.nameUUIDFromBytes(normalizedUrl.toByteArray()).toString()
 
         sourceDao.upsert(
             OpdsSourceEntity(
-                id = UUID.nameUUIDFromBytes(normalizedUrl.toByteArray()).toString(),
+                id = sourceId,
                 title = sourceTitle,
                 url = normalizedUrl,
                 enabled = true,
-                lastSyncedAt = null,
-                username = username,
-                password = password
+                lastSyncedAt = null
             )
+        )
+        credentialsStore.save(
+            sourceId = sourceId,
+            username = username,
+            password = password
         )
     }
 
     suspend fun removeSource(id: String) {
         sourceDao.deleteById(id)
+        credentialsStore.remove(id)
     }
 
     suspend fun loadCatalog(url: String): OpdsCatalog = withContext(Dispatchers.IO) {

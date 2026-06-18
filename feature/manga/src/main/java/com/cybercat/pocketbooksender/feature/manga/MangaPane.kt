@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.manga
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -40,6 +39,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.LoadingCard
 import com.cybercat.pocketbooksender.ui.StatusMessageHost
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.util.pointerInputDragSelection
 import com.cybercat.pocketbooksender.util.rememberDragSelectionState
@@ -241,7 +241,7 @@ fun MangaPane(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.LONG_PRESS
+                                AppHapticFeedback.LongPress
                             )
                             onToggleChapter(id, selected)
                         }

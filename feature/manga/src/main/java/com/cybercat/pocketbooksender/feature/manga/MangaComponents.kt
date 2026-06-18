@@ -1,7 +1,6 @@
 package com.cybercat.pocketbooksender.feature.manga
 
 import android.graphics.Bitmap
-import android.view.HapticFeedbackConstants
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -120,6 +119,7 @@ import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.BitmapCache
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.loadCachedRemoteBitmap
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.util.pointerInputDragSelection
 import com.cybercat.pocketbooksender.util.rememberClickSuppressionState
@@ -211,7 +211,7 @@ internal fun MangaDownloadProgressOverlay(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.REJECT
+                            AppHapticFeedback.Reject
                         )
                         onCancel()
                     },
@@ -279,7 +279,7 @@ internal fun SavedMangaPanel(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         onCheckSubscriptions()
                     },
@@ -308,7 +308,7 @@ internal fun SavedMangaPanel(
                                 view.performHapticIfAllowed(
                                     context,
                                     enableHaptics,
-                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                    AppHapticFeedback.Press
                                 )
                                 onOpenSeries(series.seriesId)
                             }
@@ -427,7 +427,7 @@ internal fun SelectedSeriesCard(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         onSetFavorite(!isFavorite)
                     },
@@ -449,7 +449,7 @@ internal fun SelectedSeriesCard(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         onSetSubscribed(!isSubscribed)
                     },
@@ -488,7 +488,7 @@ internal fun MangaChapterRow(
     val strings = LocalStrings.current
     Card(
         onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onToggle(chapter.chapterId, !selected)
         },
         enabled = enabled,
@@ -513,7 +513,7 @@ internal fun MangaChapterRow(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onToggle(chapter.chapterId, it)
                 },
@@ -592,7 +592,7 @@ fun MangaSelectionActions(
     val strings = LocalStrings.current
     IconButton(
         onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onSelectNew()
         },
         enabled = enabled && hasNewChapters
@@ -604,7 +604,7 @@ fun MangaSelectionActions(
     }
     IconButton(
         onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onSelectAll()
         },
         enabled = enabled && hasChapters
@@ -616,7 +616,7 @@ fun MangaSelectionActions(
     }
     IconButton(
         onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onClear()
         },
         enabled = enabled

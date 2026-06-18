@@ -42,7 +42,7 @@ class CommonsNetFtpGateway @Inject constructor(
         input: InputStream,
         onProgress: ((Long) -> Unit)?
     ): Result<Unit> {
-        val normalized = remoteRelativePath.trimStart('/').toSafeRelativeFtpPath()
+        val normalized = remoteRelativePath.toSafeRelativeFtpPath()
         val directory = normalized.substringBeforeLast('/', missingDelimiterValue = "")
         val fileName = normalized.substringAfterLast('/')
         val tempName = ".$fileName.uploading"
@@ -115,10 +115,10 @@ class CommonsNetFtpGateway @Inject constructor(
         remoteRelativePath: String
     ): Result<List<String>> = withFtpClient(device) { client ->
         runCatching {
-            client.listFiles(remoteRelativePath.trimStart('/'))
+            val normalizedPath = remoteRelativePath.toSafeRelativeFtpPathOrBlank()
+            client.listFiles(normalizedPath)
                 .filter(FTPFile::isDirectory)
-                .map(FTPFile::getName)
-                .filterNot { it == "." || it == ".." }
+                .mapNotNull { file -> file.name?.toSafeFtpEntryNameOrNull() }
                 .sorted()
         }
     }
@@ -128,17 +128,14 @@ class CommonsNetFtpGateway @Inject constructor(
         remoteRelativePath: String
     ): Result<List<FtpEntry>> = withFtpClient(device) { client ->
         runCatching {
-            val normalizedPath = remoteRelativePath.trim('/')
+            val normalizedPath = remoteRelativePath.toSafeRelativeFtpPathOrBlank()
             client.listFiles(normalizedPath)
-                .filterNot { it.name == "." || it.name == ".." }
-                .map { file ->
-                    val childPath = if (normalizedPath.isBlank()) {
-                        file.name
-                    } else {
-                        "$normalizedPath/${file.name}"
-                    }
+                .mapNotNull { file ->
+                    val safeName = file.name?.toSafeFtpEntryNameOrNull() ?: return@mapNotNull null
+                    val childPath = buildSafeChildFtpPath(normalizedPath, safeName)
+                        ?: return@mapNotNull null
                     FtpEntry(
-                        name = file.name,
+                        name = safeName,
                         path = childPath,
                         isDirectory = file.isDirectory,
                         size = file.size,
@@ -155,7 +152,7 @@ class CommonsNetFtpGateway @Inject constructor(
         output: OutputStream
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
-            val normalized = remoteRelativePath.trimStart('/')
+            val normalized = remoteRelativePath.toSafeRelativeFtpPath()
             output.use { stream ->
                 check(client.retrieveFile(normalized, stream)) {
                     "FTP download failed for $normalized: ${client.replyString}"
@@ -351,17 +348,4 @@ private class ProgressInputStream(
         }
         return result
     }
-}
-
-private fun String.toSafeRelativeFtpPath(): String {
-    val trimmed = replace('\\', '/').trim()
-    require(trimmed.isNotBlank()) { "FTP path is empty" }
-    require(!trimmed.startsWith("/")) { "FTP path must be relative" }
-
-    val segments = trimmed
-        .split('/')
-        .filter { it.isNotBlank() }
-    require(segments.none { it == "." || it == ".." }) { "FTP path must not traverse directories" }
-
-    return segments.joinToString("/")
 }

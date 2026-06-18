@@ -1,6 +1,7 @@
 package com.cybercat.pocketbooksender.data.catalog
 
 import com.cybercat.pocketbooksender.data.ftp.FtpGateway
+import com.cybercat.pocketbooksender.data.ftp.toSafeRelativeFtpPath
 import com.cybercat.pocketbooksender.data.settings.SettingsRepository
 import com.cybercat.pocketbooksender.domain.AllSupportedExtensions
 import com.cybercat.pocketbooksender.domain.contentExtension
@@ -162,16 +163,7 @@ class DeviceCatalogRepository @Inject constructor(
         }
 
     private fun validateCatalogDeletePath(path: String, settings: AppSettings): String {
-        val trimmed = path.replace('\\', '/').trim()
-        require(trimmed.isNotBlank()) { "Cannot delete an empty catalog path" }
-        require(!trimmed.startsWith("/")) { "Unsafe catalog file path" }
-
-        val segments = trimmed
-            .split('/')
-            .filter { it.isNotBlank() }
-        require(segments.none { it == "." || it == ".." }) { "Unsafe catalog file path" }
-
-        val normalized = segments.joinToString("/")
+        val normalized = path.toSafeRelativeFtpPath()
         require(
             normalized.isUnder(settings.booksFolderName) ||
                 normalized.isUnder(settings.documentsFolderName) ||
@@ -186,17 +178,8 @@ class DeviceCatalogRepository @Inject constructor(
     }
 
     private fun validateCatalogDeleteFolderPath(path: String, settings: AppSettings): String {
-        val trimmed = path.replace('\\', '/').trim()
-        require(trimmed.isNotBlank()) { "Cannot delete an empty catalog folder path" }
-        require(!trimmed.startsWith("/")) { "Unsafe catalog folder path" }
-
-        val segments = trimmed
-            .split('/')
-            .filter { it.isNotBlank() }
-        require(segments.none { it == "." || it == ".." }) { "Unsafe catalog folder path" }
-        require(segments.size >= 2) { "Refusing to delete catalog root folder" }
-
-        val normalized = segments.joinToString("/")
+        val normalized = path.toSafeRelativeFtpPath()
+        require(normalized.split('/').size >= 2) { "Refusing to delete catalog root folder" }
         require(
             normalized.isUnder(settings.booksFolderName) ||
                 normalized.isUnder(settings.documentsFolderName) ||

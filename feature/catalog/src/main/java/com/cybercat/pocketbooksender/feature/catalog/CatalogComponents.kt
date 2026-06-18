@@ -1,7 +1,6 @@
 package com.cybercat.pocketbooksender.feature.catalog
 
 import android.text.format.DateUtils
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -75,6 +74,7 @@ import com.cybercat.pocketbooksender.model.CatalogFile
 import com.cybercat.pocketbooksender.model.CatalogGroup
 import com.cybercat.pocketbooksender.model.MangaSeriesGroup
 import com.cybercat.pocketbooksender.ui.theme.EmphasizedEasing
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -229,7 +229,7 @@ internal fun CatalogGroupCard(
     val strings = LocalStrings.current
 
     fun toggleGroup(checked: Boolean = !isGroupFullySelected) {
-        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+        view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
         onToggleGroupSelection(filePaths, checked)
     }
 
@@ -238,8 +238,7 @@ internal fun CatalogGroupCard(
         view.performHapticIfAllowed(
             context,
             enableHaptics,
-            HapticFeedbackConstants.LONG_PRESS,
-            ignoreDnd = true
+            AppHapticFeedback.DragStart
         )
         if (!isEditMode) {
             onEnterEditMode()
@@ -336,7 +335,7 @@ internal fun MangaSeriesCard(
     val strings = LocalStrings.current
 
     fun toggleGroup(checked: Boolean = !isGroupFullySelected) {
-        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+        view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
         onToggleGroupSelection(filePaths, checked)
     }
 
@@ -345,8 +344,7 @@ internal fun MangaSeriesCard(
         view.performHapticIfAllowed(
             context,
             enableHaptics,
-            HapticFeedbackConstants.LONG_PRESS,
-            ignoreDnd = true
+            AppHapticFeedback.DragStart
         )
         if (!isEditMode) {
             onEnterEditMode()
@@ -488,7 +486,7 @@ internal fun ExpandableHeader(
             label = "ChevronRotation"
         )
         IconButton(onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onToggle()
         }) {
             Icon(
@@ -585,7 +583,7 @@ internal fun FileList(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY
+                                AppHapticFeedback.Press
                             )
                             onToggleFileSelection(file.path)
                         }
@@ -601,7 +599,7 @@ internal fun FileList(
                                 view.performHapticIfAllowed(
                                     context,
                                     enableHaptics,
-                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                    AppHapticFeedback.Press
                                 )
                                 onToggleFileSelection(file.path)
                             }

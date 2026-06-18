@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.manga
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
 @Composable
@@ -66,7 +66,7 @@ internal fun MangaSourceSelector(
                 view.performHapticIfAllowed(
                     context,
                     enableHaptics,
-                    HapticFeedbackConstants.VIRTUAL_KEY
+                    AppHapticFeedback.Press
                 )
                 if (state.sources.size > 1) expanded = true
             },
@@ -112,7 +112,7 @@ internal fun MangaSourceSelector(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         expanded = false
                         if (source.id != state.selectedSourceId) onSelectSource(source.id)
@@ -230,7 +230,7 @@ internal fun MangaSearchField(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onSearchChanged("")
                 }) {
@@ -253,7 +253,7 @@ internal fun MangaSearchButton(
     val strings = LocalStrings.current
     Button(
         onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Confirm)
             onSearch()
         },
         enabled = state.searchInput.isNotBlank() && !state.isLoading && !state.isDownloading,
@@ -276,7 +276,7 @@ internal fun MangaLoginButton(
     val strings = LocalStrings.current
     OutlinedButton(
         onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onOpenBrowser()
         },
         enabled = !state.isDownloading
@@ -299,7 +299,7 @@ internal fun MangaSearchResultCard(
     val view = LocalView.current
     Card(
         onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onOpenSeries(result.seriesId)
         },
         enabled = enabled,

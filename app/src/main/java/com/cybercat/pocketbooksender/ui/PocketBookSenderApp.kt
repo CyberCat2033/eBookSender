@@ -71,6 +71,7 @@ import com.cybercat.pocketbooksender.model.AppTheme
 import com.cybercat.pocketbooksender.ui.navigation.MainDestination
 import com.cybercat.pocketbooksender.ui.navigation.MainDestinations
 import com.cybercat.pocketbooksender.ui.theme.PocketBookSenderTheme
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -457,7 +458,7 @@ private fun AppNavHost(
                                 view.performHapticIfAllowed(
                                     context,
                                     enableHaptics,
-                                    android.view.HapticFeedbackConstants.VIRTUAL_KEY
+                                    AppHapticFeedback.Press
                                 )
                                 mangaViewModel.goBackManga()
                             },
@@ -497,7 +498,7 @@ private fun AppNavHost(
                                 view.performHapticIfAllowed(
                                     context,
                                     enableHaptics,
-                                    android.view.HapticFeedbackConstants.CONFIRM
+                                    AppHapticFeedback.Confirm
                                 )
                                 mangaViewModel.downloadSelectedMangaChapters()
                             },
@@ -517,7 +518,7 @@ private fun AppNavHost(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        android.view.HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     mangaViewModel.clearMangaChapterSelection()
                 }

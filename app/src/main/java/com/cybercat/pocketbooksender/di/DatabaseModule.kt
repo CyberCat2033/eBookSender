@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.cybercat.pocketbooksender.data.database.PocketBookSenderDatabase
+import com.cybercat.pocketbooksender.data.opds.OpdsSecureCredentialsStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -31,7 +32,7 @@ object DatabaseModule {
                     `downloadedAtMillis` INTEGER NOT NULL,
                     PRIMARY KEY(`sourceId`, `stableKey`)
                 )
-                """.trimIndent(),
+                """.trimIndent()
             )
         }
     }
@@ -53,7 +54,7 @@ object DatabaseModule {
                     `lastCheckedAtMillis` INTEGER,
                     PRIMARY KEY(`sourceId`, `seriesId`)
                 )
-                """.trimIndent(),
+                """.trimIndent()
             )
         }
     }
@@ -78,40 +79,94 @@ object DatabaseModule {
                 """
                 CREATE INDEX IF NOT EXISTS `index_manga_chapter_history_downloadedAtMillis`
                 ON `manga_chapter_history` (`downloadedAtMillis`)
-                """.trimIndent(),
+                """.trimIndent()
             )
             db.execSQL(
                 """
                 CREATE INDEX IF NOT EXISTS `index_manga_series_bookmarks_subscribed_title`
                 ON `manga_series_bookmarks` (`subscribed`, `title`)
-                """.trimIndent(),
+                """.trimIndent()
             )
             db.execSQL(
                 """
                 CREATE INDEX IF NOT EXISTS `index_manga_series_bookmarks_favorite_lastOpenedAtMillis_title`
                 ON `manga_series_bookmarks` (`favorite`, `lastOpenedAtMillis` DESC, `title`)
-                """.trimIndent(),
+                """.trimIndent()
             )
             db.execSQL(
                 """
                 CREATE INDEX IF NOT EXISTS `index_manga_series_bookmarks_subscribed_lastOpenedAtMillis_title`
                 ON `manga_series_bookmarks` (`subscribed`, `lastOpenedAtMillis` DESC, `title`)
-                """.trimIndent(),
+                """.trimIndent()
             )
+        }
+    }
+
+    private fun migration6To7(context: Context) = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val secureStore = OpdsSecureCredentialsStore(context)
+            db.query("SELECT `id`, `username`, `password` FROM `opds_sources`").use { cursor ->
+                val idIndex = cursor.getColumnIndexOrThrow("id")
+                val usernameIndex = cursor.getColumnIndexOrThrow("username")
+                val passwordIndex = cursor.getColumnIndexOrThrow("password")
+                while (cursor.moveToNext()) {
+                    val sourceId = cursor.getString(idIndex)
+                    val username = cursor.takeUnless {
+                        it.isNull(usernameIndex)
+                    }?.getString(usernameIndex)
+                    val password = cursor.takeUnless {
+                        it.isNull(passwordIndex)
+                    }?.getString(passwordIndex)
+                    if (!username.isNullOrBlank() || !password.isNullOrBlank()) {
+                        secureStore.save(
+                            sourceId = sourceId,
+                            username = username,
+                            password = password
+                        )
+                    }
+                }
+            }
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `opds_sources_new` (
+                    `id` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `url` TEXT NOT NULL,
+                    `enabled` INTEGER NOT NULL,
+                    `lastSyncedAt` INTEGER,
+                    PRIMARY KEY(`id`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                """
+                INSERT INTO `opds_sources_new` (`id`, `title`, `url`, `enabled`, `lastSyncedAt`)
+                SELECT `id`, `title`, `url`, `enabled`, `lastSyncedAt`
+                FROM `opds_sources`
+                """.trimIndent()
+            )
+            db.execSQL("DROP TABLE `opds_sources`")
+            db.execSQL("ALTER TABLE `opds_sources_new` RENAME TO `opds_sources`")
         }
     }
 
     @Provides
     @Singleton
-    fun provideDatabase(
-        @ApplicationContext context: Context,
-    ): PocketBookSenderDatabase =
+    fun provideDatabase(@ApplicationContext context: Context): PocketBookSenderDatabase =
         Room.databaseBuilder(
             context,
             PocketBookSenderDatabase::class.java,
-            "pocketbook_sender.db",
+            "pocketbook_sender.db"
         )
-            .addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5, Migration5To6)
+            .addMigrations(
+                Migration1To2,
+                Migration2To3,
+                Migration3To4,
+                Migration4To5,
+                Migration5To6,
+                migration6To7(context)
+            )
             .build()
 
     @Provides

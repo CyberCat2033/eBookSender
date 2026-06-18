@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.catalog
 
-import android.view.HapticFeedbackConstants
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -29,7 +28,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import com.cybercat.pocketbooksender.localization.LocalStrings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -54,14 +52,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
-import com.cybercat.pocketbooksender.util.rememberDragSelectionState
-import com.cybercat.pocketbooksender.util.rememberClickSuppressionState
 import com.cybercat.pocketbooksender.util.pointerInputDragSelection
-
+import com.cybercat.pocketbooksender.util.rememberClickSuppressionState
+import com.cybercat.pocketbooksender.util.rememberDragSelectionState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -81,7 +80,7 @@ fun CatalogScreen(
     onSetFileSelection: (String, Boolean) -> Unit,
     onToggleGroupSelection: (List<String>, Boolean) -> Unit,
     onDeleteSelectedFiles: () -> Unit,
-    onClearDeleteError: () -> Unit,
+    onClearDeleteError: () -> Unit
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -138,16 +137,17 @@ fun CatalogScreen(
 
     fun scrollToGroup(key: String, itemCount: Int) {
         scope.launch {
-            val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.key == key } ?: return@launch
+            val itemInfo =
+                listState.layoutInfo.visibleItemsInfo.find { it.key == key } ?: return@launch
             val viewportHeight = listState.layoutInfo.viewportSize.height
-            
+
             // Estimated height of an item is ~72dp (64dp + padding).
             val itemHeightPx = with(density) { 72.dp.toPx() }
             val estimatedExpandedHeight = itemInfo.size + (itemCount * itemHeightPx)
-            
+
             val itemBottom = itemInfo.offset + estimatedExpandedHeight
             val overflow = itemBottom - viewportHeight
-            
+
             if (overflow > 0) {
                 // Scroll by the overflow amount to make the bottom visible,
                 // but don't scroll the item past the top of the screen.
@@ -155,7 +155,10 @@ fun CatalogScreen(
                 val scrollAmount = minOf(overflow, maxScroll)
                 if (scrollAmount > 0) {
                     val animationDuration = minOf(750, 250 + (itemCount * 35))
-                    listState.animateScrollBy(scrollAmount, tween(durationMillis = animationDuration))
+                    listState.animateScrollBy(
+                        scrollAmount,
+                        tween(durationMillis = animationDuration)
+                    )
                 }
             }
         }
@@ -193,7 +196,11 @@ fun CatalogScreen(
                 val dismiss = LocalDismissDialog.current
                 TextButton(
                     onClick = {
-                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            AppHapticFeedback.Confirm
+                        )
                         deleteAfterDismiss = true
                         dismiss()
                     }
@@ -205,7 +212,7 @@ fun CatalogScreen(
                 val dismiss = LocalDismissDialog.current
                 TextButton(
                     onClick = {
-                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
                         deleteAfterDismiss = false
                         dismiss()
                     }
@@ -225,7 +232,7 @@ fun CatalogScreen(
                 val dismiss = LocalDismissDialog.current
                 TextButton(
                     onClick = {
-                        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                        view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
                         dismiss()
                     }
                 ) {
@@ -246,7 +253,7 @@ fun CatalogScreen(
                     CircularProgressIndicator()
                     Text(strings.catalogDeletingState, style = MaterialTheme.typography.titleMedium)
                 }
-            },
+            }
         )
     }
 
@@ -256,10 +263,12 @@ fun CatalogScreen(
                 title = {
                     AnimatedContent(
                         targetState = state.isEditMode,
-                        label = "CatalogTopBarTitle",
+                        label = "CatalogTopBarTitle"
                     ) { isEditMode ->
                         if (isEditMode) {
-                            Text(strings.get("catalog_selected_count", state.selectedFilePaths.size))
+                            Text(
+                                strings.get("catalog_selected_count", state.selectedFilePaths.size)
+                            )
                         } else {
                             Text(strings.catalogTitle)
                         }
@@ -269,48 +278,69 @@ fun CatalogScreen(
                     AnimatedVisibility(
                         visible = state.isEditMode,
                         enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-                        exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
+                        exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start)
                     ) {
                         IconButton(
                             onClick = {
-                                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                view.performHapticIfAllowed(
+                                    context,
+                                    enableHaptics,
+                                    AppHapticFeedback.Press
+                                )
                                 onSetEditMode(false)
                             }
                         ) {
-                            Icon(Icons.Outlined.Close, contentDescription = strings.catalogActionExitEdit)
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = strings.catalogActionExitEdit
+                            )
                         }
                     }
                 },
                 actions = {
                     AnimatedContent(
                         targetState = state.isEditMode,
-                        label = "CatalogTopBarActions",
+                        label = "CatalogTopBarActions"
                     ) { isEditMode ->
                         if (isEditMode) {
                             IconButton(
                                 onClick = {
-                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.LONG_PRESS)
+                                    view.performHapticIfAllowed(
+                                        context,
+                                        enableHaptics,
+                                        AppHapticFeedback.LongPress
+                                    )
                                     showDeleteConfirm = true
                                 },
-                                enabled = state.selectedFilePaths.isNotEmpty() && !catalog.isLoading,
+                                enabled = state.selectedFilePaths.isNotEmpty() && !catalog.isLoading
                             ) {
-                                Icon(Icons.Outlined.Delete, contentDescription = strings.catalogActionDeleteSelected)
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    contentDescription = strings.catalogActionDeleteSelected
+                                )
                             }
                         } else {
                             IconButton(
                                 onClick = {
-                                    view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+                                    view.performHapticIfAllowed(
+                                        context,
+                                        enableHaptics,
+                                        AppHapticFeedback.Press
+                                    )
                                     onSetEditMode(true)
                                 },
-                                enabled = isConnected && !catalog.isEmpty && !catalog.isLoading,
+                                enabled = isConnected && !catalog.isEmpty && !catalog.isLoading
                             ) {
-                                Icon(Icons.Outlined.Edit, contentDescription = strings.catalogActionEnterEdit)
+                                Icon(
+                                    Icons.Outlined.Edit,
+                                    contentDescription = strings.catalogActionEnterEdit
+                                )
                             }
                         }
                     }
-                },
+                }
             )
-        },
+        }
     ) { innerPadding ->
         val contentModifier = Modifier
             .fillMaxSize()
@@ -354,13 +384,13 @@ fun CatalogScreen(
                         state.isDeleting
                     )
                     .padding(horizontal = adaptiveLayout.screenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (!isConnected) {
                     item {
                         CatalogMessage(
                             title = strings.catalogNotConnected,
-                            text = strings.catalogConnectPrompt,
+                            text = strings.catalogConnectPrompt
                         )
                     }
                     return@LazyColumn
@@ -371,7 +401,7 @@ fun CatalogScreen(
                         CatalogMessage(
                             title = strings.catalogReadingTitle,
                             text = strings.catalogReadingDesc,
-                            isLoading = true,
+                            isLoading = true
                         )
                     }
                 }
@@ -381,7 +411,7 @@ fun CatalogScreen(
                         CatalogMessage(
                             title = strings.catalogStatusCannotRead,
                             text = message,
-                            isError = true,
+                            isError = true
                         )
                     }
                 }
@@ -390,7 +420,12 @@ fun CatalogScreen(
                     item {
                         CatalogMessage(
                             title = strings.catalogMsgEmpty,
-                            text = strings.get("catalog_no_books_found", state.settings.booksFolderName, state.settings.documentsFolderName, state.settings.mangaFolderName),
+                            text = strings.get(
+                                "catalog_no_books_found",
+                                state.settings.booksFolderName,
+                                state.settings.documentsFolderName,
+                                state.settings.mangaFolderName
+                            )
                         )
                     }
                 }
@@ -398,11 +433,11 @@ fun CatalogScreen(
                 if (catalog.books.isNotEmpty()) {
                     item(
                         key = "section:books",
-                        contentType = "catalog_section_title",
+                        contentType = "catalog_section_title"
                     ) {
                         SectionTitle(
                             title = state.settings.booksFolderName,
-                            count = catalog.books.sumOf { it.files.size },
+                            count = catalog.books.sumOf { it.files.size }
                         )
                     }
                     items(
@@ -434,7 +469,7 @@ fun CatalogScreen(
                                 } else {
                                     fileRowBounds[path] = bounds
                                 }
-                            },
+                            }
                         )
                     }
                 }
@@ -442,11 +477,11 @@ fun CatalogScreen(
                 if (catalog.documents.isNotEmpty()) {
                     item(
                         key = "section:documents",
-                        contentType = "catalog_section_title",
+                        contentType = "catalog_section_title"
                     ) {
                         SectionTitle(
                             title = state.settings.documentsFolderName,
-                            count = catalog.documents.sumOf { it.files.size },
+                            count = catalog.documents.sumOf { it.files.size }
                         )
                     }
                     items(
@@ -478,7 +513,7 @@ fun CatalogScreen(
                                 } else {
                                     fileRowBounds[path] = bounds
                                 }
-                            },
+                            }
                         )
                     }
                 }
@@ -486,11 +521,11 @@ fun CatalogScreen(
                 if (catalog.manga.isNotEmpty()) {
                     item(
                         key = "section:manga",
-                        contentType = "catalog_section_title",
+                        contentType = "catalog_section_title"
                     ) {
                         SectionTitle(
                             title = state.settings.mangaFolderName,
-                            count = catalog.manga.size,
+                            count = catalog.manga.size
                         )
                     }
                     items(
@@ -522,7 +557,7 @@ fun CatalogScreen(
                                 } else {
                                     fileRowBounds[path] = bounds
                                 }
-                            },
+                            }
                         )
                     }
                 }

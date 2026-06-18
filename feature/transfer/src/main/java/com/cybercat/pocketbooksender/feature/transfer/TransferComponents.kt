@@ -1,7 +1,6 @@
 package com.cybercat.pocketbooksender.feature.transfer
 
 import android.content.Context
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -74,6 +73,7 @@ import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
@@ -148,7 +148,7 @@ fun ConnectionPanel(
                             view.performHapticIfAllowed(
                                 context,
                                 state.settings.enableHaptics,
-                                HapticFeedbackConstants.REJECT
+                                AppHapticFeedback.Reject
                             )
                             onDisconnect()
                         },
@@ -197,7 +197,7 @@ fun ConnectionPanel(
                                     view.performHapticIfAllowed(
                                         context,
                                         state.settings.enableHaptics,
-                                        HapticFeedbackConstants.VIRTUAL_KEY
+                                        AppHapticFeedback.Press
                                     )
                                     onFtpInputChanged("")
                                 }) {
@@ -219,7 +219,7 @@ fun ConnectionPanel(
                                 view.performHapticIfAllowed(
                                     context,
                                     state.settings.enableHaptics,
-                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                    AppHapticFeedback.Press
                                 )
                                 startQrScan(context, onQrScanned)
                             },
@@ -236,7 +236,7 @@ fun ConnectionPanel(
                                 view.performHapticIfAllowed(
                                     context,
                                     state.settings.enableHaptics,
-                                    HapticFeedbackConstants.CONFIRM
+                                    AppHapticFeedback.Confirm
                                 )
                                 if (state.ftpInput.isBlank()) {
                                     startQrScan(context, onQrScanned)
@@ -312,7 +312,7 @@ fun ActionRow(
                 view.performHapticIfAllowed(
                     context,
                     enableHaptics,
-                    HapticFeedbackConstants.VIRTUAL_KEY
+                    AppHapticFeedback.Press
                 )
                 onAddFiles()
             },
@@ -326,7 +326,7 @@ fun ActionRow(
         }
         Button(
             onClick = {
-                view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.CONFIRM)
+                view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Confirm)
                 onUploadAll()
             },
             enabled = canUpload,
@@ -442,7 +442,7 @@ fun UploadedSection(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                 }) {
                     Icon(
@@ -595,7 +595,7 @@ fun UploadProgressOverlay(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.REJECT
+                            AppHapticFeedback.Reject
                         )
                         onCancel()
                     },

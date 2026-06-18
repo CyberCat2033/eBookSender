@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.opds
 
-import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -67,6 +66,7 @@ import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.ui.StatusMessage
 import com.cybercat.pocketbooksender.ui.StatusMessageHost
 import com.cybercat.pocketbooksender.ui.theme.EmphasizedEasing
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.launch
 
@@ -224,7 +224,7 @@ fun OpdsScreen(
                                 view.performHapticIfAllowed(
                                     context,
                                     enableHaptics,
-                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                    AppHapticFeedback.Press
                                 )
                                 onBack()
                             },
@@ -249,7 +249,7 @@ fun OpdsScreen(
                                     view.performHapticIfAllowed(
                                         context,
                                         enableHaptics,
-                                        HapticFeedbackConstants.VIRTUAL_KEY
+                                        AppHapticFeedback.Press
                                     )
                                     onOpenLink(startLink)
                                 },
@@ -629,7 +629,7 @@ private fun WebModeSelector(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     onModeSelected(mode)
                 },

@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.manga
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -60,6 +59,7 @@ import com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import com.cybercat.pocketbooksender.util.pointerInputDragSelection
 import com.cybercat.pocketbooksender.util.rememberClickSuppressionState
@@ -143,7 +143,7 @@ internal fun MangaSubscriptionUpdatesDialog(
     )
 
     fun toggleSeriesCollapsed(seriesKey: String) {
-        view.performHapticIfAllowed(context, enableHaptics, HapticFeedbackConstants.VIRTUAL_KEY)
+        view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
         collapsedSeriesKeys = if (seriesKey in collapsedSeriesKeys) {
             collapsedSeriesKeys - seriesKey
         } else {
@@ -177,7 +177,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         dismiss()
                     }
@@ -207,7 +207,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY
+                                AppHapticFeedback.Press
                             )
                             onSelectAll()
                         },
@@ -219,7 +219,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                             view.performHapticIfAllowed(
                                 context,
                                 enableHaptics,
-                                HapticFeedbackConstants.VIRTUAL_KEY
+                                AppHapticFeedback.Press
                             )
                             onClearAll()
                         },
@@ -348,7 +348,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                                                         view.performHapticIfAllowed(
                                                             context,
                                                             enableHaptics,
-                                                            HapticFeedbackConstants.VIRTUAL_KEY
+                                                            AppHapticFeedback.Press
                                                         )
                                                         onToggleChapter(chapterKey, !isSelected)
                                                     }
@@ -367,7 +367,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                                                         view.performHapticIfAllowed(
                                                             context,
                                                             enableHaptics,
-                                                            HapticFeedbackConstants.VIRTUAL_KEY
+                                                            AppHapticFeedback.Press
                                                         )
                                                         onToggleChapter(chapterKey, checked)
                                                     }
@@ -396,7 +396,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     downloadAfterDismiss = false
                     dismiss()
@@ -412,7 +412,7 @@ internal fun MangaSubscriptionUpdatesDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.CONFIRM
+                        AppHapticFeedback.Confirm
                     )
                     downloadAfterDismiss = true
                     dismiss()

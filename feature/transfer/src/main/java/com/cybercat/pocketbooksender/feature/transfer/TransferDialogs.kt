@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.transfer
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,6 +25,7 @@ import com.cybercat.pocketbooksender.ui.AnimatedAlertDialog
 import com.cybercat.pocketbooksender.ui.AppOutlinedTextField
 import com.cybercat.pocketbooksender.ui.LocalDismissDialog
 import com.cybercat.pocketbooksender.ui.LocalDismissDialogAfter
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
 @Composable
@@ -54,7 +54,7 @@ fun VpnBypassBlockedDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.CONFIRM
+                        AppHapticFeedback.Confirm
                     )
                     dismissAfter(onDisableBypassVpn)
                 }
@@ -69,7 +69,7 @@ fun VpnBypassBlockedDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.VIRTUAL_KEY
+                        AppHapticFeedback.Press
                     )
                     dismiss()
                 }
@@ -119,7 +119,7 @@ fun MangaBatchEditorDialog(
                                 view.performHapticIfAllowed(
                                     context,
                                     enableHaptics,
-                                    HapticFeedbackConstants.VIRTUAL_KEY
+                                    AppHapticFeedback.Press
                                 )
                                 targetSeries = null
                             },
@@ -132,7 +132,7 @@ fun MangaBatchEditorDialog(
                                     view.performHapticIfAllowed(
                                         context,
                                         enableHaptics,
-                                        HapticFeedbackConstants.VIRTUAL_KEY
+                                        AppHapticFeedback.Press
                                     )
                                     targetSeries = s
                                 },
@@ -163,7 +163,7 @@ fun MangaBatchEditorDialog(
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
-                            HapticFeedbackConstants.VIRTUAL_KEY
+                            AppHapticFeedback.Press
                         )
                         series = suggestion
                     }
@@ -177,7 +177,7 @@ fun MangaBatchEditorDialog(
                     view.performHapticIfAllowed(
                         context,
                         enableHaptics,
-                        HapticFeedbackConstants.CONFIRM
+                        AppHapticFeedback.Confirm
                     )
                     onApply(targetSeries, series.trim())
                     dismiss()
@@ -193,7 +193,7 @@ fun MangaBatchEditorDialog(
                 view.performHapticIfAllowed(
                     context,
                     enableHaptics,
-                    HapticFeedbackConstants.VIRTUAL_KEY
+                    AppHapticFeedback.Press
                 )
                 dismiss()
             }) {

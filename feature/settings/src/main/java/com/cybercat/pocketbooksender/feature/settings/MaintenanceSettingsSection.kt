@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.settings
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -35,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.localization.LocalStrings
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
 
@@ -64,7 +64,7 @@ internal fun MaintenanceSettingsSection(
                     view.performHapticIfAllowed(
                         context,
                         state.settings.enableHaptics,
-                        HapticFeedbackConstants.LONG_PRESS
+                        AppHapticFeedback.LongPress
                     )
                     onClearDownloadCache()
                 },
@@ -80,7 +80,7 @@ internal fun MaintenanceSettingsSection(
                     view.performHapticIfAllowed(
                         context,
                         state.settings.enableHaptics,
-                        HapticFeedbackConstants.LONG_PRESS
+                        AppHapticFeedback.LongPress
                     )
                     onLogoutAll()
                 },

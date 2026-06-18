@@ -61,7 +61,8 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogRepository.kt` - profile-aware catalog repository; coordinates catalog state, deletion, PocketBook DB source, and FTP folder source.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/DeviceCatalogSource.kt` - catalog source interface used by profile-specific and generic catalog loaders.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/PocketBookCatalogSource.kt` - PocketBook catalog source that builds `DeviceCatalog` from the `explorer-3.db` snapshot.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/ftp/CommonsNetFtpGateway.kt` - Apache Commons Net FTP gateway; opens the FTP mount root from the link, then creates/opens the Settings relative root where the app hierarchy lives. Atomic uploads write to a temporary `.uploading` file and clean it up when coroutine cancellation interrupts a transfer.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/ftp/CommonsNetFtpGateway.kt` - Apache Commons Net FTP gateway; opens the FTP mount root from the link, then creates/opens the Settings relative root where the app hierarchy lives. Atomic uploads write to a temporary `.uploading` file and clean it up when coroutine cancellation interrupts a transfer. All list/download/delete/rename paths go through shared FTP relative-path validation, and suspicious entry names from the server are skipped instead of being exposed to the catalog/UI.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/ftp/FtpPathSecurity.kt` - shared FTP path-hardening helpers; validates relative FTP paths, rejects `.`/`..` traversal, rejects absolute paths and control characters, and safely combines parent/child FTP entry paths.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/pocketbook/PocketBookLibraryPaths.kt` - shared PocketBook library database paths and storage prefix used by profile detection and database reading.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/PocketBookDatabaseReader.kt` - PocketBook `explorer-3.db` snapshot reader; downloads the SQLite database files from the FTP mount root, opens the local copy read-only, and maps cursor rows under the Settings relative root to catalog file records.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/catalog/CatalogTreeBuilder.kt` - pure catalog tree builder for database records; filters supported file types, deduplicates PocketBook book records, maps metadata to `CatalogFile`, and groups Books/Documents/Manga with natural sorting.
@@ -71,9 +72,10 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsSearchSupport.kt` - pure OPDS search helpers for template expansion, Flibusta author-search URL derivation, author-entry filtering, and merged search-catalog assembly.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsDownloadFileSupport.kt` - pure OPDS download helpers for URL normalization, download file-name resolution, MIME-based extension mapping, and collision-safe cache file naming.
 - `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/MatchOpdsAuthSourceUseCase.kt` - OPDS auth-source resolver; returns the saved `OpdsSource` whose host matches the URL that raised `OpdsAuthenticationRequiredException`, so the ViewModel can open the credentials dialog for the correct source.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsSecureCredentialsStore.kt` - Android Keystore-backed OPDS credential vault; encrypts saved OPDS usernames/passwords with AES/GCM in app-private preferences and replaces the previous plaintext Room storage.
 - `feature/opds/src/main/java/com/cybercat/pocketbooksender/feature/opds/OpdsAuthController.kt` - feature-layer OPDS credentials dialog controller; saves credentials and retries the protected catalog URL after successful update.
 - `feature/opds/src/main/java/com/cybercat/pocketbooksender/feature/opds/OpdsDownloadController.kt` - feature-layer OPDS download state controller; owns active download job, progress updates, cancellation, queue insertion, and auth/error routing for single and multi-entry downloads.
-- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsCredentialsProviderImpl.kt` - Room-backed OPDS credentials provider that matches saved source credentials by request host.
+- `core/data/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsCredentialsProviderImpl.kt` - OPDS credentials provider that matches saved source credentials by request host and reads the decrypted credentials from the secure OPDS vault.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsHttpClient.kt` - OPDS `HttpURLConnection` boundary; applies Accept/User-Agent headers, Basic auth from URLs or saved source credentials, manual redirects, timeouts, and HTTP status validation.
 - `core/network/src/main/java/com/cybercat/pocketbooksender/data/opds/OpdsUrlResolver.kt` - shared OPDS relative URL resolver used by catalog links, acquisitions, redirects, and search template resolution.
 - `app/src/main/java/com/cybercat/pocketbooksender/transfer/TransferForegroundService.kt` - foreground FTP upload service; coordinates service lifecycle, wake lock, transfer requests, user cancellation, profile-aware library refresh, and OPDS/manga app-cache cleanup after successful uploads.
@@ -134,16 +136,18 @@ PocketBook Sender is a Kotlin Android app built with Gradle, Jetpack Compose, Ma
 ## Haptic feedback
 
 - Central helper: `core/ui/src/main/java/com/cybercat/pocketbooksender/util/HapticHelper.kt`.
-- Use `View.performHapticIfAllowed(context, enableHaptics, feedbackConstant, ignoreDnd)` instead of calling `performHapticFeedback` directly.
-- `performHapticIfAllowed` respects the app setting, Do Not Disturb, and silent mode. Use `ignoreDnd = true` only for continuous drag-selection feedback that already follows this pattern.
+- Prefer `View.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.*)` over raw `HapticFeedbackConstants` so tap/confirm/reject/long-press semantics stay consistent across features.
+- `AppHapticFeedback` currently centralizes `Press`, `Confirm`, `Reject`, `LongPress`, `DragStart`, and `DragTick`.
+- `performHapticIfAllowed` respects the app setting, Do Not Disturb, and silent mode. `DragStart` and `DragTick` are the only built-in variants that bypass DND/silent checks because they are reserved for continuous drag-selection feedback.
 - User setting source: `AppSettings.enableHaptics` in `core/model`, persisted by `SettingsRepository` with the `enable_haptics` DataStore key.
 - Settings UI toggle: `feature/settings/.../SettingsScreen.kt`; toggling haptics intentionally uses `enableHaptics = true` so the user feels the action even when enabling feedback.
-- Current feedback constants:
-  - `VIRTUAL_KEY` - normal taps, toggles, source selection, expand/collapse, picker actions, text clear actions, and segmented choices.
-  - `CONFIRM` - destructive confirmations after dialog confirmation, upload/download actions, save/commit actions, and successful primary actions.
-  - `REJECT` - remove/delete/disconnect style actions.
-  - `LONG_PRESS` - entering selection or stronger maintenance/destructive actions.
-  - `CLOCK_TICK` - repeated range changes during drag selection in Catalog and Manga.
+- Current semantic mappings:
+  - `Press` - normal taps, toggles, source selection, expand/collapse, picker actions, text clear actions, and segmented choices.
+  - `Confirm` - destructive confirmations after dialog confirmation, upload/download actions, save/commit actions, and successful primary actions.
+  - `Reject` - remove/delete/disconnect style actions.
+  - `LongPress` - stronger maintenance/destructive actions that are not drag-selection.
+  - `DragStart` - entering drag-selection mode.
+  - `DragTick` - repeated range changes during drag selection in Catalog and Manga.
 - Feature coverage:
   - `app/.../PocketBookSenderApp.kt` passes haptic setting into Catalog, OPDS, Manga, and Settings and uses haptics for manga navigation/FAB actions.
   - `feature/catalog` uses haptics for edit mode, file/group selection, delete flow, expand/collapse, long-press drag selection, and drag-selection ticks.

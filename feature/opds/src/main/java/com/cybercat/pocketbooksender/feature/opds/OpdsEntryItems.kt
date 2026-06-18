@@ -1,6 +1,5 @@
 package com.cybercat.pocketbooksender.feature.opds
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,6 +41,7 @@ import com.cybercat.pocketbooksender.data.opds.OpdsLink
 import com.cybercat.pocketbooksender.data.opds.downloadFormatLabel
 import com.cybercat.pocketbooksender.data.opds.supportedDownloadFormat
 import com.cybercat.pocketbooksender.localization.LocalStrings
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 
 internal data class OpdsEntryRow(val key: String, val entry: OpdsEntry)
@@ -101,7 +101,7 @@ internal fun OpdsEntryCard(
                 view.performHapticIfAllowed(
                     context,
                     enableHaptics,
-                    HapticFeedbackConstants.VIRTUAL_KEY
+                    AppHapticFeedback.Press
                 )
                 onOpenLink(primaryNavigationLink)
             },
@@ -120,8 +120,8 @@ internal fun OpdsEntryCard(
                 strings = strings,
                 onOpenLink = onOpenLink,
                 onDownload = onDownload,
-                onActionHaptic = { feedbackConstant ->
-                    view.performHapticIfAllowed(context, enableHaptics, feedbackConstant)
+                onActionHaptic = { feedback ->
+                    view.performHapticIfAllowed(context, enableHaptics, feedback)
                 }
             )
         }
@@ -141,8 +141,8 @@ internal fun OpdsEntryCard(
                 strings = strings,
                 onOpenLink = onOpenLink,
                 onDownload = onDownload,
-                onActionHaptic = { feedbackConstant ->
-                    view.performHapticIfAllowed(context, enableHaptics, feedbackConstant)
+                onActionHaptic = { feedback ->
+                    view.performHapticIfAllowed(context, enableHaptics, feedback)
                 }
             )
         }
@@ -159,7 +159,7 @@ private fun OpdsEntryCardContent(
     strings: com.cybercat.pocketbooksender.localization.AppStrings,
     onOpenLink: (OpdsLink) -> Unit,
     onDownload: (OpdsEntry, OpdsAcquisition) -> Unit,
-    onActionHaptic: (Int) -> Unit
+    onActionHaptic: (AppHapticFeedback) -> Unit
 ) {
     Column(
         modifier = Modifier.padding(14.dp),
@@ -217,7 +217,7 @@ private fun OpdsEntryCardContent(
                 navigationLinks.forEach { link ->
                     OutlinedButton(
                         onClick = {
-                            onActionHaptic(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onActionHaptic(AppHapticFeedback.Press)
                             onOpenLink(link)
                         },
                         enabled = enabled,
@@ -259,7 +259,7 @@ private fun OpdsEntryCardContent(
                 visibleAcquisitions.forEach { (acquisition, label) ->
                     Button(
                         onClick = {
-                            onActionHaptic(HapticFeedbackConstants.CONFIRM)
+                            onActionHaptic(AppHapticFeedback.Confirm)
                             onDownload(entry, acquisition)
                         },
                         enabled = enabled

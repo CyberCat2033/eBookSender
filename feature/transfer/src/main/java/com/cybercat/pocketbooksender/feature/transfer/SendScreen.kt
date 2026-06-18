@@ -1,7 +1,6 @@
 package com.cybercat.pocketbooksender.feature.transfer
 
 import android.net.Uri
-import android.view.HapticFeedbackConstants
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -50,6 +49,7 @@ import com.cybercat.pocketbooksender.model.UploadStatus
 import com.cybercat.pocketbooksender.ui.LocalAdaptiveLayoutInfo
 import com.cybercat.pocketbooksender.ui.StatusMessage
 import com.cybercat.pocketbooksender.ui.StatusMessageHost
+import com.cybercat.pocketbooksender.util.AppHapticFeedback
 import com.cybercat.pocketbooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
 
@@ -173,7 +173,7 @@ fun SendScreen(
                                     view.performHapticIfAllowed(
                                         context,
                                         state.settings.enableHaptics,
-                                        HapticFeedbackConstants.LONG_PRESS
+                                        AppHapticFeedback.LongPress
                                     )
                                     val rowCount = animatedUploadedSectionCount + activeRows.size
                                     clearInProgress = true
