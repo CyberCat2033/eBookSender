@@ -27,13 +27,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +53,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cybercat.pocketbooksender.data.manga.MangaSubscriptionCheckResult
@@ -194,15 +195,12 @@ internal fun MangaSubscriptionUpdatesDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(
-                        8.dp,
-                        Alignment.CenterHorizontally
-                    ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(IntrinsicSize.Min)
                 ) {
-                    AssistChip(
+                    OutlinedButton(
                         onClick = {
                             view.performHapticIfAllowed(
                                 context,
@@ -211,10 +209,18 @@ internal fun MangaSubscriptionUpdatesDialog(
                             )
                             onSelectAll()
                         },
-                        modifier = Modifier.fillMaxHeight(),
-                        label = { Text(strings.mangaUpdatesSelectAll) }
-                    )
-                    AssistChip(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
+                        Text(
+                            text = strings.mangaUpdatesSelectAll,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    OutlinedButton(
                         onClick = {
                             view.performHapticIfAllowed(
                                 context,
@@ -223,9 +229,17 @@ internal fun MangaSubscriptionUpdatesDialog(
                             )
                             onClearAll()
                         },
-                        modifier = Modifier.fillMaxHeight(),
-                        label = { Text(strings.mangaUpdatesDeselectAll) }
-                    )
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
+                        Text(
+                            text = strings.mangaUpdatesDeselectAll,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
 
                 LazyColumn(
