@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.cybercat.pocketbooksender.domain.supportedPickerMimeTypes
 import com.cybercat.pocketbooksender.localization.LocalStrings
 import com.cybercat.pocketbooksender.model.BookCategory
 import com.cybercat.pocketbooksender.model.UploadStatus
@@ -118,6 +119,7 @@ fun SendScreen(
                 it.status == UploadStatus.Skipped
         }
     }
+    val pickerMimeTypes = remember { supportedPickerMimeTypes() }
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments(),
         onResult = onAddUris
@@ -224,7 +226,7 @@ fun SendScreen(
                                 !runtimeState.isTransferActive &&
                                 !clearInProgress,
                         enableHaptics = state.settings.enableHaptics,
-                        onAddFiles = { picker.launch(arrayOf("*/*")) },
+                        onAddFiles = { picker.launch(pickerMimeTypes) },
                         onUploadAll = onUploadAll
                     )
                 }
