@@ -4,17 +4,15 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 
 @Singleton
 class MangaDownloadCoordinator @Inject constructor() {
     private val pendingRequest = AtomicReference<MangaDownloadRequest?>(null)
 
-    private val _events = MutableSharedFlow<MangaDownloadEvent>(
-        extraBufferCapacity = 64
-    )
-    val events = _events.asSharedFlow()
+    private val _events = Channel<MangaDownloadEvent>(capacity = Channel.UNLIMITED)
+    val events = _events.receiveAsFlow()
 
     fun submit(targets: List<MangaChapterDownloadTarget>, kind: MangaDownloadRequestKind): String {
         require(targets.isNotEmpty()) { "No manga chapters selected" }
@@ -36,7 +34,7 @@ class MangaDownloadCoordinator @Inject constructor() {
     }
 
     fun emit(event: MangaDownloadEvent) {
-        _events.tryEmit(event)
+        check(_events.trySend(event).isSuccess) { "Manga download event channel is unavailable" }
     }
 }
 
