@@ -92,9 +92,20 @@
 
 <div align="center">
 
-| Отправка | Каталог устройства | Web / OPDS | Настройки |
-| :---: | :---: | :---: | :---: |
-| <img src="docs/screenshots/01_send.png" width="220" alt="Экран отправки"> | <img src="docs/screenshots/02_catalog.png" width="220" alt="Каталог устройства"> | <img src="docs/screenshots/03_web.png" width="220" alt="Веб-каталог OPDS"> | <img src="docs/screenshots/04_settings.png" width="220" alt="Настройки"> |
+<table>
+  <tr>
+    <th width="25%">Отправка</th>
+    <th width="25%">Каталог устройства</th>
+    <th width="25%">Web / OPDS</th>
+    <th width="25%">Настройки</th>
+  </tr>
+  <tr>
+    <td width="25%" align="center" valign="top"><img src="docs/screenshots/01_send.png" width="180" alt="Экран отправки"></td>
+    <td width="25%" align="center" valign="top"><img src="docs/screenshots/02_catalog.png" width="180" alt="Каталог устройства"></td>
+    <td width="25%" align="center" valign="top"><img src="docs/screenshots/03_web.png" width="180" alt="Веб-каталог OPDS"></td>
+    <td width="25%" align="center" valign="top"><img src="docs/screenshots/04_settings.png" width="180" alt="Настройки"></td>
+  </tr>
+</table>
 
 </div>
 
