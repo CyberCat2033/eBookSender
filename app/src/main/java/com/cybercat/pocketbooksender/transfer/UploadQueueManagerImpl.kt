@@ -22,8 +22,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -201,15 +201,17 @@ class UploadQueueManagerImpl @Inject constructor(
                 null
             } else {
                 val currentPendingIds = pendingMetadataItemIds.toList()
+                val currentPendingIdSet = currentPendingIds.toSet()
+                val prioritizedIdSet = prioritizedIds.toSet()
                 pendingMetadataItemIds.clear()
 
                 prioritizedIds.forEach { itemId ->
-                    if (queuedMetadataItemIds.add(itemId)) {
+                    if (itemId in currentPendingIdSet || queuedMetadataItemIds.add(itemId)) {
                         pendingMetadataItemIds.addLast(itemId)
                     }
                 }
                 currentPendingIds.forEach { itemId ->
-                    if (itemId !in prioritizedIds) {
+                    if (itemId !in prioritizedIdSet) {
                         pendingMetadataItemIds.addLast(itemId)
                     }
                 }

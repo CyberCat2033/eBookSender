@@ -33,6 +33,7 @@ fun UploadPreviewCover(
     itemId: String,
     title: String,
     modifier: Modifier = Modifier,
+    reloadKey: Any? = null,
     placeholderIcon: ImageVector = Icons.Outlined.Image
 ) {
     val context = LocalContext.current
@@ -41,7 +42,7 @@ fun UploadPreviewCover(
         mutableStateOf<Bitmap?>(BitmapCache.getFromMemory(cacheKey))
     }
 
-    LaunchedEffect(itemId) {
+    LaunchedEffect(itemId, reloadKey) {
         if (bitmap != null) return@LaunchedEffect
 
         bitmap = withContext(Dispatchers.IO) {

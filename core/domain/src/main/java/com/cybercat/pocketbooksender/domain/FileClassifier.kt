@@ -31,7 +31,11 @@ fun String.bookExtension(): String {
 
 fun String.bookTitleWithoutExtension(): String {
     val name = fileNameOnly()
-    val extension = name.bookExtension()
+    val extension = if (name.hasFb2EpubExtension()) {
+        "fb2.epub"
+    } else {
+        name.bookExtension()
+    }
     if (extension.isBlank()) return name
 
     val suffixLength = extension.length + 1
@@ -45,6 +49,10 @@ fun String.bookTitleWithoutExtension(): String {
 fun String.contentExtension(): String = bookExtension().removeSuffix(".zip")
 
 fun String.isZipWrappedBook(): Boolean = bookExtension().endsWith(".zip")
+
+fun String.hasFb2EpubExtension(): Boolean = fileNameOnly()
+    .lowercase()
+    .endsWith(".fb2.epub")
 
 private fun String.fileNameOnly(): String = substringAfterLast('/')
     .substringAfterLast('\\')

@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import com.cybercat.pocketbooksender.domain.bookTitleWithoutExtension
 import com.cybercat.pocketbooksender.domain.contentExtension
+import com.cybercat.pocketbooksender.domain.hasFb2EpubExtension
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.InputStream
 import javax.inject.Inject
@@ -27,7 +28,7 @@ class LocalMetadataExtractor @Inject constructor(
             runCatching {
                 when (displayName.contentExtension()) {
                     "fb2" -> fb2MetadataParser.extract(uri, displayName, fallbackTitle) { open(it) }
-                    "epub" -> epubMetadataParser.extract(uri, fallbackTitle) { open(it) }
+                    "epub" -> extractEpub(uri, displayName, fallbackTitle)
                     "docx" -> docxMetadataParser.extract(uri, fallbackTitle) { open(it) }
                     "mobi", "azw3" -> extractMobi(uri, fallbackTitle)
                     "pdf" -> pdfMetadataParser.extract(uri, fallbackTitle)
@@ -39,6 +40,22 @@ class LocalMetadataExtractor @Inject constructor(
                 BookMetadata(title = fallbackTitle)
             }
         }
+
+    private fun extractEpub(uri: Uri, displayName: String, fallbackTitle: String): BookMetadata {
+        val epubMetadata = epubMetadataParser.extract(uri, fallbackTitle) { open(it) }
+        if (!displayName.hasFb2EpubExtension() ||
+            epubMetadata.hasExtractedMetadata(fallbackTitle)
+        ) {
+            return epubMetadata
+        }
+
+        return runCatching {
+            fb2MetadataParser.extract(uri, displayName, fallbackTitle) { open(it) }
+        }.getOrElse { error ->
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            epubMetadata
+        }
+    }
 
     private fun extractMobi(uri: Uri, fallbackTitle: String): BookMetadata {
         val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
@@ -66,4 +83,16 @@ class LocalMetadataExtractor @Inject constructor(
         requireNotNull(context.contentResolver.openInputStream(uri)) {
             "Cannot open $uri"
         }
+
+    private fun BookMetadata.hasExtractedMetadata(fallbackTitle: String): Boolean =
+        title != fallbackTitle ||
+            authors.isNotEmpty() ||
+            !description.isNullOrBlank() ||
+            !coverUri.isNullOrBlank() ||
+            preview != null ||
+            !series.isNullOrBlank() ||
+            !seriesIndex.isNullOrBlank() ||
+            !language.isNullOrBlank() ||
+            !year.isNullOrBlank() ||
+            !publisher.isNullOrBlank()
 }

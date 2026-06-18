@@ -3,6 +3,7 @@ package com.cybercat.pocketbooksender.metadata
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Base64
+import com.cybercat.pocketbooksender.domain.hasFb2EpubExtension
 import com.cybercat.pocketbooksender.domain.isZipWrappedBook
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -18,7 +19,18 @@ class Fb2MetadataParser @Inject constructor() {
         fallbackTitle: String,
         openStream: (Uri) -> InputStream
     ): BookMetadata {
-        val bytes = if (displayName.isZipWrappedBook()) {
+        val bytes = if (displayName.isZipWrappedBook() || displayName.hasFb2EpubExtension()) {
+            readFb2EntryFromArchive(uri, openStream)
+                ?: openStream(uri).use { it.readBytesLimited(MAX_TEXT_BYTES) }
+        } else {
+            openStream(uri).use { it.readBytesLimited(MAX_TEXT_BYTES) }
+        }
+
+        return bytes?.let { parseFb2(it, fallbackTitle) } ?: BookMetadata(title = fallbackTitle)
+    }
+
+    private fun readFb2EntryFromArchive(uri: Uri, openStream: (Uri) -> InputStream): ByteArray? =
+        runCatching {
             openStream(uri).use { input ->
                 ZipInputStream(input).use { zip ->
                     generateSequence { zip.nextEntry }
@@ -26,12 +38,7 @@ class Fb2MetadataParser @Inject constructor() {
                         ?.let { zip.readCurrentEntry(MAX_TEXT_BYTES) }
                 }
             }
-        } else {
-            openStream(uri).use { it.readBytesLimited(MAX_TEXT_BYTES) }
-        }
-
-        return bytes?.let { parseFb2(it, fallbackTitle) } ?: BookMetadata(title = fallbackTitle)
-    }
+        }.getOrNull()
 
     private fun parseFb2(bytes: ByteArray, fallbackTitle: String): BookMetadata {
         val parser = newMetadataXmlParser(ByteArrayInputStream(bytes))

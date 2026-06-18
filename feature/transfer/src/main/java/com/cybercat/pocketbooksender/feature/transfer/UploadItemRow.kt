@@ -378,6 +378,7 @@ private fun BookCover(item: UploadItem) {
     UploadPreviewCover(
         itemId = item.id,
         title = item.title,
+        reloadKey = item.status,
         placeholderIcon = item.category.iconFor(item.extension)
     )
 }
