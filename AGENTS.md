@@ -77,11 +77,14 @@ These instructions define the required working rules for Codex in this repositor
 - Check `git status --short` before making changes.
 - In this environment, `.git` is read-only inside the sandbox. Run git commands that write to `.git` (for example `git add` and `git commit`) with `sandbox_permissions: "require_escalated"` immediately instead of first trying them inside the sandbox.
 - Never overwrite, reset, or revert user changes unless explicitly requested.
-- For new large features, create a dedicated branch named `feature/<short-name>`. After implementing the changes and having the user verify them (specifically on the release version installed on a phone), merge the branch into `main`/`master` if everything is in order.
-- For small tasks, minor refactoring, and code cleanup, work on a dedicated `refactoring` branch (or `refactor/<short-name>`) to avoid polluting the git history.
+- Do all work on a task-appropriate branch, not directly on `main`/`master`, unless the user explicitly asks otherwise.
+- For refactoring, minor cleanup, and small maintenance tasks, use the dedicated `refactoring` branch. Use `refactor/<short-name>` only when a separate refactoring branch is clearly useful.
+- For new features, create a dedicated branch named `feature/<short-name>`.
+- For bug fixes, create a dedicated branch named `bugfix/<short-name>`.
+- After finishing and verifying a feature, refactoring, or bug-fix branch, merge it back into `main`/`master` when everything is in order and the user has not asked to leave the branch separate. For new large features, wait for the user to verify the release version installed on a phone before merging.
 - If only a few minor changes (e.g., 1-2 cosmetic edits, tiny bug fix) have accumulated, wait for more changes before committing (always check for accumulated changes after finishing a task).
 - Commit every completed code change that modifies more than five lines, unless the user explicitly asks not to commit.
-- If a change is significant, commit it with a descriptive and clear commit message (avoid short 1-2 word messages).
+- Use professional commit messages: write a concise imperative subject that names the actual change, keep it specific enough to stand alone in history, and avoid vague subjects such as `fix`, `update`, or `changes`. For non-trivial commits, add a body that explains why the change was needed, summarizes important behavior or migration details, and calls out verification or risk when relevant.
 - Keep commits logically grouped. Stage and commit only the files that belong to the current task.
 
 ## Verification
