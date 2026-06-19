@@ -71,16 +71,24 @@
 
 <table>
   <tr>
-    <th width="25%">Отправка</th>
-    <th width="25%">Каталог устройства</th>
-    <th width="25%">Web / OPDS</th>
-    <th width="25%">Настройки</th>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/screenshots/01_send.png" width="180" alt="Отправка"><br>
+      <sub>Отправка</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/screenshots/02_catalog.png" width="180" alt="Каталог устройства"><br>
+      <sub>Каталог устройства</sub>
+    </td>
   </tr>
   <tr>
-    <td width="25%" align="center" valign="top"><img src="docs/screenshots/01_send.png" width="180" alt="Экран отправки"></td>
-    <td width="25%" align="center" valign="top"><img src="docs/screenshots/02_catalog.png" width="180" alt="Каталог устройства"></td>
-    <td width="25%" align="center" valign="top"><img src="docs/screenshots/03_web.png" width="180" alt="Веб-каталог OPDS"></td>
-    <td width="25%" align="center" valign="top"><img src="docs/screenshots/04_settings.png" width="180" alt="Настройки"></td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/screenshots/03_web.png" width="180" alt="Web / OPDS"><br>
+      <sub>Web / OPDS</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/screenshots/04_settings.png" width="180" alt="Настройки"><br>
+      <sub>Настройки</sub>
+    </td>
   </tr>
 </table>
 
