@@ -36,7 +36,8 @@ data class MangaUiState(
     val statusMessage: String? = null,
     val errorMessage: String? = null,
     val isAuthorized: Boolean = false,
-    val pendingLoginPost: MangaPendingLoginPost? = null
+    val pendingLoginPost: MangaPendingLoginPost? = null,
+    val browserSessionRefreshRequest: MangaBrowserSessionRefreshRequest? = null
 ) {
     val selectedChapters: List<MangaChapter> =
         chapters.filter { chapter -> chapter.chapterId in selectedChapterIds }
@@ -53,6 +54,8 @@ data class MangaUiState(
     val hasNewChapters: Boolean =
         newChapters.isNotEmpty()
 }
+
+data class MangaBrowserSessionRefreshRequest(val id: Long, val url: String)
 
 data class MangaDownloadUiProgress(
     val title: String,

@@ -16,7 +16,7 @@ class ComxGuardChallengeClient @Inject constructor(
             ?: return false
 
         val target = runCatching { URI(url).resolve("/_v").toString() }
-            .getOrDefault("${ComxMangaAdapter.HomeUrl}_v")
+            .getOrDefault("${ComxMangaAdapter.HOME_URL}_v")
         val body = listOf(
             "token" to token,
             "mode" to "legacy",
@@ -45,7 +45,7 @@ class ComxGuardChallengeClient @Inject constructor(
             doOutput = true
             instanceFollowRedirects = true
             setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-            setRequestProperty("Origin", ComxMangaAdapter.HomeUrl.trimEnd('/'))
+            setRequestProperty("Origin", ComxMangaAdapter.HOME_URL.trimEnd('/'))
         }
 
         return try {

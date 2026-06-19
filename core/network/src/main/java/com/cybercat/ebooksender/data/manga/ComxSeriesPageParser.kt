@@ -57,7 +57,7 @@ class ComxSeriesPageParser @Inject constructor() {
         ).ifBlank { null }
 
         return MangaSeriesDetails(
-            sourceId = ComxMangaAdapter.SourceId,
+            sourceId = ComxMangaAdapter.SOURCE_ID,
             seriesId = url,
             title = title,
             coverUrl = cover.ifBlank { null },
@@ -82,7 +82,7 @@ class ComxSeriesPageParser @Inject constructor() {
             .mapNotNull { index ->
                 val item = chapters.optJSONObject(index) ?: return@mapNotNull null
                 val chapterId = item.optLong("id", -1L).takeIf { it > 0L } ?: return@mapNotNull null
-                val chapterUrl = "${ComxMangaAdapter.HomeUrl}reader/$newsId/$chapterId"
+                val chapterUrl = "${ComxMangaAdapter.HOME_URL}reader/$newsId/$chapterId"
                 val title = firstNonBlank(
                     item.firstString("title", "name"),
                     "Chapter ${index + 1}"
@@ -92,7 +92,7 @@ class ComxSeriesPageParser @Inject constructor() {
                     ?: title.extractChapterNumber()
 
                 MangaChapter(
-                    sourceId = ComxMangaAdapter.SourceId,
+                    sourceId = ComxMangaAdapter.SOURCE_ID,
                     seriesId = seriesId,
                     chapterId = chapterUrl,
                     stableKey = chapterUrl.normalizeUrlKey(),
@@ -129,7 +129,7 @@ class ComxSeriesPageParser @Inject constructor() {
                 }.stripSeriesPrefix(seriesTitle)
 
                 MangaChapter(
-                    sourceId = ComxMangaAdapter.SourceId,
+                    sourceId = ComxMangaAdapter.SOURCE_ID,
                     seriesId = seriesId,
                     chapterId = href,
                     stableKey = href.normalizeUrlKey(),

@@ -333,6 +333,8 @@
   "manga_status_no_manga_found": "No manga found",
   "manga_error_cannot_search": "Cannot search manga source",
   "manga_error_login_expired": "Com-X session expired. Sign in again.",
+  "manga_status_refreshing_session": "Refreshing Com-X session",
+  "manga_error_browser_session_required": "Com-X requires a browser check. Open Com-X and retry.",
   "manga_error_cannot_open_series": "Cannot open manga series",
   "manga_error_cannot_update_favorite": "Cannot update favorite manga",
   "manga_error_cannot_update_subscription": "Cannot update manga subscription",

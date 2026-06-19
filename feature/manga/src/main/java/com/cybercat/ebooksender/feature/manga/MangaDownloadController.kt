@@ -1,6 +1,7 @@
 package com.cybercat.ebooksender.feature.manga
 
 import com.cybercat.ebooksender.data.manga.CheckMangaSubscriptionsUseCase
+import com.cybercat.ebooksender.data.manga.MangaBrowserSessionRefreshRequiredException
 import com.cybercat.ebooksender.data.manga.MangaChapterDownloadTarget
 import com.cybercat.ebooksender.data.manga.MangaDownloadCoordinator
 import com.cybercat.ebooksender.data.manga.MangaDownloadEvent
@@ -21,7 +22,8 @@ internal class MangaDownloadController(
     private val localizationManager: LocalizationManager,
     private val mangaState: MutableStateFlow<MangaUiState>,
     private val scope: CoroutineScope,
-    private val showStatus: (String) -> Unit
+    private val showStatus: (String) -> Unit,
+    private val requestBrowserSessionRefresh: (url: String, retry: () -> Unit) -> Unit
 ) {
     private var activeDownload: ActiveMangaDownload? = null
 
@@ -37,6 +39,10 @@ internal class MangaDownloadController(
             )
         }
 
+        checkMangaSubscriptions(allowBrowserSessionRefresh = true)
+    }
+
+    private fun checkMangaSubscriptions(allowBrowserSessionRefresh: Boolean) {
         scope.launch {
             runCatching {
                 checkMangaSubscriptionsUseCase()
@@ -71,6 +77,14 @@ internal class MangaDownloadController(
                     )
                 }
             }.onFailureRethrowing { error ->
+                if (error is MangaBrowserSessionRefreshRequiredException &&
+                    allowBrowserSessionRefresh
+                ) {
+                    requestBrowserSessionRefresh(error.url) {
+                        checkMangaSubscriptions(allowBrowserSessionRefresh = false)
+                    }
+                    return@onFailureRethrowing
+                }
                 val strings = localizationManager.currentStrings.value
                 mangaState.update { state ->
                     state.copy(

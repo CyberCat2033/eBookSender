@@ -72,7 +72,7 @@ class ComxSearchParser @Inject constructor() {
             .ifBlank { null }
 
         return MangaSeriesSearchResult(
-            sourceId = ComxMangaAdapter.SourceId,
+            sourceId = ComxMangaAdapter.SOURCE_ID,
             seriesId = href,
             title = title,
             coverUrl = selectFirst(".readed__img img, img")?.absImageUrl(),
@@ -104,7 +104,7 @@ class ComxSearchParser @Inject constructor() {
         ).cleanWhitespace().takeIf { it.length in 4..120 }
 
         return MangaSeriesSearchResult(
-            sourceId = ComxMangaAdapter.SourceId,
+            sourceId = ComxMangaAdapter.SOURCE_ID,
             seriesId = href,
             title = title,
             coverUrl = selectFirst("img")?.absImageUrl(),
@@ -160,7 +160,7 @@ class ComxSearchParser @Inject constructor() {
     }
 
     private fun jsonObjectToSearchResult(json: JSONObject): MangaSeriesSearchResult? {
-        val url = json.firstString("url", "@id").resolveAgainst(ComxMangaAdapter.HomeUrl)
+        val url = json.firstString("url", "@id").resolveAgainst(ComxMangaAdapter.HOME_URL)
         if (!ownsComxUrl(url) || !url.isLikelySeriesUrl()) return null
 
         val title = firstNonBlank(
@@ -169,13 +169,13 @@ class ComxSearchParser @Inject constructor() {
         ).cleanPosterTitle()
 
         return MangaSeriesSearchResult(
-            sourceId = ComxMangaAdapter.SourceId,
+            sourceId = ComxMangaAdapter.SOURCE_ID,
             seriesId = url,
             title = title,
             coverUrl = json.firstString(
                 "image",
                 "thumbnailUrl"
-            ).resolveAgainst(ComxMangaAdapter.HomeUrl)
+            ).resolveAgainst(ComxMangaAdapter.HOME_URL)
                 .takeIf { it.isNotBlank() }
         )
     }

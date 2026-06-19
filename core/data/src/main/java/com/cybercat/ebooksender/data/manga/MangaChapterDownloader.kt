@@ -43,9 +43,10 @@ class MangaChapterDownloader @Inject constructor(
         }
 
         val outputDir = File(context.cacheDir, "manga").apply { mkdirs() }
+        val concurrency = targets.downloadConcurrency()
         val completedChapters = AtomicInteger(0)
-        val chapterSemaphore = Semaphore(MAX_PARALLEL_CHAPTERS)
-        val pageSemaphore = Semaphore(MAX_PARALLEL_PAGES)
+        val chapterSemaphore = Semaphore(concurrency.maxParallelChapters)
+        val pageSemaphore = Semaphore(concurrency.maxParallelPages)
         val completedOutcomes = Collections.synchronizedList(
             mutableListOf<ChapterDownloadOutcome>()
         )
@@ -191,6 +192,7 @@ class MangaChapterDownloader @Inject constructor(
         )
     }.getOrElse { error ->
         if (error is CancellationException) throw error
+        if (error is MangaBrowserSessionRefreshRequiredException) throw error
         val message = if (error is MangaNetworkUnavailableException) {
             "${chapter.title}: $NETWORK_UNAVAILABLE_MESSAGE"
         } else {
@@ -328,6 +330,9 @@ class MangaChapterDownloader @Inject constructor(
             throw error
         } catch (error: IOException) {
             tempFile.delete()
+            if (error is MangaBrowserSessionRefreshRequiredException) {
+                throw error
+            }
             if (error is MangaNetworkUnavailableException ||
                 !networkStateChecker.hasActiveInternetConnection()
             ) {
@@ -344,14 +349,33 @@ class MangaChapterDownloader @Inject constructor(
         }
     }
 
+    private fun List<MangaChapterDownloadTarget>.downloadConcurrency(): MangaDownloadConcurrency {
+        val sourceIds = map { target -> target.resolvedSourceId() }.distinct()
+        val capabilities = sourceIds.map { sourceId ->
+            sourceRegistry.adapter(sourceId).capabilities
+        }
+        return MangaDownloadConcurrency(
+            maxParallelChapters = capabilities
+                .minOfOrNull { capability -> capability.maxParallelChapters }
+                ?.coerceAtLeast(1)
+                ?: DEFAULT_MAX_PARALLEL_CHAPTERS,
+            maxParallelPages = capabilities
+                .minOfOrNull { capability -> capability.maxParallelPages }
+                ?.coerceAtLeast(1)
+                ?: DEFAULT_MAX_PARALLEL_PAGES
+        )
+    }
+
     private companion object {
-        const val MAX_PARALLEL_CHAPTERS = 2
-        const val MAX_PARALLEL_PAGES = 6
+        const val DEFAULT_MAX_PARALLEL_CHAPTERS = 2
+        const val DEFAULT_MAX_PARALLEL_PAGES = 6
         const val PAGE_DOWNLOAD_ATTEMPTS = 3
         const val PAGE_ATTEMPT_TIMEOUT_MILLIS = 18_000L
         const val PAGE_RETRY_DELAY_MILLIS = 450L
     }
 }
+
+private data class MangaDownloadConcurrency(val maxParallelChapters: Int, val maxParallelPages: Int)
 
 internal data class MangaChapterDownloadBatch(
     val downloaded: List<MangaDownloadedChapter>,
