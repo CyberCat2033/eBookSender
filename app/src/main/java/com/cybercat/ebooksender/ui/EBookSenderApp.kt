@@ -84,6 +84,7 @@ import kotlinx.coroutines.launch
 private const val NAV_ENTER_DURATION_MILLIS = 200
 private const val NAV_EXIT_DURATION_MILLIS = 80
 private val LANDSCAPE_NAVIGATION_RAIL_WIDTH = 80.dp
+private val UPDATE_PROGRESS_OVERLAY_MARGIN = 16.dp
 
 private class NavigationClickGate(
     private val debounceMillis: Long = NAV_ENTER_DURATION_MILLIS.toLong()
@@ -191,16 +192,33 @@ fun EBookSenderApp(
                     }
                 }
                 val content: @Composable () -> Unit = {
-                    AppNavHost(
-                        navController = navController,
-                        appSettings = settings,
-                        sendListState = sendListState,
-                        catalogListState = catalogListState,
-                        opdsListState = opdsListState,
-                        mangaListState = mangaListState,
-                        settingsScrollState = settingsScrollState,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Box(Modifier.fillMaxSize()) {
+                        AppNavHost(
+                            navController = navController,
+                            appSettings = settings,
+                            sendListState = sendListState,
+                            catalogListState = catalogListState,
+                            opdsListState = opdsListState,
+                            mangaListState = mangaListState,
+                            settingsScrollState = settingsScrollState,
+                            modifier = Modifier.fillMaxSize()
+                        )
+
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = appUpdateState.isDownloading,
+                            enter = fadeIn() + slideInVertically { height -> height },
+                            exit = fadeOut() + slideOutVertically { height -> height },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(UPDATE_PROGRESS_OVERLAY_MARGIN)
+                        ) {
+                            AppUpdateProgressOverlay(
+                                progress = appUpdateState.downloadProgress,
+                                enableHaptics = settings.enableHaptics,
+                                onCancel = onCancelUpdateDownload
+                            )
+                        }
+                    }
                 }
                 if (useFullHeightNavigationRail) {
                     LandscapeNavigationRailScaffold(
@@ -237,21 +255,6 @@ fun EBookSenderApp(
                         containerColor = MaterialTheme.colorScheme.background,
                         contentColor = MaterialTheme.colorScheme.onBackground,
                         content = { content() }
-                    )
-                }
-
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = appUpdateState.isDownloading,
-                    enter = fadeIn() + slideInVertically { height -> height },
-                    exit = fadeOut() + slideOutVertically { height -> height },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp)
-                ) {
-                    AppUpdateProgressOverlay(
-                        progress = appUpdateState.downloadProgress,
-                        enableHaptics = settings.enableHaptics,
-                        onCancel = onCancelUpdateDownload
                     )
                 }
 
