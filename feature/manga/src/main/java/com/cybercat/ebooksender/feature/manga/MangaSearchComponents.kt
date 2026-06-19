@@ -3,9 +3,13 @@ package com.cybercat.ebooksender.feature.manga
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -181,7 +185,7 @@ internal fun MangaSearchPanel(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -189,13 +193,14 @@ internal fun MangaSearchPanel(
                             state = state,
                             onSearch = onSearch,
                             enableHaptics = enableHaptics,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f).fillMaxHeight()
                         )
                         if (!state.isAuthorized) {
                             MangaLoginButton(
                                 state = state,
                                 enableHaptics = enableHaptics,
-                                onOpenBrowser = onOpenBrowser
+                                onOpenBrowser = onOpenBrowser,
+                                modifier = Modifier.fillMaxHeight()
                             )
                         }
                     }
@@ -257,7 +262,8 @@ internal fun MangaSearchButton(
             onSearch()
         },
         enabled = state.searchInput.isNotBlank() && !state.isLoading && !state.isDownloading,
-        modifier = modifier
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 8.dp)
     ) {
         Icon(Icons.Outlined.Search, contentDescription = null)
         Spacer(Modifier.width(8.dp))
@@ -269,7 +275,8 @@ internal fun MangaSearchButton(
 internal fun MangaLoginButton(
     state: MangaUiState,
     enableHaptics: Boolean,
-    onOpenBrowser: () -> Unit
+    onOpenBrowser: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -279,7 +286,9 @@ internal fun MangaLoginButton(
             view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onOpenBrowser()
         },
-        enabled = !state.isDownloading
+        enabled = !state.isDownloading,
+        modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 8.dp)
     ) {
         Icon(Icons.Outlined.OpenInBrowser, contentDescription = null)
         Spacer(Modifier.width(8.dp))
