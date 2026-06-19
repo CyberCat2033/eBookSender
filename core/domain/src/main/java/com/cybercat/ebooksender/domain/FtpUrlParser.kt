@@ -19,7 +19,7 @@ object FtpUrlParser {
 
         val host = requireNotNull(uri.host) { "FTP host is missing" }
         val port = if (uri.port > 0) uri.port else 2121
-        val username = uri.userInfo?.substringBefore(':')?.ifBlank { "anonymous" } ?: "anonymous"
+        val username = normalizeUsername(uri.userInfo)
         val rootPath = normalizeFtpRootPath(uri.path.orEmpty())
 
         RemoteDevice(
@@ -43,5 +43,14 @@ object FtpUrlParser {
         }
         val normalizedPath = path.takeIf { it.isNotBlank() }?.let { "/$it" } ?: "/"
         return "ftp://$authorityWithPort$normalizedPath"
+    }
+
+    private fun normalizeUsername(userInfo: String?): String {
+        val username = userInfo?.substringBefore(':')?.trim().orEmpty()
+        return if (username.isBlank() || username.equals("<user>", ignoreCase = true)) {
+            "anonymous"
+        } else {
+            username
+        }
     }
 }
