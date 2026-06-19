@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -38,15 +37,12 @@ import androidx.compose.material.icons.outlined.WifiTethering
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -74,6 +70,7 @@ import com.cybercat.ebooksender.ui.AdaptiveSingleLineText
 import com.cybercat.ebooksender.ui.AnimatedAlertDialog
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
 import com.cybercat.ebooksender.ui.LocalDismissDialog
+import com.cybercat.ebooksender.ui.ProgressOverlayCard
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
@@ -517,8 +514,6 @@ fun UploadProgressOverlay(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val view = LocalView.current
     val currentItem = currentUploadItemId?.let { itemId ->
         queue.firstOrNull { item -> item.id == itemId }
     } ?: queue.firstOrNull { item -> item.status == UploadStatus.Uploading }
@@ -535,125 +530,62 @@ fun UploadProgressOverlay(
     }
     val overallProgress = (uploadedCount + activeProgress) / totalCount
 
-    val animatedProgress by animateFloatAsState(
-        targetValue = overallProgress,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "OverallProgress"
-    )
     val strings = LocalStrings.current
     val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
 
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .widthIn(max = 560.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.primaryContainer,
+    ProgressOverlayCard(
+        title = when {
+            isCanceling -> strings.get("send_upload_canceling")
+            uploadedCount == totalCount -> strings.sendUploadComplete
+            else -> strings.sendSendingStatus
+        },
+        progress = overallProgress,
+        icon = Icons.Outlined.Upload,
+        showSpinner = isCanceling,
+        cancelContentDescription = strings.get("send_upload_cancel"),
+        cancelEnabled = !isCanceling,
+        enableHaptics = enableHaptics,
+        onCancel = onCancel,
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = contentColor,
-        tonalElevation = 8.dp,
-        shadowElevation = 8.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (isCanceling) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = contentColor,
-                        strokeWidth = 3.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.Upload,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = contentColor
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = when {
-                            isCanceling -> strings.get("send_upload_canceling")
-                            uploadedCount == totalCount -> strings.sendUploadComplete
-                            else -> strings.sendSendingStatus
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = contentColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Text(
-                    text = "${(overallProgress * 100).toInt()}%",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor
-                )
-                OutlinedIconButton(
-                    onClick = {
-                        view.performHapticIfAllowed(
-                            context,
-                            enableHaptics,
-                            AppHapticFeedback.Reject
-                        )
-                        onCancel()
-                    },
-                    modifier = Modifier.size(48.dp),
-                    enabled = !isCanceling
-                ) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = strings.get("send_upload_cancel"),
-                        tint = if (isCanceling) {
-                            contentColor.copy(alpha = 0.38f)
-                        } else {
-                            contentColor
-                        }
-                    )
-                }
-            }
-
-            LinearProgressIndicator(
-                progress = { animatedProgress },
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-            )
-
+        progressColor = MaterialTheme.colorScheme.primary,
+        progressTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+        titleStyle = MaterialTheme.typography.titleMedium,
+        titleFontWeight = FontWeight.Bold,
+        verticalSpacing = 8.dp,
+        trailingContent = {
             Text(
-                text = if (failedCount > 0) {
-                    strings.get(
-                        "send_progress_detail_failed",
-                        uploadedCount,
-                        totalCount,
-                        failedCount
-                    )
-                } else {
-                    strings.get("send_progress_detail", uploadedCount, totalCount)
-                },
+                text = "${(overallProgress * 100).toInt()}%",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = contentColor
+            )
+        }
+    ) {
+        Text(
+            text = if (failedCount > 0) {
+                strings.get(
+                    "send_progress_detail_failed",
+                    uploadedCount,
+                    totalCount,
+                    failedCount
+                )
+            } else {
+                strings.get("send_progress_detail", uploadedCount, totalCount)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = contentColor.copy(alpha = 0.8f)
+        )
+        if (currentItem != null) {
+            Text(
+                text = currentItem.title,
                 style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 color = contentColor.copy(alpha = 0.8f)
             )
-            if (currentItem != null) {
-                Text(
-                    text = currentItem.title,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = contentColor.copy(alpha = 0.8f)
-                )
-            }
         }
     }
 }

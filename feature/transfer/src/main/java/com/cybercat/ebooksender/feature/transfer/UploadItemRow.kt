@@ -34,7 +34,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -57,6 +56,7 @@ import com.cybercat.ebooksender.model.AppSettings
 import com.cybercat.ebooksender.model.BookCategory
 import com.cybercat.ebooksender.model.UploadItem
 import com.cybercat.ebooksender.model.UploadStatus
+import com.cybercat.ebooksender.ui.AnimatedLinearProgressIndicator
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
 import com.cybercat.ebooksender.ui.UploadPreviewCover
 import com.cybercat.ebooksender.util.AppHapticFeedback
@@ -253,29 +253,14 @@ fun UploadItemRow(
             )
 
             if (progressHeight > 0.dp) {
-                SmoothProgressIndicator(
+                AnimatedLinearProgressIndicator(
                     progress = progress,
-                    modifier = Modifier.fillMaxWidth().height(progressHeight)
+                    modifier = Modifier.fillMaxWidth().height(progressHeight),
+                    label = "SmoothProgress"
                 )
             }
         }
     }
-}
-
-@Composable
-private fun SmoothProgressIndicator(progress: Float, modifier: Modifier = Modifier) {
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "SmoothProgress"
-    )
-    LinearProgressIndicator(
-        progress = { animatedProgress },
-        modifier = modifier
-    )
 }
 
 @Composable

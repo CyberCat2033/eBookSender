@@ -6,9 +6,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -60,17 +57,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedIconButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -118,6 +111,7 @@ import com.cybercat.ebooksender.ui.AnimatedAlertDialog
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
 import com.cybercat.ebooksender.ui.BitmapCache
 import com.cybercat.ebooksender.ui.LocalDismissDialog
+import com.cybercat.ebooksender.ui.ProgressOverlayCard
 import com.cybercat.ebooksender.ui.loadCachedRemoteBitmap
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
@@ -138,8 +132,6 @@ internal fun MangaDownloadProgressOverlay(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val view = LocalView.current
     val strings = LocalStrings.current
     val titleText = progressInfo?.title ?: strings.mangaDownloadPreparing
     val detailText = progressInfo?.detail ?: when (selectedCount) {
@@ -149,97 +141,22 @@ internal fun MangaDownloadProgressOverlay(
     }
 
     val progress = progressInfo?.progress
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress ?: 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "MangaDownloadProgress"
-    )
     val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
 
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .widthIn(max = 560.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.secondaryContainer,
+    ProgressOverlayCard(
+        title = titleText,
+        subtitle = detailText,
+        progress = progress,
+        icon = Icons.Outlined.Download,
+        cancelContentDescription = strings.get("manga_download_cancel"),
+        enableHaptics = enableHaptics,
+        onCancel = onCancel,
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = contentColor,
-        tonalElevation = 8.dp,
-        shadowElevation = 8.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (progress == null) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = contentColor,
-                        strokeWidth = 3.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.Download,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = contentColor
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = titleText,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = detailText,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                OutlinedIconButton(
-                    onClick = {
-                        view.performHapticIfAllowed(
-                            context,
-                            enableHaptics,
-                            AppHapticFeedback.Reject
-                        )
-                        onCancel()
-                    },
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = strings.get("manga_download_cancel"),
-                        tint = contentColor
-                    )
-                }
-            }
-            if (progress == null) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = contentColor,
-                    trackColor = contentColor.copy(alpha = 0.24f)
-                )
-            } else {
-                LinearProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = contentColor,
-                    trackColor = contentColor.copy(alpha = 0.24f)
-                )
-            }
-        }
-    }
+        progressColor = contentColor,
+        progressTrackColor = contentColor.copy(alpha = 0.24f)
+    )
 }
 
 @Composable

@@ -50,6 +50,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AppTextFields.kt` - shared Material 3 outlined text fields that preserve selection state, support single-line horizontal scrolling, and expose simple string state to feature screens; use for app text inputs before reaching for raw `OutlinedTextField`.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AdaptiveSingleLineText.kt` - shared single-line text helper that keeps the full localized label by default and switches to a compact localized fallback only after actual layout overflow; used for tight Material controls such as navigation labels and action buttons.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AnimatedAlertDialog.kt` - shared animated dialog pattern.
+- `core/ui/src/main/java/com/cybercat/ebooksender/ui/ProgressComponents.kt` - shared Material 3 progress primitives, including `ProgressOverlayCard` for active upload/download/update overlays and `AnimatedLinearProgressIndicator` for spring-smoothed determinate progress.
 - `core/ui/src/main/java/com/cybercat/ebooksender/localization/AppStrings.kt` - string access model.
 - `core/ui/src/main/java/com/cybercat/ebooksender/localization/LocalizationManager.kt` - runtime localization loading.
 - `app/src/main/java/com/cybercat/ebooksender/ui/EBookSenderApp.kt` - Compose app shell and navigation integration.
@@ -144,6 +145,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - Reuse `AnimatedAlertDialog` for Material 3 dialogs with shared fade/scale behavior.
 - Reuse `AppOutlinedTextField` for Material 3 text input so cursor/selection behavior, single-line horizontal scrolling, and placeholders stay consistent across features.
 - Reuse `AdaptiveSingleLineText` for tight one-line labels that need localized compact fallbacks only when the full label does not fit.
+- Reuse `ProgressOverlayCard` and `AnimatedLinearProgressIndicator` for active upload/download/update progress UI before creating feature-local progress cards or spring-smoothed linear indicators.
 - Reuse `core:ui` gesture and haptic helpers for drag selection and touch feedback.
 - Reuse domain helpers for classification, filename/path planning, natural sorting, and sanitization.
 - Reuse repositories and transfer abstractions instead of making direct FTP, Room, DataStore, or network calls from UI code.
@@ -182,6 +184,9 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
   - Use `LocalDismissDialogAfter.current` when an action would repaint large UI, such as applying a language after the dialog closes.
 - Shared status messages: `core/ui/.../StatusComponents.kt`.
   - `StatusMessageHost` preserves the last non-empty text and shows/hides it with fade, vertical expand/shrink, and a small vertical slide.
+- Shared progress UI: `core/ui/.../ProgressComponents.kt`.
+  - `ProgressOverlayCard` centralizes the Material 3 surface, leading spinner/icon, cancel button with reject haptic, 560 dp max width, 14 dp content padding, 24 dp spinner/icon, 48 dp cancel button, and 8 dp elevation used by active upload/download/update overlays.
+  - `AnimatedLinearProgressIndicator` uses a low-stiffness no-bounce spring for determinate progress and falls back to indeterminate Material 3 progress when the progress fraction is unknown.
 - App shell: `app/src/main/java/com/cybercat/ebooksender/ui/EBookSenderApp.kt`.
   - `NavHost` screen transitions use fade-in plus subtle `scaleIn(0.96f)` over 200 ms without a delayed start; exits fade out in 80 ms.
   - `NavigationSuiteScaffold` keeps the default Material 3 adaptive layout except landscape orientation, where the app uses a custom full-height `NavigationRail` so primary navigation stays on the left and each destination receives equal vertical hit area on phones.

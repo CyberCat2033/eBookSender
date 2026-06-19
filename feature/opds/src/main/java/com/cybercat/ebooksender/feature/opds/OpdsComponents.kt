@@ -1,9 +1,6 @@
 package com.cybercat.ebooksender.feature.opds
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -39,17 +36,14 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,6 +65,7 @@ import com.cybercat.ebooksender.data.opds.OpdsSource
 import com.cybercat.ebooksender.localization.AppStrings
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
+import com.cybercat.ebooksender.ui.ProgressOverlayCard
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
 
@@ -400,118 +395,39 @@ internal fun OpdsDownloadProgressOverlay(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val view = LocalView.current
     val strings = LocalStrings.current
     val totalCount = progressInfo?.totalCount?.coerceAtLeast(1) ?: 1
     val completedCount = progressInfo?.completedCount?.coerceIn(0, totalCount) ?: 0
     val progress = progressInfo?.overallProgress
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress ?: 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "OpdsDownloadProgress"
-    )
     val contentColor = MaterialTheme.colorScheme.onTertiaryContainer
     val isCanceling = progressInfo?.isCanceling == true
 
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .widthIn(max = 560.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.tertiaryContainer,
+    ProgressOverlayCard(
+        title = if (isCanceling) {
+            strings.get("opds_download_canceling_title")
+        } else {
+            strings.get("opds_download_progress_title")
+        },
+        subtitle = opdsDownloadProgressDetail(
+            strings = strings,
+            progressInfo = progressInfo,
+            completedCount = completedCount,
+            totalCount = totalCount
+        ),
+        subtitleMaxLines = 1,
+        progress = progress,
+        icon = Icons.Outlined.Download,
+        showSpinner = completedCount == 0 || isCanceling,
+        cancelContentDescription = strings.get("opds_download_cancel"),
+        cancelEnabled = !isCanceling,
+        enableHaptics = enableHaptics,
+        onCancel = onCancel,
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
         contentColor = contentColor,
-        tonalElevation = 8.dp,
-        shadowElevation = 8.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (completedCount == 0 || isCanceling) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = contentColor,
-                        strokeWidth = 3.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.Download,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = contentColor
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = if (isCanceling) {
-                            strings.get("opds_download_canceling_title")
-                        } else {
-                            strings.get("opds_download_progress_title")
-                        },
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = opdsDownloadProgressDetail(
-                            strings = strings,
-                            progressInfo = progressInfo,
-                            completedCount = completedCount,
-                            totalCount = totalCount
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                OutlinedIconButton(
-                    onClick = {
-                        view.performHapticIfAllowed(
-                            context,
-                            enableHaptics,
-                            AppHapticFeedback.Reject
-                        )
-                        onCancel()
-                    },
-                    modifier = Modifier.size(48.dp),
-                    enabled = !isCanceling
-                ) {
-                    Icon(
-                        Icons.Outlined.Close,
-                        contentDescription = strings.get("opds_download_cancel"),
-                        tint = if (isCanceling) {
-                            contentColor.copy(alpha = 0.38f)
-                        } else {
-                            contentColor
-                        }
-                    )
-                }
-            }
-            if (progress == null) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = contentColor,
-                    trackColor = contentColor.copy(alpha = 0.24f)
-                )
-            } else {
-                LinearProgressIndicator(
-                    progress = { animatedProgress },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = contentColor,
-                    trackColor = contentColor.copy(alpha = 0.24f)
-                )
-            }
-        }
-    }
+        progressColor = contentColor,
+        progressTrackColor = contentColor.copy(alpha = 0.24f)
+    )
 }
 
 private fun opdsDownloadProgressDetail(
