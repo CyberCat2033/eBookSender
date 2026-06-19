@@ -2,6 +2,7 @@ package com.cybercat.ebooksender.data.manga
 
 import java.io.File
 import java.io.IOException
+import java.net.HttpURLConnection
 import java.net.URLDecoder
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -55,6 +56,9 @@ class ComxArchiveDownloader @Inject constructor(
 
             val code = connection.responseCode
             sessionManager.captureCookies(connection, downloadUrl)
+            if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+                throw MangaBrowserSessionRefreshRequiredException(chapter.seriesId)
+            }
             if (code !in 200..299) {
                 throw IOException(
                     "Archive HTTP $code${connection.readErrorSnippet().messageSuffix()}"
@@ -130,7 +134,7 @@ class ComxArchiveDownloader @Inject constructor(
         val chapterId = chapter.chapterId.extractReaderChapterId()
             ?: fallbackUrl.extractDownloadChapterId()
             ?: return fallbackUrl
-        val ajaxUrl = ComxMangaAdapter.HomeUrl +
+        val ajaxUrl = ComxMangaAdapter.HOME_URL +
             "engine/ajax/controller.php?mod=api&action=chapters/download"
         val body = listOf(
             "news_id" to newsId.toString(),
@@ -149,7 +153,7 @@ class ComxArchiveDownloader @Inject constructor(
             doOutput = true
             instanceFollowRedirects = true
             setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-            setRequestProperty("Origin", ComxMangaAdapter.HomeUrl.trimEnd('/'))
+            setRequestProperty("Origin", ComxMangaAdapter.HOME_URL.trimEnd('/'))
             setRequestProperty("X-Requested-With", "XMLHttpRequest")
         }
 
@@ -171,6 +175,9 @@ class ComxArchiveDownloader @Inject constructor(
             ) {
                 sessionManager.clearAuthenticatedCookies()
                 throw MangaAuthenticationExpiredException()
+            }
+            if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+                throw MangaBrowserSessionRefreshRequiredException(chapter.seriesId)
             }
             if (code !in 200..299) {
                 throw IOException(

@@ -73,6 +73,7 @@ fun MangaPane(
     onDownloadSubscriptionUpdates: () -> Unit,
     onCloseSubscriptionUpdates: () -> Unit,
     onRefreshAuthState: () -> Unit,
+    onBrowserSessionRefreshFinished: (requestId: Long, success: Boolean) -> Unit,
     onCancelDownload: () -> Unit,
     onMangaLoginModeChanged: (MangaLoginMode) -> Unit,
     onNativeLoginSubmit: (
@@ -313,6 +314,16 @@ fun MangaPane(
                 selectedCount = state.selectedChapterIds.size,
                 enableHaptics = enableHaptics,
                 onCancel = onCancelDownload
+            )
+        }
+
+        state.browserSessionRefreshRequest?.let { request ->
+            MangaSilentBrowserSessionRefresh(
+                request = request,
+                sourceHomeUrl = selectedSource?.homeUrl ?: state.browserUrl,
+                userAgent = selectedSource?.browserUserAgent,
+                modifier = Modifier.align(Alignment.TopStart),
+                onFinished = onBrowserSessionRefreshFinished
             )
         }
     }

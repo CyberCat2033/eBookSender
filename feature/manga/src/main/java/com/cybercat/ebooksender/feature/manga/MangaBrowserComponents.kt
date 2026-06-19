@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -70,6 +71,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 
 internal const val HTML_EXTRACT_DELAY_MILLIS = 900L
+private const val SILENT_SESSION_REFRESH_TIMEOUT_MILLIS = 8_000L
 private const val BROWSER_DIALOG_ENTER_MILLIS = 260
 private const val BROWSER_DIALOG_EXIT_MILLIS = 220
 
@@ -313,6 +315,79 @@ internal fun MangaBrowserCard(
 }
 
 @Composable
+internal fun MangaSilentBrowserSessionRefresh(
+    request: MangaBrowserSessionRefreshRequest,
+    sourceHomeUrl: String,
+    userAgent: String?,
+    modifier: Modifier = Modifier,
+    onFinished: (requestId: Long, success: Boolean) -> Unit
+) {
+    var completed by remember(request.id) { mutableStateOf(false) }
+
+    fun finish(success: Boolean) {
+        if (!completed) {
+            completed = true
+            onFinished(request.id, success)
+        }
+    }
+
+    LaunchedEffect(request.id) {
+        delay(SILENT_SESSION_REFRESH_TIMEOUT_MILLIS)
+        finish(success = false)
+    }
+
+    key(request.id) {
+        AndroidView(
+            modifier = modifier
+                .width(1.dp)
+                .height(1.dp),
+            factory = { context ->
+                WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.loadsImagesAutomatically = false
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    settings.useWideViewPort = true
+                    settings.loadWithOverviewMode = true
+                    userAgent?.takeIf { it.isNotBlank() }?.let { value ->
+                        settings.userAgentString = value
+                    }
+                    CookieManager.getInstance().setAcceptCookie(true)
+                    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView, loadedUrl: String) {
+                            super.onPageFinished(view, loadedUrl)
+                            CookieManager.getInstance().flush()
+                            view.postDelayed(
+                                {
+                                    view.extractHtml { html ->
+                                        if (
+                                            isSilentRefreshComplete(
+                                                url = loadedUrl,
+                                                html = html,
+                                                sourceHomeUrl = sourceHomeUrl
+                                            )
+                                        ) {
+                                            finish(success = true)
+                                        }
+                                    }
+                                },
+                                HTML_EXTRACT_DELAY_MILLIS
+                            )
+                        }
+                    }
+                    loadUrl(request.url)
+                }
+            },
+            update = {},
+            onRelease = { webView ->
+                webView.releaseBrowser()
+            }
+        )
+    }
+}
+
+@Composable
 internal fun MangaLoginMethodDialog(
     enableHaptics: Boolean,
     onDismiss: () -> Unit,
@@ -527,4 +602,26 @@ private fun WebView.releaseBrowser() {
     pauseBrowser()
     removeAllViews()
     destroy()
+}
+
+private fun isSilentRefreshComplete(url: String, html: String, sourceHomeUrl: String): Boolean {
+    val normalizedUrl = url.lowercase()
+    if (normalizedUrl.contains("://com-x.life/_c") ||
+        normalizedUrl.contains("://www.com-x.life/_c") ||
+        normalizedUrl.contains("://com-x.life/_v") ||
+        normalizedUrl.contains("://www.com-x.life/_v")
+    ) {
+        return false
+    }
+
+    if (html.isBlank()) return false
+    if (html.contains("targetUrl") && html.contains("token:")) return false
+    if (
+        html.contains("/_v") &&
+        html.contains("Для доступа к сайту необходимо включить JavaScript")
+    ) {
+        return false
+    }
+
+    return url.startsWith(sourceHomeUrl, ignoreCase = true)
 }

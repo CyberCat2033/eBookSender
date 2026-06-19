@@ -12,17 +12,23 @@ import kotlinx.coroutines.withContext
 class ComxMangaAdapter @Inject constructor(
     private val parser: ComxHtmlParser,
     private val httpClient: ComxMangaHttpClient,
+    private val userAgentProvider: ComxUserAgentProvider
 ) : HtmlMangaSourceAdapter {
-    override val id: String = SourceId
+    override val id: String = SOURCE_ID
     override val title: String = "Com-X"
-    override val homeUrl: String = HomeUrl
-    override val browserUserAgent: String = UserAgent
+    override val homeUrl: String = HOME_URL
+    override val browserUserAgent: String
+        get() = userAgentProvider.userAgent
     override val capabilities: MangaSourceCapabilities =
-        MangaSourceCapabilities(authMode = MangaAuthMode.WebLogin)
+        MangaSourceCapabilities(
+            authMode = MangaAuthMode.WebLogin,
+            maxParallelChapters = 1,
+            maxParallelPages = 3
+        )
     override val nativeLoginConfig: MangaNativeLoginConfig =
         MangaNativeLoginConfig(
-            loginUrl = HomeUrl,
-            showDoNotRemember = true,
+            loginUrl = HOME_URL,
+            showDoNotRemember = true
         )
 
     override fun buildLoginPostBody(
@@ -42,30 +48,33 @@ class ComxMangaAdapter @Inject constructor(
     override suspend fun searchSeries(query: String): List<MangaSeriesSearchResult> =
         withContext(Dispatchers.IO) {
             val searchUrl = buildSearchUrl(query)
-            parser.parseSearchResults(searchUrl, httpClient.fetchText(searchUrl, HomeUrl))
+            parser.parseSearchResults(searchUrl, httpClient.fetchText(searchUrl, HOME_URL))
         }
 
     override suspend fun getSeries(seriesId: String): MangaSeriesDetails =
         withContext(Dispatchers.IO) {
-            val html = httpClient.fetchText(seriesId, HomeUrl)
+            val html = httpClient.fetchText(seriesId, HOME_URL)
             parser.parseSeriesPage(seriesId, html)?.details
                 ?: parser.parseSeriesDetails(seriesId, html)
         }
 
     override suspend fun listChapters(seriesId: String): List<MangaChapter> =
         withContext(Dispatchers.IO) {
-            parser.parseSeriesPage(seriesId, httpClient.fetchText(seriesId, HomeUrl))?.chapters.orEmpty()
+            parser.parseSeriesPage(
+                seriesId,
+                httpClient.fetchText(seriesId, HOME_URL)
+            )?.chapters.orEmpty()
         }
 
     override suspend fun getSeriesPage(seriesId: String): MangaSeriesPage =
         withContext(Dispatchers.IO) {
-            parser.parseSeriesPage(seriesId, httpClient.fetchText(seriesId, HomeUrl))
+            parser.parseSeriesPage(seriesId, httpClient.fetchText(seriesId, HOME_URL))
                 ?: throw IOException("Cannot parse manga series")
         }
 
     override suspend fun getChapterPages(chapterId: String): List<MangaPage> =
         withContext(Dispatchers.IO) {
-            parser.parseChapterPages(chapterId, httpClient.fetchText(chapterId, HomeUrl))
+            parser.parseChapterPages(chapterId, httpClient.fetchText(chapterId, HOME_URL))
         }
 
     override suspend fun downloadPage(page: MangaPage): MangaDownloadedPage =
@@ -74,18 +83,16 @@ class ComxMangaAdapter @Inject constructor(
     override suspend fun downloadChapterArchive(
         chapter: MangaChapter,
         outputFile: File,
-        onProgress: suspend (bytesRead: Long, totalBytes: Long?) -> Unit,
-    ): MangaDownloadedArchive? =
-        httpClient.downloadChapterArchive(chapter, outputFile, onProgress)
+        onProgress: suspend (bytesRead: Long, totalBytes: Long?) -> Unit
+    ): MangaDownloadedArchive? = httpClient.downloadChapterArchive(chapter, outputFile, onProgress)
 
     override fun buildSearchUrl(query: String): String {
         val encoded = URLEncoder.encode(query.trim(), Charsets.UTF_8.name())
             .replace("+", "%20")
-        return "${HomeUrl}search/$encoded"
+        return "${HOME_URL}search/$encoded"
     }
 
-    override fun ownsUrl(url: String): Boolean =
-        parser.ownsUrl(url)
+    override fun ownsUrl(url: String): Boolean = parser.ownsUrl(url)
 
     override fun parseSearchResults(url: String, html: String): List<MangaSeriesSearchResult> =
         parser.parseSearchResults(url, html)
@@ -97,10 +104,7 @@ class ComxMangaAdapter @Inject constructor(
         parser.parseChapterPages(url, html)
 
     companion object {
-        const val SourceId = "comx"
-        const val HomeUrl = "https://com-x.life/"
-        const val UserAgent =
-            "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36"
+        const val SOURCE_ID = "comx"
+        const val HOME_URL = "https://com-x.life/"
     }
 }

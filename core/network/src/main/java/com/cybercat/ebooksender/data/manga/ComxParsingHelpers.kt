@@ -28,7 +28,7 @@ internal fun Element.absImageUrl(): String = firstNonBlank(
 
 internal fun String.isLikelySeriesUrl(): Boolean {
     val lower = lowercase()
-    return lower.startsWith(ComxMangaAdapter.HomeUrl) &&
+    return lower.startsWith(ComxMangaAdapter.HOME_URL) &&
         lower.substringBefore('?').endsWith(".html") &&
         !lower.contains("/user/") &&
         !lower.contains("/index.php") &&

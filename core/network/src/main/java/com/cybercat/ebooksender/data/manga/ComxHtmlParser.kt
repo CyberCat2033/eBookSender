@@ -1,6 +1,5 @@
 package com.cybercat.ebooksender.data.manga
 
-import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,9 +35,7 @@ class ComxHtmlParser @Inject constructor(
 
     fun ensureReadableHtml(html: String) {
         if (isGuardChallenge(html)) {
-            throw IOException(
-                "Com-X session is not ready. Open Login, let the site load, then retry."
-            )
+            throw MangaBrowserSessionRefreshRequiredException(ComxMangaAdapter.HOME_URL)
         }
     }
 

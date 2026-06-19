@@ -501,6 +501,8 @@ private fun AppNavHost(
                         onDownloadSubscriptionUpdates = mangaViewModel::downloadSubscriptionUpdates,
                         onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
                         onRefreshAuthState = mangaViewModel::refreshMangaAuthState,
+                        onBrowserSessionRefreshFinished =
+                            mangaViewModel::finishBrowserSessionRefresh,
                         onCancelDownload = mangaViewModel::cancelMangaDownload,
                         onMangaLoginModeChanged = mangaViewModel::setMangaLoginMode,
                         onNativeLoginSubmit = mangaViewModel::performNativeLogin,

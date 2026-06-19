@@ -50,7 +50,8 @@ class MangaViewModel @Inject constructor(
         mangaState = mutableMangaState,
         scope = viewModelScope,
         showStatus = ::showMangaStatus,
-        refreshAuthState = browserController::refreshAuthState
+        refreshAuthState = browserController::refreshAuthState,
+        requestBrowserSessionRefresh = ::requestBrowserSessionRefresh
     )
     private val downloadController = MangaDownloadController(
         checkMangaSubscriptionsUseCase = checkMangaSubscriptionsUseCase,
@@ -59,8 +60,11 @@ class MangaViewModel @Inject constructor(
         localizationManager = localizationManager,
         mangaState = mutableMangaState,
         scope = viewModelScope,
-        showStatus = ::showMangaStatus
+        showStatus = ::showMangaStatus,
+        requestBrowserSessionRefresh = ::requestBrowserSessionRefresh
     )
+    private var browserSessionRefreshRetry: (() -> Unit)? = null
+    private var browserSessionRefreshRequestId = 0L
 
     private val mangaContentState = combine(
         mangaRepository.downloadedStableKeys,
@@ -237,6 +241,31 @@ class MangaViewModel @Inject constructor(
     fun refreshMangaAuthState(closeBrowserOnAuthenticated: Boolean = false) =
         browserController.refreshAuthState(closeBrowserOnAuthenticated)
 
+    fun finishBrowserSessionRefresh(requestId: Long, success: Boolean) {
+        val snapshot = mutableMangaState.value
+        if (snapshot.browserSessionRefreshRequest?.id != requestId) return
+
+        val retry = browserSessionRefreshRetry
+        browserSessionRefreshRetry = null
+        mutableMangaState.update { state ->
+            state.copy(
+                browserSessionRefreshRequest = null,
+                statusMessage = null,
+                isLoading = if (success) state.isLoading else false,
+                isCheckingSubscriptions = if (success) state.isCheckingSubscriptions else false,
+                errorMessage = if (success) {
+                    null
+                } else {
+                    localizationManager.currentStrings.value
+                        .get("manga_error_browser_session_required")
+                }
+            )
+        }
+        if (success) {
+            retry?.invoke()
+        }
+    }
+
     private fun showMangaStatus(message: String) {
         viewModelScope.launchTemporaryStatus(
             message = message,
@@ -256,6 +285,24 @@ class MangaViewModel @Inject constructor(
                 }
             }
         )
+    }
+
+    private fun requestBrowserSessionRefresh(url: String, retry: () -> Unit) {
+        val requestId = ++browserSessionRefreshRequestId
+        browserSessionRefreshRetry = retry
+        mutableMangaState.update { state ->
+            state.copy(
+                browserSessionRefreshRequest = MangaBrowserSessionRefreshRequest(
+                    id = requestId,
+                    url = url.ifBlank {
+                        mangaRepository.homeUrl(state.selectedSourceId)
+                    }
+                ),
+                statusMessage = localizationManager.currentStrings.value
+                    .get("manga_status_refreshing_session"),
+                errorMessage = null
+            )
+        }
     }
 
     private companion object {

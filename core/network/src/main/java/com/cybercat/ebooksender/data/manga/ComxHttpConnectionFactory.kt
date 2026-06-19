@@ -7,7 +7,8 @@ import javax.inject.Singleton
 
 @Singleton
 class ComxHttpConnectionFactory @Inject constructor(
-    private val sessionManager: ComxMangaSessionManager
+    private val sessionManager: ComxMangaSessionManager,
+    private val userAgentProvider: ComxUserAgentProvider
 ) {
     fun openConnection(
         url: String,
@@ -23,7 +24,7 @@ class ComxHttpConnectionFactory @Inject constructor(
         setRequestProperty("Accept", accept)
         setRequestProperty("Accept-Language", "ru,en;q=0.8")
         setRequestProperty("Referer", referer)
-        setRequestProperty("User-Agent", ComxMangaAdapter.UserAgent)
+        setRequestProperty("User-Agent", userAgentProvider.userAgent)
         sessionManager.cookiesFor(url)?.let { cookie ->
             setRequestProperty("Cookie", cookie)
         }

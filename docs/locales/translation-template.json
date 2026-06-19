@@ -309,6 +309,8 @@
   "manga_status_no_manga_found": "",
   "manga_error_cannot_search": "",
   "manga_error_login_expired": "",
+  "manga_status_refreshing_session": "",
+  "manga_error_browser_session_required": "",
   "manga_error_cannot_open_series": "",
   "manga_error_cannot_update_favorite": "",
   "manga_error_cannot_update_subscription": "",

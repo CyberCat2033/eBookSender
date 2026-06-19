@@ -333,6 +333,8 @@
   "manga_status_no_manga_found": "Манга не найдена",
   "manga_error_cannot_search": "Не удалось выполнить поиск манги",
   "manga_error_login_expired": "Сессия Com-X истекла. Войдите заново.",
+  "manga_status_refreshing_session": "Обновление сессии Com-X",
+  "manga_error_browser_session_required": "Com-X требует браузерную проверку. Откройте Com-X и повторите попытку.",
   "manga_error_cannot_open_series": "Не удалось открыть серию манги",
   "manga_error_cannot_update_favorite": "Не удалось обновить избранное",
   "manga_error_cannot_update_subscription": "Не удалось обновить подписку",

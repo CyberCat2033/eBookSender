@@ -9,12 +9,12 @@ import javax.inject.Singleton
 @Singleton
 class ComxMangaSessionManager @Inject constructor() {
     fun hasAuthenticatedSession(): Boolean =
-        cookiesFor(ComxMangaAdapter.HomeUrl)?.hasAuthenticatedCookies() == true
+        cookiesFor(ComxMangaAdapter.HOME_URL)?.hasAuthenticatedCookies() == true
 
     fun cookiesFor(url: String): String? {
         val cookies = listOfNotNull(
             CookieManager.getInstance().getCookie(url),
-            CookieManager.getInstance().getCookie(ComxMangaAdapter.HomeUrl)
+            CookieManager.getInstance().getCookie(ComxMangaAdapter.HOME_URL)
         )
             .flatMap { cookieHeader -> cookieHeader.split(';') }
             .map { cookie -> cookie.trim() }
@@ -31,14 +31,14 @@ class ComxMangaSessionManager @Inject constructor() {
             .flatten()
             .forEach { cookie ->
                 CookieManager.getInstance().setCookie(url, cookie)
-                CookieManager.getInstance().setCookie(ComxMangaAdapter.HomeUrl, cookie)
+                CookieManager.getInstance().setCookie(ComxMangaAdapter.HOME_URL, cookie)
             }
         CookieManager.getInstance().flush()
     }
 
     fun clearAuthenticatedCookies() {
         AUTH_COOKIE_EXPIRE_HEADERS.forEach { cookie ->
-            CookieManager.getInstance().setCookie(ComxMangaAdapter.HomeUrl, cookie)
+            CookieManager.getInstance().setCookie(ComxMangaAdapter.HOME_URL, cookie)
         }
         CookieManager.getInstance().flush()
     }

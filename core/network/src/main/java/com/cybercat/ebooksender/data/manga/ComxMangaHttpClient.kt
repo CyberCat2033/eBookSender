@@ -32,7 +32,7 @@ class ComxMangaHttpClient @Inject constructor(
         val connection = connectionFactory.openConnection(
             url = page.imageUrl,
             accept = "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-            referer = page.refererUrl ?: ComxMangaAdapter.HomeUrl,
+            referer = page.refererUrl ?: ComxMangaAdapter.HOME_URL,
             connectTimeout = IMAGE_CONNECT_TIMEOUT_MILLIS,
             readTimeout = IMAGE_READ_TIMEOUT_MILLIS
         )
@@ -44,6 +44,11 @@ class ComxMangaHttpClient @Inject constructor(
         try {
             val code = connection.responseCode
             sessionManager.captureCookies(connection, page.imageUrl)
+            if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+                throw MangaBrowserSessionRefreshRequiredException(
+                    page.refererUrl ?: ComxMangaAdapter.HOME_URL
+                )
+            }
             if (code !in 200..299) {
                 throw IOException("Image HTTP $code")
             }
@@ -118,13 +123,11 @@ class ComxMangaHttpClient @Inject constructor(
                     throw IOException("HTTP $code")
                 }
 
-                if (parser.isGuardChallenge(html)) {
+                if (parser.isGuardChallenge(html) || currentUrl.isComxBrowserChallengeUrl()) {
                     if (retryGuard && guardChallengeClient.solveGuardChallenge(html, currentUrl)) {
                         return fetchText(url, referer, retryGuard = false)
                     }
-                    throw IOException(
-                        "Com-X session is not ready. Open Login, let the site load, then retry."
-                    )
+                    throw MangaBrowserSessionRefreshRequiredException(currentUrl)
                 }
 
                 parser.ensureReadableHtml(html)
@@ -204,3 +207,9 @@ class ComxMangaHttpClient @Inject constructor(
         )
     }
 }
+
+private fun String.isComxBrowserChallengeUrl(): Boolean =
+    contains("://com-x.life/_c", ignoreCase = true) ||
+        contains("://www.com-x.life/_c", ignoreCase = true) ||
+        contains("://com-x.life/_v", ignoreCase = true) ||
+        contains("://www.com-x.life/_v", ignoreCase = true)
