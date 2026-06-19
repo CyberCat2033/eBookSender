@@ -71,6 +71,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        appUpdateManager.resumePendingInstall()
+    }
+
     override fun onLowMemory() {
         super.onLowMemory()
         opdsRepository.clearCache()

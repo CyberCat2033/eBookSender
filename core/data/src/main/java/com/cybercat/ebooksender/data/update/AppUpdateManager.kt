@@ -11,6 +11,8 @@ interface AppUpdateManager {
 
     fun installAvailableUpdate()
 
+    fun resumePendingInstall()
+
     fun cancelUpdateDownload()
 
     fun clearStatus()

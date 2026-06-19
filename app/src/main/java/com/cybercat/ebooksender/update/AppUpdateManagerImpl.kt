@@ -52,6 +52,7 @@ class AppUpdateManagerImpl @Inject constructor(
     private var checkJob: Job? = null
     private var installJob: Job? = null
     private var statusClearJob: Job? = null
+    private var pendingInstallPermissionUpdate: AvailableAppUpdate? = null
 
     private val _state = MutableStateFlow(
         AppUpdateState(
@@ -60,6 +61,12 @@ class AppUpdateManagerImpl @Inject constructor(
         )
     )
     override val state: StateFlow<AppUpdateState> = _state.asStateFlow()
+
+    init {
+        applicationScope.launch(Dispatchers.IO) {
+            cleanupInstalledCachedApks()
+        }
+    }
 
     override fun checkForUpdates(trigger: AppUpdateCheckTrigger) {
         if (checkJob?.isActive == true) return
@@ -132,14 +139,23 @@ class AppUpdateManagerImpl @Inject constructor(
             }
             result
                 .onSuccess { (latestUpdate, apk) ->
+                    val installLaunchResult = launchInstaller(latestUpdate, apk)
+                    val status = when (installLaunchResult) {
+                        InstallLaunchResult.InstallerStarted ->
+                            AppUpdateStatus.ReadyToInstall(latestUpdate)
+
+                        InstallLaunchResult.PermissionRequired -> null
+
+                        InstallLaunchResult.InstallUnavailable ->
+                            AppUpdateStatus.Error(AppUpdateErrorReason.InstallUnavailable)
+                    }
                     _state.update {
                         it.withStatus(
-                            status = AppUpdateStatus.ReadyToInstall(latestUpdate),
+                            status = status,
                             isDownloading = false,
                             availableUpdate = latestUpdate
                         ).copy(downloadProgress = null)
                     }
-                    launchInstaller(apk)
                     scheduleStatusClearIfTransient(_state.value.status)
                 }
                 .onFailure { throwable ->
@@ -161,6 +177,24 @@ class AppUpdateManagerImpl @Inject constructor(
                     }
                     scheduleStatusClearIfTransient(_state.value.status)
                 }
+        }
+    }
+
+    override fun resumePendingInstall() {
+        val update = pendingInstallPermissionUpdate ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            return
+        }
+
+        pendingInstallPermissionUpdate = null
+        _state.update {
+            it.withStatus(
+                status = AppUpdateStatus.UpdateAvailable(update),
+                isDownloading = false,
+                availableUpdate = update
+            ).copy(downloadProgress = null)
         }
     }
 
@@ -203,7 +237,10 @@ class AppUpdateManagerImpl @Inject constructor(
             readTimeout = READ_TIMEOUT_MS
             instanceFollowRedirects = true
             requestMethod = "GET"
+            useCaches = false
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("Cache-Control", "no-cache")
+            setRequestProperty("Pragma", "no-cache")
             setRequestProperty("User-Agent", USER_AGENT)
         }
         try {
@@ -339,18 +376,25 @@ class AppUpdateManagerImpl @Inject constructor(
         }
     }
 
-    private fun launchInstaller(apk: File) {
+    private fun launchInstaller(update: AvailableAppUpdate, apk: File): InstallLaunchResult {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !packageManager.canRequestPackageInstalls()
         ) {
+            pendingInstallPermissionUpdate = update
             val settingsIntent = Intent(
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:${context.packageName}")
             ).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(settingsIntent)
-            return
+            return runCatching { context.startActivity(settingsIntent) }
+                .fold(
+                    onSuccess = { InstallLaunchResult.PermissionRequired },
+                    onFailure = {
+                        pendingInstallPermissionUpdate = null
+                        InstallLaunchResult.InstallUnavailable
+                    }
+                )
         }
 
         val uri = FileProvider.getUriForFile(
@@ -363,16 +407,11 @@ class AppUpdateManagerImpl @Inject constructor(
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        runCatching { context.startActivity(installIntent) }
-            .onFailure {
-                _state.update { state ->
-                    state.withStatus(
-                        status = AppUpdateStatus.Error(AppUpdateErrorReason.InstallUnavailable),
-                        isDownloading = false
-                    )
-                }
-                scheduleStatusClearIfTransient(_state.value.status)
-            }
+        return runCatching { context.startActivity(installIntent) }
+            .fold(
+                onSuccess = { InstallLaunchResult.InstallerStarted },
+                onFailure = { InstallLaunchResult.InstallUnavailable }
+            )
     }
 
     private fun cachedApkFile(update: AvailableAppUpdate): File {
@@ -386,6 +425,24 @@ class AppUpdateManagerImpl @Inject constructor(
         val dir = updateCacheDir()
         dir.listFiles().orEmpty().forEach { file ->
             if (file != keep) runCatching { file.deleteRecursively() }
+        }
+    }
+
+    private fun cleanupInstalledCachedApks() {
+        val installedVersionCode = currentVersionCode()
+        updateCacheDir().listFiles().orEmpty().forEach { file ->
+            if (!file.isFile || !file.name.endsWith(".apk", ignoreCase = true)) {
+                runCatching { file.deleteRecursively() }
+                return@forEach
+            }
+
+            val archiveInfo = packageManager.getPackageArchiveInfoCompat(file.absolutePath)
+            val shouldDelete = archiveInfo == null ||
+                archiveInfo.packageName != context.packageName ||
+                archiveInfo.longVersionCodeCompat() <= installedVersionCode
+            if (shouldDelete) {
+                runCatching { file.delete() }
+            }
         }
     }
 
@@ -456,6 +513,12 @@ class AppUpdateManagerImpl @Inject constructor(
         const val APK_MIME_TYPE = "application/vnd.android.package-archive"
         val SHA256_PATTERN = Regex("^[a-fA-F0-9]{64}$")
     }
+}
+
+private enum class InstallLaunchResult {
+    InstallerStarted,
+    PermissionRequired,
+    InstallUnavailable
 }
 
 private class AppUpdateException(val reason: AppUpdateErrorReason, cause: Throwable? = null) :
