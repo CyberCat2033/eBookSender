@@ -7,6 +7,7 @@
   "nav_catalog": "Каталог",
   "nav_web": "Сеть",
   "nav_settings": "Настройки",
+  "nav_settings_compact": "Настр.",
 
   "action_back": "Назад",
   "action_clear": "Очистить",
@@ -96,8 +97,10 @@
   "send_btn_scan_qr": "Скан QR",
   "send_btn_connecting": "Проверка",
   "send_btn_connect": "Подключить",
+  "send_btn_connect_compact": "Подкл.",
   "send_btn_disconnect": "Отключить",
   "send_btn_add_files": "Добавить файлы",
+  "send_btn_add_files_compact": "Добавить",
   "send_btn_upload": "Загрузить",
   "send_uploaded_header": "Загружено",
   "send_uploaded_books_count": "книг: %1$d",

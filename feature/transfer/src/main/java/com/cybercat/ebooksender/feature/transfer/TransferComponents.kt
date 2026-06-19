@@ -70,6 +70,7 @@ import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.model.BookCategory
 import com.cybercat.ebooksender.model.UploadItem
 import com.cybercat.ebooksender.model.UploadStatus
+import com.cybercat.ebooksender.ui.AdaptiveSingleLineText
 import com.cybercat.ebooksender.ui.AnimatedAlertDialog
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
 import com.cybercat.ebooksender.ui.LocalDismissDialog
@@ -250,11 +251,16 @@ fun ConnectionPanel(
                         ) {
                             Icon(Icons.Outlined.WifiTethering, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
-                            Text(
-                                if (state.isConnecting) {
+                            AdaptiveSingleLineText(
+                                text = if (state.isConnecting) {
                                     strings.sendStatusChecking
                                 } else {
                                     strings.sendBtnConnect
+                                },
+                                compactText = if (state.isConnecting) {
+                                    strings.sendStatusChecking
+                                } else {
+                                    strings.sendBtnConnectCompact
                                 }
                             )
                         }
@@ -322,7 +328,10 @@ fun ActionRow(
         ) {
             Icon(Icons.Outlined.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text(strings.sendBtnAddFiles)
+            AdaptiveSingleLineText(
+                text = strings.sendBtnAddFiles,
+                compactText = strings.sendBtnAddFilesCompact
+            )
         }
         Button(
             onClick = {

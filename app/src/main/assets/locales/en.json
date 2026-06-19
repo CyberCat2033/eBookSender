@@ -7,6 +7,7 @@
   "nav_catalog": "Catalog",
   "nav_web": "Web",
   "nav_settings": "Settings",
+  "nav_settings_compact": "Set.",
 
   "action_back": "Back",
   "action_clear": "Clear",
@@ -96,8 +97,10 @@
   "send_btn_scan_qr": "Scan QR",
   "send_btn_connecting": "Checking",
   "send_btn_connect": "Connect",
+  "send_btn_connect_compact": "Connect",
   "send_btn_disconnect": "Disconnect",
   "send_btn_add_files": "Add files",
+  "send_btn_add_files_compact": "Add",
   "send_btn_upload": "Upload",
   "send_uploaded_header": "Uploaded",
   "send_uploaded_books_count": "%1$d books",

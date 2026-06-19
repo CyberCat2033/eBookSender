@@ -46,6 +46,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/theme/Motion.kt` - Material 3 animation curve tokens (e.g. `EmphasizedEasing`).
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AdaptiveLayout.kt` - shared adaptive width class and screen padding tokens for Compact, Medium, and Expanded layouts.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AppTextFields.kt` - shared Material 3 outlined text fields that preserve selection state, support single-line horizontal scrolling, and expose simple string state to feature screens; use for app text inputs before reaching for raw `OutlinedTextField`.
+- `core/ui/src/main/java/com/cybercat/ebooksender/ui/AdaptiveSingleLineText.kt` - shared single-line text helper that keeps the full localized label by default and switches to a compact localized fallback only after actual layout overflow; used for tight Material controls such as navigation labels and action buttons.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AnimatedAlertDialog.kt` - shared animated dialog pattern.
 - `core/ui/src/main/java/com/cybercat/ebooksender/localization/AppStrings.kt` - string access model.
 - `core/ui/src/main/java/com/cybercat/ebooksender/localization/LocalizationManager.kt` - runtime localization loading.
@@ -137,6 +138,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 
 - Reuse `AnimatedAlertDialog` for Material 3 dialogs with shared fade/scale behavior.
 - Reuse `AppOutlinedTextField` for Material 3 text input so cursor/selection behavior, single-line horizontal scrolling, and placeholders stay consistent across features.
+- Reuse `AdaptiveSingleLineText` for tight one-line labels that need localized compact fallbacks only when the full label does not fit.
 - Reuse `core:ui` gesture and haptic helpers for drag selection and touch feedback.
 - Reuse domain helpers for classification, filename/path planning, natural sorting, and sanitization.
 - Reuse repositories and transfer abstractions instead of making direct FTP, Room, DataStore, or network calls from UI code.

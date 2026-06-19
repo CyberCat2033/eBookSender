@@ -23,6 +23,7 @@ class AppStrings(
     val navCatalog: String get() = get("nav_catalog")
     val navWeb: String get() = get("nav_web")
     val navSettings: String get() = get("nav_settings")
+    val navSettingsCompact: String get() = get("nav_settings_compact")
 
     // Settings Screen
     val settingsTitle: String get() = get("settings_title")
@@ -112,8 +113,10 @@ class AppStrings(
     val sendBtnScanQr: String get() = get("send_btn_scan_qr")
     val sendBtnConnecting: String get() = get("send_btn_connecting")
     val sendBtnConnect: String get() = get("send_btn_connect")
+    val sendBtnConnectCompact: String get() = get("send_btn_connect_compact")
     val sendBtnDisconnect: String get() = get("send_btn_disconnect")
     val sendBtnAddFiles: String get() = get("send_btn_add_files")
+    val sendBtnAddFilesCompact: String get() = get("send_btn_add_files_compact")
     val sendBtnUpload: String get() = get("send_btn_upload")
     val sendUploadedHeader: String get() = get("send_uploaded_header")
     val sendUploadedBooksCount: String get() = get("send_uploaded_books_count")

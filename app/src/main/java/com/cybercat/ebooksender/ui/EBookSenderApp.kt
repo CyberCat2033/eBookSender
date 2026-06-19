@@ -162,6 +162,9 @@ fun EBookSenderApp(
                 val destinationLabels = MainDestinations.associateWith { destination ->
                     destination.translatedLabel()
                 }
+                val compactDestinationLabels = MainDestinations.associateWith { destination ->
+                    destination.translatedCompactLabel()
+                }
                 val navigationLayoutType = currentNavigationSuiteLayoutType()
                 val useFullHeightNavigationRail =
                     LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE &&
@@ -204,13 +207,19 @@ fun EBookSenderApp(
                             MainDestinations.forEach { destination ->
                                 val selected = currentRoute == destination.route
                                 val label = destinationLabels.getValue(destination)
+                                val compactLabel = compactDestinationLabels.getValue(destination)
                                 item(
                                     selected = selected,
                                     onClick = {
                                         onNavigationDestinationClick(destination, selected)
                                     },
                                     icon = { Icon(destination.icon, contentDescription = label) },
-                                    label = { Text(label) }
+                                    label = {
+                                        AdaptiveSingleLineText(
+                                            text = label,
+                                            compactText = compactLabel
+                                        )
+                                    }
                                 )
                             }
                         },
@@ -245,11 +254,17 @@ private fun LandscapeNavigationRailScaffold(
             MainDestinations.forEach { destination ->
                 val selected = currentRoute == destination.route
                 val label = destinationLabels.getValue(destination)
+                val compactLabel = destination.translatedCompactLabel()
                 NavigationRailItem(
                     selected = selected,
                     onClick = { onDestinationClick(destination, selected) },
                     icon = { Icon(destination.icon, contentDescription = label) },
-                    label = { Text(label) },
+                    label = {
+                        AdaptiveSingleLineText(
+                            text = label,
+                            compactText = compactLabel
+                        )
+                    },
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -576,6 +591,17 @@ private fun MainDestination.translatedLabel(): String {
         MainDestination.Catalog -> strings.navCatalog
         MainDestination.Opds -> strings.navWeb
         MainDestination.Settings -> strings.navSettings
+    }
+}
+
+@Composable
+private fun MainDestination.translatedCompactLabel(): String {
+    val strings = com.cybercat.ebooksender.localization.LocalStrings.current
+    return when (this) {
+        MainDestination.Send -> strings.navSend
+        MainDestination.Catalog -> strings.navCatalog
+        MainDestination.Opds -> strings.navWeb
+        MainDestination.Settings -> strings.navSettingsCompact
     }
 }
 
