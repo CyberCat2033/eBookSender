@@ -14,8 +14,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -36,8 +36,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -102,8 +102,8 @@ fun SendScreen(
                 emptyList()
             } else {
                 activeQueue.filterNot { item -> item.id in visuallyRemovedActiveItemIds }
+            }
         }
-    }
     val activeRows = remember(activeQueue) { activeQueue.withStableLazyKeys() }
     val activeRowsByKey = remember(activeRows) { activeRows.associateBy(QueueRow::key) }
     val activeMangaQueue = remember(displayedActiveQueue) {
@@ -223,31 +223,34 @@ fun SendScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = adaptiveLayout.screenHorizontalPadding),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = adaptiveLayout.screenHorizontalPadding)
             ) {
                 item {
-                    ConnectionPanel(
-                        state = state,
-                        onFtpInputChanged = onFtpInputChanged,
-                        onConnect = onConnect,
-                        onQrScanned = onQrScanned,
-                        onDisconnect = onDisconnect
-                    )
+                    QueueListItem {
+                        ConnectionPanel(
+                            state = state,
+                            onFtpInputChanged = onFtpInputChanged,
+                            onConnect = onConnect,
+                            onQrScanned = onQrScanned,
+                            onDisconnect = onDisconnect
+                        )
+                    }
                 }
 
                 item {
-                    ActionRow(
-                        canAddFiles = !clearInProgress,
-                        canUpload =
-                            state.isConnected &&
-                                hasUploadableFiles &&
-                                !runtimeState.isTransferActive &&
-                                !clearInProgress,
-                        enableHaptics = state.settings.enableHaptics,
-                        onAddFiles = { picker.launch(pickerMimeTypes) },
-                        onUploadAll = onUploadAll
-                    )
+                    QueueListItem {
+                        ActionRow(
+                            canAddFiles = !clearInProgress,
+                            canUpload =
+                                state.isConnected &&
+                                    hasUploadableFiles &&
+                                    !runtimeState.isTransferActive &&
+                                    !clearInProgress,
+                            enableHaptics = state.settings.enableHaptics,
+                            onAddFiles = { picker.launch(pickerMimeTypes) },
+                            onUploadAll = onUploadAll
+                        )
+                    }
                 }
 
                 if (uploadedQueue.isNotEmpty()) {
@@ -263,40 +266,50 @@ fun SendScreen(
                             ),
                             onRemoved = {}
                         ) {
-                            UploadedSection(
-                                items = uploadedQueue,
-                                enableHaptics = state.settings.enableHaptics
-                            )
+                            QueueListItem {
+                                UploadedSection(
+                                    items = uploadedQueue,
+                                    enableHaptics = state.settings.enableHaptics
+                                )
+                            }
                         }
                     }
                 }
 
                 if (state.errorMessage != null) {
                     item {
-                        StatusMessage(
-                            text = state.errorMessage,
-                            isError = true
+                        QueueListItem {
+                            StatusMessage(
+                                text = state.errorMessage,
+                                isError = true
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    QueueListItem {
+                        StatusMessageHost(
+                            text = if (state.errorMessage == null) state.statusMessage else null
                         )
                     }
                 }
 
                 item {
-                    StatusMessageHost(
-                        text = if (state.errorMessage == null) state.statusMessage else null
-                    )
-                }
-
-                item {
-                    QueueHeader(
-                        count = displayedActiveQueue.size,
-                        canBatchRenameManga = canBatchRenameManga,
-                        onBatchRenameManga = { showMangaBatchEditor = true }
-                    )
+                    QueueListItem {
+                        QueueHeader(
+                            count = displayedActiveQueue.size,
+                            canBatchRenameManga = canBatchRenameManga,
+                            onBatchRenameManga = { showMangaBatchEditor = true }
+                        )
+                    }
                 }
 
                 if (activeQueue.isEmpty()) {
                     item {
-                        EmptyQueue()
+                        QueueListItem {
+                            EmptyQueue()
+                        }
                     }
                 } else {
                     itemsIndexed(
@@ -316,29 +329,31 @@ fun SendScreen(
                             ),
                             onRemoved = { onRemoveItem(item.id) }
                         ) { triggerRemove ->
-                            UploadItemRow(
-                                item = item,
-                                progress = runtimeState.progressFor(item.id, item.progress),
-                                documentsTags = state.documentsTags,
-                                mangaSeriesSuggestions = state.mangaSeriesSuggestions,
-                                enableHaptics = state.settings.enableHaptics,
-                                canRemove = item.id !in runtimeState.activeTransferItemIds,
-                                settings = state.settings,
-                                onRemove = {
-                                    visuallyRemovedActiveItemIds =
-                                        visuallyRemovedActiveItemIds + item.id
-                                    triggerRemove()
-                                },
-                                onCategoryChanged = { category ->
-                                    onCategoryChanged(item.id, category)
-                                },
-                                onDocumentsTagChanged = { tag ->
-                                    onDocumentsTagChanged(item.id, tag)
-                                },
-                                onMangaSeriesChanged = { series ->
-                                    onMangaSeriesChanged(item.id, series)
-                                }
-                            )
+                            QueueListItem {
+                                UploadItemRow(
+                                    item = item,
+                                    progress = runtimeState.progressFor(item.id, item.progress),
+                                    documentsTags = state.documentsTags,
+                                    mangaSeriesSuggestions = state.mangaSeriesSuggestions,
+                                    enableHaptics = state.settings.enableHaptics,
+                                    canRemove = item.id !in runtimeState.activeTransferItemIds,
+                                    settings = state.settings,
+                                    onRemove = {
+                                        visuallyRemovedActiveItemIds =
+                                            visuallyRemovedActiveItemIds + item.id
+                                        triggerRemove()
+                                    },
+                                    onCategoryChanged = { category ->
+                                        onCategoryChanged(item.id, category)
+                                    },
+                                    onDocumentsTagChanged = { tag ->
+                                        onDocumentsTagChanged(item.id, tag)
+                                    },
+                                    onMangaSeriesChanged = { series ->
+                                        onMangaSeriesChanged(item.id, series)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -366,6 +381,14 @@ fun SendScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun QueueListItem(content: @Composable () -> Unit) {
+    Column {
+        content()
+        Spacer(Modifier.height(QueueListItemSpacing))
     }
 }
 
@@ -424,3 +447,5 @@ private fun AnimatedRemovalItem(
         content { visible = false }
     }
 }
+
+private val QueueListItemSpacing = 12.dp
