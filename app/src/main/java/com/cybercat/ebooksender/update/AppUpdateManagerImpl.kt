@@ -196,6 +196,7 @@ class AppUpdateManagerImpl @Inject constructor(
                 availableUpdate = update
             ).copy(downloadProgress = null)
         }
+        installAvailableUpdate()
     }
 
     override fun cancelUpdateDownload() {
@@ -402,8 +403,12 @@ class AppUpdateManagerImpl @Inject constructor(
             "${context.packageName}.fileprovider",
             apk
         )
-        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, APK_MIME_TYPE)
+
+        @Suppress("DEPRECATION")
+        val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            data = uri
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            putExtra(Intent.EXTRA_RETURN_RESULT, false)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -510,7 +515,6 @@ class AppUpdateManagerImpl @Inject constructor(
         const val MAX_MANIFEST_BYTES = 512 * 1024
         const val STATUS_AUTO_CLEAR_MS = 3_000L
         const val USER_AGENT = "eBookSender/${BuildConfig.VERSION_NAME}"
-        const val APK_MIME_TYPE = "application/vnd.android.package-archive"
         val SHA256_PATTERN = Regex("^[a-fA-F0-9]{64}$")
     }
 }

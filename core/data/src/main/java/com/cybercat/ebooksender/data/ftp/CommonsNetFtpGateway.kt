@@ -4,8 +4,10 @@ import com.cybercat.ebooksender.data.network.LocalDeviceNetworkProvider
 import com.cybercat.ebooksender.model.RemoteDevice
 import com.cybercat.ebooksender.model.normalizeFtpRelativeRootPath
 import com.cybercat.ebooksender.model.normalizeFtpRootPath
+import java.io.Closeable
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -56,21 +58,29 @@ class CommonsNetFtpGateway @Inject constructor(
                     }
 
                     val uploadContext = currentCoroutineContext()
+                    val activeDataStream = AtomicReference<Closeable?>()
                     val cancellationHandle = uploadContext[Job]?.invokeOnCompletion { cause ->
                         if (cause is CancellationException) {
+                            runCatching { activeDataStream.get()?.close() }
                             runCatching { client.disconnect() }
                         }
                     }
 
                     try {
-                        ProgressInputStream(
-                            delegate = input,
-                            onProgress = onProgress,
-                            ensureActive = { uploadContext.ensureActive() }
-                        ).use { stream ->
-                            check(client.storeFile(tempPath, stream)) {
-                                "FTP upload failed: ${client.replyString}"
-                            }
+                        val output = client.storeFileStream(tempPath)
+                            ?: error("FTP upload failed: ${client.replyString}")
+                        activeDataStream.set(output)
+                        output.use { stream ->
+                            input.copyToFtp(
+                                output = stream,
+                                onProgress = onProgress,
+                                ensureActive = { uploadContext.ensureActive() }
+                            )
+                        }
+                        uploadContext.ensureActive()
+                        activeDataStream.set(null)
+                        check(client.completePendingCommand()) {
+                            "FTP upload failed: ${client.replyString}"
                         }
                     } catch (error: Throwable) {
                         if (error is CancellationException) throw error
@@ -81,6 +91,9 @@ class CommonsNetFtpGateway @Inject constructor(
                         }
                         throw error
                     } finally {
+                        activeDataStream.getAndSet(null)?.let { stream ->
+                            runCatching { stream.close() }
+                        }
                         cancellationHandle?.dispose()
                     }
 
@@ -291,61 +304,37 @@ class CommonsNetFtpGateway @Inject constructor(
     }
 }
 
-private class ProgressInputStream(
-    private val delegate: InputStream,
-    private val onProgress: ((Long) -> Unit)?,
-    private val ensureActive: () -> Unit
-) : InputStream() {
-    private var bytesRead = 0L
-    private var lastUpdate = 0L
+private fun InputStream.copyToFtp(
+    output: OutputStream,
+    onProgress: ((Long) -> Unit)?,
+    ensureActive: () -> Unit
+) {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var bytesRead = 0L
+    var lastUpdate = 0L
 
-    private fun reportProgress(force: Boolean = false) {
+    fun reportProgress(force: Boolean = false) {
         val progressCallback = onProgress ?: return
         val now = System.currentTimeMillis()
-        if (force || now - lastUpdate >= 100) { // Throttle updates to every 100ms
+        if (force || now - lastUpdate >= 100) {
             progressCallback(bytesRead)
             lastUpdate = now
         }
     }
 
-    override fun read(): Int {
-        ensureActive()
-        val b = delegate.read()
-        ensureActive()
-        if (b != -1) {
-            bytesRead++
+    try {
+        while (true) {
+            ensureActive()
+            val read = read(buffer)
+            ensureActive()
+            if (read <= 0) break
+            output.write(buffer, 0, read)
+            bytesRead += read
             reportProgress()
         }
-        return b
-    }
-
-    override fun read(b: ByteArray): Int = read(b, 0, b.size)
-
-    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        output.flush()
         ensureActive()
-        val result = delegate.read(b, off, len)
-        ensureActive()
-        if (result != -1) {
-            bytesRead += result
-            reportProgress()
-        }
-        return result
-    }
-
-    override fun close() {
-        delegate.close()
+    } finally {
         reportProgress(force = true)
-    }
-
-    override fun available(): Int = delegate.available()
-    override fun skip(n: Long): Long {
-        ensureActive()
-        val result = delegate.skip(n)
-        ensureActive()
-        if (result > 0) {
-            bytesRead += result
-            reportProgress()
-        }
-        return result
     }
 }
