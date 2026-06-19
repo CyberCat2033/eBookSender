@@ -351,6 +351,7 @@ fun OpdsScreen(
 
                             WebContentMode.Opds -> OpdsCatalogContent(
                                 state = state,
+                                startLink = opdsStartLink,
                                 opdsListState = opdsListState,
                                 enableHaptics = enableHaptics,
                                 onOpenSource = onOpenSource,
@@ -404,6 +405,7 @@ fun OpdsScreen(
 @Composable
 private fun OpdsCatalogContent(
     state: OpdsUiState,
+    startLink: OpdsLink?,
     opdsListState: LazyListState,
     enableHaptics: Boolean,
     onOpenSource: (String) -> Unit,
@@ -514,6 +516,10 @@ private fun OpdsCatalogContent(
                     enabled = !state.isLoading && !state.isDownloading,
                     enableHaptics = enableHaptics,
                     onSearchChanged = onSearchChanged,
+                    onClearSearch = {
+                        onSearchChanged("")
+                        startLink?.let(onOpenLink)
+                    },
                     onSearch = onSearch
                 )
             }

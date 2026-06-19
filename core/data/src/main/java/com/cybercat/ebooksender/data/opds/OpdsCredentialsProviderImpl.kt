@@ -12,6 +12,8 @@ class OpdsCredentialsProviderImpl @Inject constructor(
         val requestHost = runCatching { URL(urlStr).host.lowercase() }.getOrNull() ?: return null
         val sourcesList = sourceDao.getAllSources()
         for (source in sourcesList) {
+            if (!source.enabled) continue
+
             val sourceHost = runCatching { URL(source.url).host.lowercase() }.getOrNull()
             if (sourceHost != null && sourceHost == requestHost) {
                 val credentials = credentialsStore.read(source.id)

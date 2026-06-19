@@ -154,7 +154,15 @@ class PocketBookServerUpdateManager @Inject constructor(
     }
 
     fun cancelInstall() {
-        installJob?.cancel()
+        val job = installJob?.takeIf { it.isActive } ?: return
+        _state.update {
+            it.withStatus(
+                status = PocketBookServerUpdateStatus.InstallCanceled,
+                isInstalling = false
+            ).copy(installProgress = null)
+        }
+        scheduleStatusClearIfTransient(_state.value.status)
+        job.cancel()
     }
 
     fun clearStatus() {

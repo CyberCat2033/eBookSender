@@ -21,8 +21,14 @@ internal class MangaSearchController(
     private val requestBrowserSessionRefresh: (url: String, retry: () -> Unit) -> Unit
 ) {
     fun onSearchChanged(value: String) {
+        val previous = mangaState.value
         mangaState.update {
-            it.copy(
+            val state = if (previous.searchInput.isNotBlank() && value.isBlank()) {
+                it.resetSelectedSeries().copy(searchResults = emptyList())
+            } else {
+                it
+            }
+            state.copy(
                 searchInput = value,
                 errorMessage = null,
                 statusMessage = null

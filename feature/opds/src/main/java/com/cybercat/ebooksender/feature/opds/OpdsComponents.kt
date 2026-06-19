@@ -183,6 +183,7 @@ internal fun SearchPanel(
     enabled: Boolean,
     enableHaptics: Boolean,
     onSearchChanged: (String) -> Unit,
+    onClearSearch: () -> Unit,
     onSearch: () -> Unit
 ) {
     val context = LocalContext.current
@@ -214,7 +215,7 @@ internal fun SearchPanel(
                                 enableHaptics,
                                 AppHapticFeedback.Press
                             )
-                            onSearchChanged("")
+                            onClearSearch()
                         }) {
                             Icon(
                                 Icons.Outlined.Close,

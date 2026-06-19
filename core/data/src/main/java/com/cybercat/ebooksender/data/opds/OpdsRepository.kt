@@ -112,8 +112,13 @@ class OpdsRepository @Inject constructor(
     }
 
     suspend fun removeSource(id: String) {
-        sourceDao.deleteById(id)
+        if (id in DEFAULT_SOURCE_IDS) {
+            sourceDao.setEnabled(id, false)
+        } else {
+            sourceDao.deleteById(id)
+        }
         credentialsStore.remove(id)
+        clearCache()
     }
 
     suspend fun loadCatalog(url: String): OpdsCatalog = withContext(Dispatchers.IO) {
@@ -285,5 +290,6 @@ class OpdsRepository @Inject constructor(
                 url = "https://flub.flibusta.is/opds"
             )
         )
+        val DEFAULT_SOURCE_IDS = DEFAULT_SOURCES.mapTo(mutableSetOf()) { it.id }
     }
 }

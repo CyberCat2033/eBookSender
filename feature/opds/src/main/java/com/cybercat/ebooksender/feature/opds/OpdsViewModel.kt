@@ -112,7 +112,13 @@ class OpdsViewModel @Inject constructor(
     }
 
     fun onSearchInputChanged(value: String) {
-        mutableOpdsState.update { it.copy(searchInput = value) }
+        mutableOpdsState.update {
+            it.copy(
+                searchInput = value,
+                errorMessage = null,
+                statusMessage = null
+            )
+        }
     }
 
     fun setWebContentMode(mode: WebContentMode) {
@@ -168,7 +174,26 @@ class OpdsViewModel @Inject constructor(
 
     fun removeOpdsSource(id: String) {
         viewModelScope.launch {
+            val removedSource = opdsRepository.sources.first()
+                .firstOrNull { source -> source.id == id }
             opdsRepository.removeSource(id)
+            if (removedSource != null &&
+                mutableOpdsState.value.belongsToSource(removedSource.url)
+            ) {
+                mutableOpdsState.update { state ->
+                    state.copy(
+                        urlInput = "",
+                        searchInput = "",
+                        currentUrl = null,
+                        catalog = null,
+                        history = emptyList(),
+                        paging = OpdsPagingState(),
+                        isLoading = false,
+                        errorMessage = null,
+                        statusMessage = null
+                    )
+                }
+            }
         }
     }
 
@@ -474,6 +499,12 @@ class OpdsViewModel @Inject constructor(
                 catalog?.title ?: localizationManager.currentStrings.value.opdsHistoryFallbackTitle,
             url = currentUrl
         )
+    }
+
+    private fun OpdsUiState.belongsToSource(sourceUrl: String): Boolean {
+        val root = sourceUrl.trimEnd('/')
+        return currentUrl?.trimEnd('/')?.startsWith(root) == true ||
+            urlInput.trimEnd('/').startsWith(root)
     }
 
     private fun showOpdsStatus(message: String) {

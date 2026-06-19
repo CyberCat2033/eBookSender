@@ -20,6 +20,9 @@ interface OpdsSourceDao {
     @Upsert
     suspend fun upsert(source: OpdsSourceEntity)
 
+    @Query("UPDATE opds_sources SET enabled = :enabled WHERE id = :id")
+    suspend fun setEnabled(id: String, enabled: Boolean)
+
     @Query("DELETE FROM opds_sources WHERE id = :id")
     suspend fun deleteById(id: String)
 }
