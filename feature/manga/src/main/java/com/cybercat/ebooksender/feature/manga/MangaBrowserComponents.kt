@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.OpenInBrowser
-import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -403,8 +401,6 @@ internal fun MangaLoginMethodDialog(
                         .fillMaxHeight(),
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
-                    Icon(Icons.Outlined.OpenInBrowser, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
                     Text(strings.get("manga_login_method_webview"))
                 }
                 Button(
@@ -421,8 +417,6 @@ internal fun MangaLoginMethodDialog(
                         .fillMaxHeight(),
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
-                    Icon(Icons.Outlined.VpnKey, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
                     Text(strings.get("manga_login_method_native"))
                 }
             }
