@@ -8,8 +8,10 @@ import com.cybercat.ebooksender.data.settings.SettingsRepository
 import com.cybercat.ebooksender.data.transfer.UploadQueueManager
 import com.cybercat.ebooksender.data.update.AppUpdateCheckTrigger
 import com.cybercat.ebooksender.data.update.AppUpdateManager
+import com.cybercat.ebooksender.data.update.PocketBookServerUpdateManager
 import com.cybercat.ebooksender.model.AppSettings
 import com.cybercat.ebooksender.model.AppTheme
+import com.cybercat.ebooksender.model.DeviceProfile
 import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.model.normalizeFtpRelativeRootPath
 import com.cybercat.ebooksender.transfer.ConnectionManager
@@ -34,6 +36,7 @@ class SettingsViewModel @Inject constructor(
     private val appCacheManager: SettingsCacheManager,
     private val uploadQueueManager: UploadQueueManager,
     private val appUpdateManager: AppUpdateManager,
+    private val pocketBookServerUpdateManager: PocketBookServerUpdateManager,
     private val logoutUseCase: LogoutUseCase,
     private val deviceFolderRenameUseCase: DeviceFolderRenameUseCase
 ) : ViewModel() {
@@ -78,17 +81,25 @@ class SettingsViewModel @Inject constructor(
 
     val uiState: StateFlow<SettingsUiState> = combine(
         combine(
-            combine(effectiveSettings, appUpdateManager.state) { settings, updateState ->
-                settings to updateState
+            combine(
+                effectiveSettings,
+                appUpdateManager.state,
+                pocketBookServerUpdateManager.state,
+                connectionManager.connectedDevice
+            ) { settings, updateState, pocketBookServerUpdateState, connectedDevice ->
+                SettingsUiState(
+                    settings = settings,
+                    appUpdateState = updateState,
+                    pocketBookServerUpdateState = pocketBookServerUpdateState,
+                    isPocketBookConnected = connectedDevice?.profile == DeviceProfile.PocketBook
+                )
             },
             _statusMessage,
             _pendingRename,
             localizationManager.availableLocales,
             _activeFolderRename
-        ) { (settings, appUpdateState), status, pending, locales, activeFolderRename ->
-            SettingsUiState(
-                settings = settings,
-                appUpdateState = appUpdateState,
+        ) { state, status, pending, locales, activeFolderRename ->
+            state.copy(
                 settingsStatusMessage = status,
                 pendingRename = pending,
                 activeFolderRename = activeFolderRename,
@@ -338,7 +349,8 @@ class SettingsViewModel @Inject constructor(
     fun clearDownloadCache() {
         viewModelScope.launch {
             val totalBytes = appCacheManager.clearDownloadCache() +
-                appUpdateManager.clearUpdateCache()
+                appUpdateManager.clearUpdateCache() +
+                pocketBookServerUpdateManager.clearUpdateCache()
             val removedQueueItems = uploadQueueManager.removeDownloadCacheItems()
 
             if (totalBytes == 0L && removedQueueItems == 0) {
@@ -365,6 +377,14 @@ class SettingsViewModel @Inject constructor(
 
     fun clearUpdateStatus() {
         appUpdateManager.clearStatus()
+    }
+
+    fun checkPocketBookServerUpdates() {
+        pocketBookServerUpdateManager.checkForUpdates()
+    }
+
+    fun installPocketBookServerUpdate() {
+        pocketBookServerUpdateManager.installAvailableUpdate()
     }
 
     fun logoutAll() {

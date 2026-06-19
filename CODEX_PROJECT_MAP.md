@@ -11,13 +11,13 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 ## Gradle modules
 
 - `:app` - Android application entry point, DI setup, navigation shell, metadata extraction, transfer and manga foreground services, persisted queue implementation, app resources, manifest, and launcher assets.
-- `:core:model` - shared app models such as upload items, settings, device catalog, categories, `RemoteDevice`, and `DeviceProfile`.
+- `:core:model` - shared app models such as upload items, settings, device catalog, categories, `RemoteDevice`, `DeviceProfile`, and app/PocketBook-server update manifests.
 - `:core:common` - common utilities, constants, formatting helpers, coroutine helpers, result helpers, and small shared primitives.
 - `:core:domain` - pure domain logic: FTP URL parsing, file classification, path planning, filename sanitizing, book formats, and natural sorting.
 - `:core:database` - Room database, DAOs, entities, and type converters.
 - `:core:datastore` - DataStore-backed settings repository.
 - `:core:network` - OPDS parsing/models/download formats and manga source adapters such as Com-X.
-- `:core:data` - repositories and data orchestration for catalog, FTP, OPDS, manga, transfer, connection management, automatic device profile detection, profile-aware library refresh, and PocketBook-specific control.
+- `:core:data` - repositories and data orchestration for catalog, FTP, OPDS, manga, transfer, connection management, automatic device profile detection, profile-aware library refresh, PocketBook-specific control, and PocketBook `pb-ftp` server updates.
 - `:core:ui` - shared Compose UI, Material 3 theme, animated dialogs, status components, remote covers, bitmap cache, localization, gestures, and haptics.
 - `:feature:catalog` - device catalog screen, state, components (split into `CatalogComponents.kt`, `CatalogConstants.kt`, `CatalogExtensions.kt`), selection, deletion, and catalog ViewModel.
 - `:feature:manga` - manga pane, state, components (split into `MangaComponents.kt`, `MangaSearchComponents.kt`, `MangaBrowserComponents.kt`, `MangaSubscriptionUpdatesDialog.kt`), selection behavior, hidden WebView browser-session refresh, and manga ViewModel.
@@ -35,7 +35,9 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `.github/workflows/ci.yml` - CI: builds debug APK and runs unit tests on every push to `main` and every PR.
 - `.github/workflows/release.yml` - Release: on a pushed `v*` tag, validates a leading-`v` SemVer tag, runs unit tests, decodes `KEYSTORE_BASE64` into `release.keystore`, builds signed release APKs with `-PenableAbiSplits=true`, renames them to `eBookSender-v<version>-universal.apk`, `eBookSender-v<version>-arm64-v8a.apk`, and `eBookSender-v<version>-armeabi-v7a.apk`, publishes them to GitHub Releases, then deploys `updates/latest.json` to GitHub Pages for in-app update checks. Requires repo secrets `KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`; requires GitHub Pages configured for GitHub Actions deployment.
 - `core/model/src/main/java/com/cybercat/ebooksender/model/update/AppUpdateManifest.kt` - serializable update manifest and artifact models consumed from the GitHub Pages `updates/latest.json` endpoint.
+- `core/model/src/main/java/com/cybercat/ebooksender/model/update/PocketBookServerUpdateManifest.kt` - serializable PocketBook `pb-ftp` server update manifest, artifact, and installed-version models consumed from the `pb-ftp` GitHub Pages manifest and `/version` endpoint.
 - `core/data/src/main/java/com/cybercat/ebooksender/data/update/AppUpdateManager.kt` - app update boundary shared by app and settings UI; exposes update check/install state, manual/app-open triggers, installer-permission resume handling, and cache cleanup.
+- `core/data/src/main/java/com/cybercat/ebooksender/data/update/PocketBookServerUpdateManager.kt` - PocketBook `pb-ftp` server updater; requires a connected PocketBook profile, reads installed version through the local control API, validates the GitHub Pages manifest and fixed `.app`/`.version` install paths, downloads/checksums launcher/version artifacts, uploads them via the FTP gateway, supports cancellation, progress state, and cache cleanup.
 - `app/src/main/java/com/cybercat/ebooksender/` and matching `core/*` + `feature/*` package trees - primary source roots after the package rename from `com.cybercat.pocketbooksender`.
 - `core/model/src/main/java/com/cybercat/ebooksender/model/AppSettings.kt` - persisted user settings model, shared FTP mount/relative-root path normalization, folder/template preferences, theme/haptics, localization, and local-device VPN-bypass behavior.
 - `core/model/src/main/java/com/cybercat/ebooksender/model/RemoteDevice.kt` - connected remote FTP device model, detected `DeviceProfile`, profile-derived capabilities, working-root path, and display FTP URL.
@@ -55,6 +57,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `core/ui/src/main/java/com/cybercat/ebooksender/localization/LocalizationManager.kt` - runtime localization loading.
 - `app/src/main/java/com/cybercat/ebooksender/ui/EBookSenderApp.kt` - Compose app shell and navigation integration.
 - `app/src/main/java/com/cybercat/ebooksender/ui/AppUpdateDialog.kt` - global Material 3 dialog shown when the app-open or manual update check finds a newer version.
+- `app/src/main/java/com/cybercat/ebooksender/ui/PocketBookServerUpdateProgressOverlay.kt` - global bottom progress overlay for active PocketBook `pb-ftp` server installs; reuses `ProgressOverlayCard` and is positioned with the app update download overlay.
 - `app/src/main/java/com/cybercat/ebooksender/EBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
 - `app/src/main/java/com/cybercat/ebooksender/di/AppCoroutineModule.kt` - Hilt module that provides the shared application-lifetime coroutine scope and exception handler for singleton background managers and repositories.
 - `app/src/main/java/com/cybercat/ebooksender/di/AppUpdateModule.kt` - Hilt binding from the shared `AppUpdateManager` contract to the app-level updater implementation.

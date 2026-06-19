@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cybercat.ebooksender.data.opds.OpdsRepository
 import com.cybercat.ebooksender.data.update.AppUpdateCheckTrigger
 import com.cybercat.ebooksender.data.update.AppUpdateManager
+import com.cybercat.ebooksender.data.update.PocketBookServerUpdateManager
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.localization.LocalizationManager
 import com.cybercat.ebooksender.ui.EBookSenderApp
@@ -35,6 +36,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appUpdateManager: AppUpdateManager
 
+    @Inject
+    lateinit var pocketBookServerUpdateManager: PocketBookServerUpdateManager
+
     private var sharedUris by mutableStateOf<List<Uri>>(emptyList())
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -51,13 +55,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             val currentStrings by localizationManager.currentStrings.collectAsStateWithLifecycle()
             val appUpdateState by appUpdateManager.state.collectAsStateWithLifecycle()
+            val pocketBookServerUpdateState by
+                pocketBookServerUpdateManager.state.collectAsStateWithLifecycle()
             CompositionLocalProvider(LocalStrings provides currentStrings) {
                 EBookSenderApp(
                     sharedUris = sharedUris,
                     onSharedUrisConsumed = { sharedUris = emptyList() },
                     appUpdateState = appUpdateState,
                     onInstallUpdate = appUpdateManager::installAvailableUpdate,
-                    onCancelUpdateDownload = appUpdateManager::cancelUpdateDownload
+                    onCancelUpdateDownload = appUpdateManager::cancelUpdateDownload,
+                    pocketBookServerUpdateState = pocketBookServerUpdateState,
+                    onCancelPocketBookServerUpdate =
+                        pocketBookServerUpdateManager::cancelInstall
                 )
             }
         }

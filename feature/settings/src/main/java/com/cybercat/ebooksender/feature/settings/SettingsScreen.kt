@@ -51,6 +51,8 @@ fun SettingsScreen(
     onMangaLoginModeChanged: (MangaLoginMode) -> Unit,
     onCheckForUpdates: () -> Unit,
     onInstallUpdate: () -> Unit,
+    onCheckPocketBookServerUpdates: () -> Unit,
+    onInstallPocketBookServerUpdate: () -> Unit,
     onClearUpdateStatus: () -> Unit,
     onClearDownloadCache: () -> Unit,
     onClearStatusMessage: () -> Unit,
@@ -76,6 +78,7 @@ fun SettingsScreen(
     val hadPendingRename = remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showMangaLoginModeDialog by remember { mutableStateOf(false) }
+    var dismissedPocketBookServerUpdateEventId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(state.pendingRename) {
         val hasPending = state.pendingRename != null
@@ -160,6 +163,22 @@ fun SettingsScreen(
         )
     }
 
+    val pocketBookServerStatus = state.pocketBookServerUpdateState.status
+    if (pocketBookServerStatus != null &&
+        dismissedPocketBookServerUpdateEventId !=
+        state.pocketBookServerUpdateState.statusEventId
+    ) {
+        PocketBookServerUpdateDialog(
+            status = pocketBookServerStatus,
+            enableHaptics = state.settings.enableHaptics,
+            onInstall = onInstallPocketBookServerUpdate,
+            onDismiss = {
+                dismissedPocketBookServerUpdateEventId =
+                    state.pocketBookServerUpdateState.statusEventId
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             val containerColor = MaterialTheme.colorScheme.background
@@ -230,6 +249,8 @@ fun SettingsScreen(
                     state = state,
                     onCheckForUpdates = onCheckForUpdates,
                     onInstallUpdate = onInstallUpdate,
+                    onCheckPocketBookServerUpdates = onCheckPocketBookServerUpdates,
+                    onInstallPocketBookServerUpdate = onInstallPocketBookServerUpdate,
                     onClearDownloadCache = onClearDownloadCache,
                     onLogoutAll = onLogoutAll,
                     onResetSettings = onResetSettings,

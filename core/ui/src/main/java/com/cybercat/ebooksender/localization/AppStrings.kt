@@ -123,6 +123,34 @@ class AppStrings(
     val updateErrorSignatureMismatch: String get() = get("update_error_signature_mismatch")
     val updateErrorInstallUnavailable: String get() = get("update_error_install_unavailable")
     val updateErrorUnknown: String get() = get("update_error_unknown")
+    val pbServerCurrentVersionUnknown: String get() = get("pb_server_current_version_unknown")
+    val pbServerCheckUpdates: String get() = get("pb_server_check_updates")
+    val pbServerCheckingUpdates: String get() = get("pb_server_checking_updates")
+    val pbServerConnectRequired: String get() = get("pb_server_connect_required")
+    val pbServerNoUpdate: String get() = get("pb_server_no_update")
+    val pbServerInstallingUpdate: String get() = get("pb_server_installing_update")
+    val pbServerUpdatePreparing: String get() = get("pb_server_update_preparing")
+    val pbServerUpdateDownloading: String get() = get("pb_server_update_downloading")
+    val pbServerUpdateUploading: String get() = get("pb_server_update_uploading")
+    val pbServerUpdateCancel: String get() = get("pb_server_update_cancel")
+    val pbServerUpdateCanceled: String get() = get("pb_server_update_canceled")
+    val pbServerUpdateErrorNetwork: String get() = get("pb_server_update_error_network")
+    val pbServerUpdateErrorInvalidManifest: String get() = get(
+        "pb_server_update_error_invalid_manifest"
+    )
+    val pbServerUpdateErrorMissingArtifacts: String get() = get(
+        "pb_server_update_error_missing_artifacts"
+    )
+    val pbServerUpdateErrorDownloadFailed: String get() = get(
+        "pb_server_update_error_download_failed"
+    )
+    val pbServerUpdateErrorChecksumMismatch: String get() = get(
+        "pb_server_update_error_checksum_mismatch"
+    )
+    val pbServerUpdateErrorUploadFailed: String get() = get(
+        "pb_server_update_error_upload_failed"
+    )
+    val pbServerUpdateErrorUnknown: String get() = get("pb_server_update_error_unknown")
     val categoryBooks: String get() = get("category_books")
     val categoryDocuments: String get() = get("category_documents")
     val categoryManga: String get() = get("category_manga")

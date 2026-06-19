@@ -13,8 +13,10 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,6 +64,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.cybercat.ebooksender.data.update.AppUpdateState
+import com.cybercat.ebooksender.data.update.PocketBookServerUpdateState
 import com.cybercat.ebooksender.feature.catalog.CatalogScreen
 import com.cybercat.ebooksender.feature.catalog.CatalogViewModel
 import com.cybercat.ebooksender.feature.manga.MangaViewModel
@@ -112,6 +115,8 @@ fun EBookSenderApp(
     appUpdateState: AppUpdateState,
     onInstallUpdate: () -> Unit,
     onCancelUpdateDownload: () -> Unit,
+    pocketBookServerUpdateState: PocketBookServerUpdateState,
+    onCancelPocketBookServerUpdate: () -> Unit,
     rootViewModel: RootViewModel = hiltViewModel()
 ) {
     val settings by rootViewModel.settings.collectAsStateWithLifecycle()
@@ -204,19 +209,35 @@ fun EBookSenderApp(
                             modifier = Modifier.fillMaxSize()
                         )
 
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = appUpdateState.isDownloading,
-                            enter = fadeIn() + slideInVertically { height -> height },
-                            exit = fadeOut() + slideOutVertically { height -> height },
+                        Column(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(UPDATE_PROGRESS_OVERLAY_MARGIN)
+                                .padding(UPDATE_PROGRESS_OVERLAY_MARGIN),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            AppUpdateProgressOverlay(
-                                progress = appUpdateState.downloadProgress,
-                                enableHaptics = settings.enableHaptics,
-                                onCancel = onCancelUpdateDownload
-                            )
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = appUpdateState.isDownloading,
+                                enter = fadeIn() + slideInVertically { height -> height },
+                                exit = fadeOut() + slideOutVertically { height -> height }
+                            ) {
+                                AppUpdateProgressOverlay(
+                                    progress = appUpdateState.downloadProgress,
+                                    enableHaptics = settings.enableHaptics,
+                                    onCancel = onCancelUpdateDownload
+                                )
+                            }
+                            androidx.compose.animation.AnimatedVisibility(
+                                visible = pocketBookServerUpdateState.isInstalling,
+                                enter = fadeIn() + slideInVertically { height -> height },
+                                exit = fadeOut() + slideOutVertically { height -> height }
+                            ) {
+                                PocketBookServerUpdateProgressOverlay(
+                                    progress = pocketBookServerUpdateState.installProgress,
+                                    enableHaptics = settings.enableHaptics,
+                                    onCancel = onCancelPocketBookServerUpdate
+                                )
+                            }
                         }
                     }
                 }
@@ -608,6 +629,10 @@ private fun AppNavHost(
                 onMangaLoginModeChanged = settingsViewModel::setMangaLoginMode,
                 onCheckForUpdates = settingsViewModel::checkForUpdates,
                 onInstallUpdate = settingsViewModel::installUpdate,
+                onCheckPocketBookServerUpdates =
+                    settingsViewModel::checkPocketBookServerUpdates,
+                onInstallPocketBookServerUpdate =
+                    settingsViewModel::installPocketBookServerUpdate,
                 onClearUpdateStatus = settingsViewModel::clearUpdateStatus,
                 onClearDownloadCache = settingsViewModel::clearDownloadCache,
                 onClearStatusMessage = settingsViewModel::clearStatusMessage,

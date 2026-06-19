@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.cybercat.ebooksender.data.update.AppUpdateErrorReason
 import com.cybercat.ebooksender.data.update.AppUpdateStatus
+import com.cybercat.ebooksender.data.update.PocketBookServerUpdateErrorReason
+import com.cybercat.ebooksender.data.update.PocketBookServerUpdateStatus
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
@@ -48,6 +50,8 @@ internal fun MaintenanceSettingsSection(
     state: SettingsUiState,
     onCheckForUpdates: () -> Unit,
     onInstallUpdate: () -> Unit,
+    onCheckPocketBookServerUpdates: () -> Unit,
+    onInstallPocketBookServerUpdate: () -> Unit,
     onClearDownloadCache: () -> Unit,
     onLogoutAll: () -> Unit,
     onResetSettings: () -> Unit,
@@ -127,6 +131,86 @@ internal fun MaintenanceSettingsSection(
                     text = updateStatusText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Text(
+                text = state.pocketBookServerUpdateState.installedVersion?.let { version ->
+                    strings.get(
+                        "pb_server_current_version",
+                        version.versionName,
+                        version.versionCode
+                    )
+                } ?: strings.pbServerCurrentVersionUnknown,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Button(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        state.settings.enableHaptics,
+                        AppHapticFeedback.Confirm
+                    )
+                    onCheckPocketBookServerUpdates()
+                },
+                enabled = state.isPocketBookConnected &&
+                    !state.pocketBookServerUpdateState.isChecking &&
+                    !state.pocketBookServerUpdateState.isInstalling,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Outlined.SystemUpdate, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    when {
+                        state.pocketBookServerUpdateState.isChecking ->
+                            strings.pbServerCheckingUpdates
+
+                        state.isPocketBookConnected -> strings.pbServerCheckUpdates
+
+                        else -> strings.pbServerConnectRequired
+                    }
+                )
+            }
+
+            state.pocketBookServerUpdateState.availableUpdate?.let { update ->
+                Button(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            state.settings.enableHaptics,
+                            AppHapticFeedback.Confirm
+                        )
+                        onInstallPocketBookServerUpdate()
+                    },
+                    enabled = state.isPocketBookConnected &&
+                        !state.pocketBookServerUpdateState.isChecking &&
+                        !state.pocketBookServerUpdateState.isInstalling,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Outlined.Download, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(strings.get("pb_server_install_update", update.versionName))
+                }
+            }
+
+            val pocketBookServerStatusText =
+                state.pocketBookServerUpdateState.status?.toSettingsText(strings)
+            if (pocketBookServerStatusText != null) {
+                Text(
+                    text = pocketBookServerStatusText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (
+                        state.pocketBookServerUpdateState.status
+                            is PocketBookServerUpdateStatus.Error
+                    ) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -275,4 +359,50 @@ private fun AppUpdateErrorReason.toSettingsText(
     AppUpdateErrorReason.SignatureMismatch -> strings.updateErrorSignatureMismatch
     AppUpdateErrorReason.InstallUnavailable -> strings.updateErrorInstallUnavailable
     AppUpdateErrorReason.Unknown -> strings.updateErrorUnknown
+}
+
+private fun PocketBookServerUpdateStatus.toSettingsText(
+    strings: com.cybercat.ebooksender.localization.AppStrings
+): String? = when (this) {
+    PocketBookServerUpdateStatus.NoPocketBookConnected -> strings.pbServerConnectRequired
+
+    PocketBookServerUpdateStatus.NoUpdateAvailable -> strings.pbServerNoUpdate
+
+    is PocketBookServerUpdateStatus.UpdateAvailable ->
+        strings.get("pb_server_update_available", update.versionName)
+
+    is PocketBookServerUpdateStatus.InstalledVersionUnknown ->
+        strings.get("pb_server_update_available_unknown", update.versionName)
+
+    is PocketBookServerUpdateStatus.Installing -> strings.pbServerInstallingUpdate
+
+    is PocketBookServerUpdateStatus.Installed ->
+        strings.get("pb_server_update_installed", version.versionName)
+
+    PocketBookServerUpdateStatus.InstallCanceled -> strings.pbServerUpdateCanceled
+
+    is PocketBookServerUpdateStatus.Error -> reason.toSettingsText(strings)
+}
+
+private fun PocketBookServerUpdateErrorReason.toSettingsText(
+    strings: com.cybercat.ebooksender.localization.AppStrings
+): String = when (this) {
+    PocketBookServerUpdateErrorReason.Network -> strings.pbServerUpdateErrorNetwork
+
+    PocketBookServerUpdateErrorReason.InvalidManifest ->
+        strings.pbServerUpdateErrorInvalidManifest
+
+    PocketBookServerUpdateErrorReason.MissingArtifacts ->
+        strings.pbServerUpdateErrorMissingArtifacts
+
+    PocketBookServerUpdateErrorReason.DownloadFailed ->
+        strings.pbServerUpdateErrorDownloadFailed
+
+    PocketBookServerUpdateErrorReason.ChecksumMismatch ->
+        strings.pbServerUpdateErrorChecksumMismatch
+
+    PocketBookServerUpdateErrorReason.UploadFailed ->
+        strings.pbServerUpdateErrorUploadFailed
+
+    PocketBookServerUpdateErrorReason.Unknown -> strings.pbServerUpdateErrorUnknown
 }
