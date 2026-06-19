@@ -6,6 +6,8 @@ import com.cybercat.ebooksender.data.settings.DeviceFolderRenameUseCase
 import com.cybercat.ebooksender.data.settings.LogoutUseCase
 import com.cybercat.ebooksender.data.settings.SettingsRepository
 import com.cybercat.ebooksender.data.transfer.UploadQueueManager
+import com.cybercat.ebooksender.data.update.AppUpdateCheckTrigger
+import com.cybercat.ebooksender.data.update.AppUpdateManager
 import com.cybercat.ebooksender.model.AppSettings
 import com.cybercat.ebooksender.model.AppTheme
 import com.cybercat.ebooksender.model.MangaLoginMode
@@ -31,6 +33,7 @@ class SettingsViewModel @Inject constructor(
     private val localizationManager: com.cybercat.ebooksender.localization.LocalizationManager,
     private val appCacheManager: SettingsCacheManager,
     private val uploadQueueManager: UploadQueueManager,
+    private val appUpdateManager: AppUpdateManager,
     private val logoutUseCase: LogoutUseCase,
     private val deviceFolderRenameUseCase: DeviceFolderRenameUseCase
 ) : ViewModel() {
@@ -75,14 +78,17 @@ class SettingsViewModel @Inject constructor(
 
     val uiState: StateFlow<SettingsUiState> = combine(
         combine(
-            effectiveSettings,
+            combine(effectiveSettings, appUpdateManager.state) { settings, updateState ->
+                settings to updateState
+            },
             _statusMessage,
             _pendingRename,
             localizationManager.availableLocales,
             _activeFolderRename
-        ) { settings, status, pending, locales, activeFolderRename ->
+        ) { (settings, appUpdateState), status, pending, locales, activeFolderRename ->
             SettingsUiState(
                 settings = settings,
+                appUpdateState = appUpdateState,
                 settingsStatusMessage = status,
                 pendingRename = pending,
                 activeFolderRename = activeFolderRename,
@@ -331,7 +337,8 @@ class SettingsViewModel @Inject constructor(
 
     fun clearDownloadCache() {
         viewModelScope.launch {
-            val totalBytes = appCacheManager.clearDownloadCache()
+            val totalBytes = appCacheManager.clearDownloadCache() +
+                appUpdateManager.clearUpdateCache()
             val removedQueueItems = uploadQueueManager.removeDownloadCacheItems()
 
             if (totalBytes == 0L && removedQueueItems == 0) {
@@ -346,6 +353,18 @@ class SettingsViewModel @Inject constructor(
             )
             showTemporaryStatus(message)
         }
+    }
+
+    fun checkForUpdates() {
+        appUpdateManager.checkForUpdates(AppUpdateCheckTrigger.Manual)
+    }
+
+    fun installUpdate() {
+        appUpdateManager.installAvailableUpdate()
+    }
+
+    fun clearUpdateStatus() {
+        appUpdateManager.clearStatus()
     }
 
     fun logoutAll() {

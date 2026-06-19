@@ -24,10 +24,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.cybercat.ebooksender.data.update.AppUpdateStatus
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.model.AppTheme
 import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.ui.LocalAdaptiveLayoutInfo
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +49,9 @@ fun SettingsScreen(
     onHapticFeedbackEnabledChanged: (Boolean) -> Unit,
     onBypassVpnForLocalConnectionsChanged: (Boolean) -> Unit,
     onMangaLoginModeChanged: (MangaLoginMode) -> Unit,
+    onCheckForUpdates: () -> Unit,
+    onInstallUpdate: () -> Unit,
+    onClearUpdateStatus: () -> Unit,
     onClearDownloadCache: () -> Unit,
     onClearStatusMessage: () -> Unit,
     onThemeChanged: (AppTheme) -> Unit,
@@ -80,6 +85,20 @@ fun SettingsScreen(
         }
         if (hadPendingRename.value && !hasPending) folderFieldResetKey++
         hadPendingRename.value = hasPending
+    }
+
+    LaunchedEffect(state.appUpdateState.statusEventId) {
+        when (state.appUpdateState.status) {
+            AppUpdateStatus.NoUpdateAvailable,
+            AppUpdateStatus.DownloadCanceled,
+            is AppUpdateStatus.Error,
+            is AppUpdateStatus.ReadyToInstall -> {
+                delay(3000)
+                onClearUpdateStatus()
+            }
+
+            else -> Unit
+        }
     }
 
     fun updateFocusedNamingTemplateSlot(slot: NamingTemplateSlot, isFocused: Boolean) {
@@ -209,6 +228,8 @@ fun SettingsScreen(
 
                 MaintenanceSettingsSection(
                     state = state,
+                    onCheckForUpdates = onCheckForUpdates,
+                    onInstallUpdate = onInstallUpdate,
                     onClearDownloadCache = onClearDownloadCache,
                     onLogoutAll = onLogoutAll,
                     onResetSettings = onResetSettings,

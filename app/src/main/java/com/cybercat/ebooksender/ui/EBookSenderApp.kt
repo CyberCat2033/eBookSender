@@ -10,6 +10,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -43,6 +46,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
@@ -57,6 +61,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.cybercat.ebooksender.data.update.AppUpdateState
 import com.cybercat.ebooksender.feature.catalog.CatalogScreen
 import com.cybercat.ebooksender.feature.catalog.CatalogViewModel
 import com.cybercat.ebooksender.feature.manga.MangaViewModel
@@ -103,6 +108,9 @@ private class NavigationClickGate(
 fun EBookSenderApp(
     sharedUris: List<Uri>,
     onSharedUrisConsumed: () -> Unit,
+    appUpdateState: AppUpdateState,
+    onInstallUpdate: () -> Unit,
+    onCancelUpdateDownload: () -> Unit,
     rootViewModel: RootViewModel = hiltViewModel()
 ) {
     val settings by rootViewModel.settings.collectAsStateWithLifecycle()
@@ -118,6 +126,7 @@ fun EBookSenderApp(
     val settingsScrollState = rememberScrollState()
     val navigationClickGate = remember { NavigationClickGate() }
     var topScrollJob by remember { mutableStateOf<Job?>(null) }
+    var dismissedUpdateEventId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(sharedUris) {
         if (sharedUris.isNotEmpty()) {
@@ -228,6 +237,33 @@ fun EBookSenderApp(
                         containerColor = MaterialTheme.colorScheme.background,
                         contentColor = MaterialTheme.colorScheme.onBackground,
                         content = { content() }
+                    )
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = appUpdateState.isDownloading,
+                    enter = fadeIn() + slideInVertically { height -> height },
+                    exit = fadeOut() + slideOutVertically { height -> height },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp)
+                ) {
+                    AppUpdateProgressOverlay(
+                        progress = appUpdateState.downloadProgress,
+                        enableHaptics = settings.enableHaptics,
+                        onCancel = onCancelUpdateDownload
+                    )
+                }
+
+                val updateStatus = appUpdateState.status
+                if (updateStatus != null &&
+                    dismissedUpdateEventId != appUpdateState.statusEventId
+                ) {
+                    AppUpdateDialog(
+                        status = updateStatus,
+                        enableHaptics = settings.enableHaptics,
+                        onInstall = onInstallUpdate,
+                        onDismiss = { dismissedUpdateEventId = appUpdateState.statusEventId }
                     )
                 }
             }
@@ -565,6 +601,9 @@ private fun AppNavHost(
                 onBypassVpnForLocalConnectionsChanged =
                     settingsViewModel::setBypassVpnForLocalConnections,
                 onMangaLoginModeChanged = settingsViewModel::setMangaLoginMode,
+                onCheckForUpdates = settingsViewModel::checkForUpdates,
+                onInstallUpdate = settingsViewModel::installUpdate,
+                onClearUpdateStatus = settingsViewModel::clearUpdateStatus,
                 onClearDownloadCache = settingsViewModel::clearDownloadCache,
                 onClearStatusMessage = settingsViewModel::clearStatusMessage,
                 onThemeChanged = settingsViewModel::setTheme,

@@ -79,10 +79,16 @@ android {
         targetSdk = 35
         versionCode = gitVersionCode().toInt()
         versionName = gitVersionName()
+        buildConfigField(
+            "String",
+            "UPDATE_MANIFEST_URL",
+            "\"https://cybercat2033.github.io/eBookSender/updates/latest.json\""
+        )
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     splits {

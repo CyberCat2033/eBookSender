@@ -14,7 +14,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
@@ -32,6 +35,7 @@ dependencies {
     implementation(project(":core:network"))
     implementation(libs.commons.net)
     implementation(libs.hilt.android)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit4)
 }

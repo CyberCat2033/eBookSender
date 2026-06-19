@@ -2,7 +2,8 @@ name: Release
 
 # При пуше тега v* (например v0.2.0) проверяет SemVer-формат тега,
 # запускает unit-тесты, собирает подписанные release-APK для ARM ABI
-# и universal APK, затем публикует их в GitHub Releases.
+# и universal APK, затем публикует их в GitHub Releases и обновляет
+# GitHub Pages манифест updates/latest.json для автообновлений.
 # Сборка debug APK на main/PR — в workflow ci.yml.
 #
 # Требуются секреты репозитория (Settings → Secrets and variables → Actions):
@@ -19,6 +20,8 @@ on:
 
 permissions:
   contents: write # нужно для создания GitHub Release и загрузки ассетов
+  pages: write # нужно для публикации updates/latest.json на GitHub Pages
+  id-token: write # нужно actions/deploy-pages
 
 concurrency:
   group: release-${{ github.ref }}
@@ -98,6 +101,57 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Generate update manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_CODE="$(git rev-list --count HEAD)"
+          TAG="${GITHUB_REF_NAME}"
+          ARTIFACT_DIR="release-artifacts"
+          SITE_DIR="site/updates"
+          RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          RELEASED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+          mkdir -p "$SITE_DIR"
+
+          universal="eBookSender-v${VERSION}-universal.apk"
+          arm64="eBookSender-v${VERSION}-arm64-v8a.apk"
+          armv7="eBookSender-v${VERSION}-armeabi-v7a.apk"
+
+          cat > "$SITE_DIR/latest.json" <<EOF
+          {
+            "schemaVersion": 1,
+            "packageName": "com.cybercat.ebooksender",
+            "versionName": "$VERSION",
+            "versionCode": $VERSION_CODE,
+            "minSdk": 26,
+            "releasedAt": "$RELEASED_AT",
+            "changelogUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}",
+            "artifacts": [
+              {
+                "abi": "universal",
+                "fileName": "$universal",
+                "url": "$RELEASE_URL/$universal",
+                "sha256": "$(sha256sum "$ARTIFACT_DIR/$universal" | cut -d ' ' -f 1)",
+                "sizeBytes": $(stat -c%s "$ARTIFACT_DIR/$universal")
+              },
+              {
+                "abi": "arm64-v8a",
+                "fileName": "$arm64",
+                "url": "$RELEASE_URL/$arm64",
+                "sha256": "$(sha256sum "$ARTIFACT_DIR/$arm64" | cut -d ' ' -f 1)",
+                "sizeBytes": $(stat -c%s "$ARTIFACT_DIR/$arm64")
+              },
+              {
+                "abi": "armeabi-v7a",
+                "fileName": "$armv7",
+                "url": "$RELEASE_URL/$armv7",
+                "sha256": "$(sha256sum "$ARTIFACT_DIR/$armv7" | cut -d ' ' -f 1)",
+                "sizeBytes": $(stat -c%s "$ARTIFACT_DIR/$armv7")
+              }
+            ]
+          }
+          EOF
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -108,3 +162,22 @@ jobs:
           fail_on_unmatched_files: true
           # generate_release_notes: GitHub сам соберёт список PR/коммитов
           # с прошлого релиза по этот тег.
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy-pages:
+    name: Deploy Update Manifest
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

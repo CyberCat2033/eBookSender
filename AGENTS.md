@@ -33,6 +33,7 @@ These instructions define the required working rules for Codex in this repositor
 - Keep press, ripple, and selection indications clipped to the same shape as the visible component. For rounded Material surfaces such as `Card`/`ElevatedCard`, prefer the component `onClick` overload or explicitly clip the indication to the surface shape; do not apply an outer rectangular `Modifier.clickable` to a rounded surface.
 - Keep user-facing strings in the localization system and update bundled locales when adding or changing visible text.
 - Bundled runtime locales live in `app/src/main/assets/locales/en.json` and `app/src/main/assets/locales/ru.json`; update both for every new or changed user-facing string and keep external locale loading compatible.
+- Whenever adding or changing localization keys, update `docs/locales/translation-template.json` in the same change so external translators see the new keys.
 
 ## Quality, security, and performance
 
@@ -63,6 +64,7 @@ These instructions define the required working rules for Codex in this repositor
   The repository `.editorconfig` configures ktlint for Android Studio style and Compose `@Composable` function names. Prefer formatting only files touched by the current task; use `~/.local/bin/ktlint -F "**/*.kt" "**/*.kts"` only for an explicit broad formatting task.
 - For large or ambiguous tasks, create a professional plan first, split the work into clear steps, and wait for user approval before implementation.
 - For small, obvious fixes, proceed directly on the `refactoring` branch while keeping the scope tight.
+- Treat `README.md` as user-facing documentation only. Do not put internal Codex instructions, contributor-only workflow notes, implementation planning, or maintainer reminders there; use `AGENTS.md`, `CODEX_PROJECT_MAP.md`, or dedicated developer docs for that information.
 - At the end of each task, decide whether `AGENTS.md` or `CODEX_PROJECT_MAP.md` need updates. Update them yourself when the change affects repository workflow, architecture, module layout, important paths, shared patterns, or verification commands; if no update is needed, state that in the final response.
 - Use the existing module boundaries:
   - `app` wires the application, DI, navigation, metadata, transfer service, and Android entry points.

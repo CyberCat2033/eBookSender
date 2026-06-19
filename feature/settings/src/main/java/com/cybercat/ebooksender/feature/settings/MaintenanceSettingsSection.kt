@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +36,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.cybercat.ebooksender.data.update.AppUpdateErrorReason
+import com.cybercat.ebooksender.data.update.AppUpdateStatus
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
@@ -42,6 +46,8 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun MaintenanceSettingsSection(
     state: SettingsUiState,
+    onCheckForUpdates: () -> Unit,
+    onInstallUpdate: () -> Unit,
     onClearDownloadCache: () -> Unit,
     onLogoutAll: () -> Unit,
     onResetSettings: () -> Unit,
@@ -61,6 +67,71 @@ internal fun MaintenanceSettingsSection(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Text(
+                text = strings.get(
+                    "settings_current_version",
+                    state.appUpdateState.currentVersionName,
+                    state.appUpdateState.currentVersionCode
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Button(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        state.settings.enableHaptics,
+                        AppHapticFeedback.Confirm
+                    )
+                    onCheckForUpdates()
+                },
+                enabled = !state.appUpdateState.isChecking &&
+                    !state.appUpdateState.isDownloading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Outlined.SystemUpdate, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (state.appUpdateState.isChecking) {
+                        strings.settingsCheckingUpdates
+                    } else {
+                        strings.settingsCheckUpdates
+                    }
+                )
+            }
+
+            state.appUpdateState.availableUpdate?.let { update ->
+                Button(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            state.settings.enableHaptics,
+                            AppHapticFeedback.Confirm
+                        )
+                        onInstallUpdate()
+                    },
+                    enabled = !state.appUpdateState.isChecking &&
+                        !state.appUpdateState.isDownloading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Outlined.Download, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(strings.get("settings_install_update", update.versionName))
+                }
+            }
+
+            val updateStatusText = state.appUpdateState.status?.toSettingsText(strings)
+            if (updateStatusText != null) {
+                Text(
+                    text = updateStatusText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             Button(
                 onClick = {
                     view.performHapticIfAllowed(
@@ -173,4 +244,35 @@ internal fun MaintenanceSettingsSection(
             }
         }
     }
+}
+
+private fun AppUpdateStatus.toSettingsText(
+    strings: com.cybercat.ebooksender.localization.AppStrings
+): String? = when (this) {
+    AppUpdateStatus.NoUpdateAvailable -> strings.updateNoUpdate
+
+    is AppUpdateStatus.UpdateAvailable ->
+        strings.get("settings_update_available", update.versionName)
+
+    is AppUpdateStatus.Downloading -> strings.updateDialogDownloading
+
+    AppUpdateStatus.DownloadCanceled -> strings.updateDownloadCanceled
+
+    is AppUpdateStatus.ReadyToInstall ->
+        strings.get("settings_update_available", update.versionName)
+
+    is AppUpdateStatus.Error -> reason.toSettingsText(strings)
+}
+
+private fun AppUpdateErrorReason.toSettingsText(
+    strings: com.cybercat.ebooksender.localization.AppStrings
+): String = when (this) {
+    AppUpdateErrorReason.Network -> strings.updateErrorNetwork
+    AppUpdateErrorReason.InvalidManifest -> strings.updateErrorInvalidManifest
+    AppUpdateErrorReason.NoCompatibleArtifact -> strings.updateErrorNoCompatibleArtifact
+    AppUpdateErrorReason.DownloadFailed -> strings.updateErrorDownloadFailed
+    AppUpdateErrorReason.ChecksumMismatch -> strings.updateErrorChecksumMismatch
+    AppUpdateErrorReason.SignatureMismatch -> strings.updateErrorSignatureMismatch
+    AppUpdateErrorReason.InstallUnavailable -> strings.updateErrorInstallUnavailable
+    AppUpdateErrorReason.Unknown -> strings.updateErrorUnknown
 }
