@@ -3,6 +3,7 @@ package com.cybercat.ebooksender
 import android.app.Application
 import android.net.http.HttpResponseCache
 import com.cybercat.ebooksender.lifecycle.AppVisibilityTracker
+import com.cybercat.ebooksender.notification.AppNotificationVisibilityCleaner
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 import java.io.IOException
@@ -12,6 +13,7 @@ class EBookSenderApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         AppVisibilityTracker.register(this)
+        AppNotificationVisibilityCleaner.register(this)
         installHttpCache()
     }
 

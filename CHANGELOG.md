@@ -12,3 +12,4 @@ All notable user-facing changes to eBookSender are documented in this file.
 ### Fixed
 
 - Fixed duplicate loading indicators while deleting selected catalog books.
+- Fixed transfer and manga download progress notifications so they appear while the app is in the background and disappear again when the app is opened.

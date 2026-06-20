@@ -46,7 +46,7 @@ class TransferForegroundService : Service() {
 
     private val transferNotifications by lazy {
         TransferNotificationManager(
-            context = this,
+            service = this,
             localizationManager = localizationManager
         )
     }
@@ -80,13 +80,10 @@ class TransferForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        startForeground(
-            TransferNotificationManager.FOREGROUND_NOTIFICATION_ID,
-            transferNotifications.buildProgressNotification(
-                localizationManager.currentStrings.value.transferNotificationUploadingBooks,
-                0,
-                request.items.size
-            )
+        transferNotifications.startProgress(
+            text = localizationManager.currentStrings.value.transferNotificationUploadingBooks,
+            completed = 0,
+            total = request.items.size
         )
 
         transferWakeLock.acquire()
@@ -108,6 +105,7 @@ class TransferForegroundService : Service() {
 
     override fun onDestroy() {
         transferWakeLock.release()
+        transferNotifications.dispose()
         activeTransferJob?.cancel()
         serviceScope.cancel()
         super.onDestroy()
@@ -304,12 +302,10 @@ class TransferForegroundService : Service() {
     }
 
     private fun showFinishedNotification(uploaded: Int, failed: Int) {
-        stopForeground(STOP_FOREGROUND_REMOVE)
         transferNotifications.showFinishedNotification(uploaded, failed)
     }
 
     private fun showCanceledNotification(uploaded: Int) {
-        stopForeground(STOP_FOREGROUND_REMOVE)
         transferNotifications.showCanceledNotification(uploaded)
     }
 
