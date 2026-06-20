@@ -12,6 +12,8 @@ class MangaAuthenticationExpiredException : IOException(MANGA_AUTHENTICATION_EXP
 class MangaBrowserSessionRefreshRequiredException(val url: String) :
     IOException(MANGA_BROWSER_SESSION_REFRESH_REQUIRED_MESSAGE)
 
+class MangaNotFoundException(val statusCode: Int, message: String) : IOException(message)
+
 interface MangaSourceAdapter {
     val id: String
     val title: String

@@ -120,6 +120,9 @@ class ComxMangaHttpClient @Inject constructor(
                 }
 
                 if (code !in 200..299) {
+                    if (code == HttpURLConnection.HTTP_NOT_FOUND) {
+                        throw MangaNotFoundException(code, "HTTP $code")
+                    }
                     throw IOException("HTTP $code")
                 }
 

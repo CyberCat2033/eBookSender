@@ -29,8 +29,14 @@ internal fun rankRecoveredSeriesCandidates(
 
 internal fun String.mangaSeriesCacheKey(): String = trim().trimEnd('/').lowercase()
 
-internal fun Throwable.isMangaSeriesNotFound(): Boolean =
-    message?.contains("HTTP 404", ignoreCase = true) == true
+internal fun Throwable.isMangaSeriesNotFound(): Boolean {
+    var current: Throwable? = this
+    while (current != null) {
+        if (current is MangaNotFoundException) return true
+        current = current.cause
+    }
+    return false
+}
 
 private fun String.mangaTitleMatchScore(savedKey: String): Int {
     val resultKey = mangaTitleMatchKey()

@@ -1,6 +1,7 @@
 package com.cybercat.ebooksender.data.ftp
 
 import com.cybercat.ebooksender.model.RemoteDevice
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -103,3 +104,6 @@ data class FtpEntry(
 )
 
 data class FtpBatchOperationResult(val successfulPaths: List<String>, val firstError: Throwable?)
+
+class FtpReplyException(val replyCode: Int, val replyString: String, message: String) :
+    IOException(message)

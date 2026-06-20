@@ -2,6 +2,7 @@ package com.cybercat.ebooksender.data.settings
 
 import com.cybercat.ebooksender.data.device.DeviceLibraryRefresher
 import com.cybercat.ebooksender.data.ftp.FtpGateway
+import com.cybercat.ebooksender.data.ftp.FtpReplyException
 import com.cybercat.ebooksender.model.FolderRenameMethod
 import com.cybercat.ebooksender.model.RemoteDevice
 import javax.inject.Inject
@@ -40,29 +41,29 @@ class DeviceFolderRenameUseCase @Inject constructor(
         }
     }
 
-    private fun isNotSupportedRenameError(error: Throwable?): Boolean =
-        error.messagesInCausalChain().any { message ->
-            val unsupportedCommand =
-                message.contains("not implemented") ||
-                    message.contains("not supported") ||
-                    message.contains("unsupported") ||
-                    message.contains("command not implemented")
-            val serverCommandFailure = message.contains("500") && message.contains("command")
-
-            message.contains("502") || unsupportedCommand || serverCommandFailure
+    private fun isNotSupportedRenameError(error: Throwable?): Boolean {
+        val ftpException = error.findInCausalChain<FtpReplyException>()
+        if (ftpException != null) {
+            return ftpException.replyCode == 502 || ftpException.replyCode == 500
         }
+        return false
+    }
 
-    private fun isAlreadyExistsRenameError(error: Throwable?): Boolean =
-        error.messagesInCausalChain().any { message ->
-            message.contains("550") || message.contains("exist")
+    private fun isAlreadyExistsRenameError(error: Throwable?): Boolean {
+        val ftpException = error.findInCausalChain<FtpReplyException>()
+        if (ftpException != null) {
+            return ftpException.replyCode == 550
         }
+        return false
+    }
 
-    private fun Throwable?.messagesInCausalChain(): List<String> = buildList {
+    private inline fun <reified T : Throwable> Throwable?.findInCausalChain(): T? {
         val seen = mutableSetOf<Throwable>()
-        var current = this@messagesInCausalChain
+        var current = this
         while (current != null && seen.add(current)) {
-            current.message?.lowercase()?.let(::add)
+            if (current is T) return current
             current = current.cause
         }
+        return null
     }
 }

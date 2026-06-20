@@ -28,9 +28,7 @@ class CommonsNetFtpGateway @Inject constructor(
         withFtpClient(device) { client ->
             runCatching {
                 client.listFiles()
-                check(FTPReply.isPositiveCompletion(client.replyCode)) {
-                    "Cannot read ${device.workingRootPath}: ${client.replyString}"
-                }
+                client.checkReply("Cannot read ${device.workingRootPath}")
                 FtpSessionInfo(
                     rootPath = device.workingRootPath,
                     systemType = runCatching { client.systemType }.getOrNull()
@@ -67,8 +65,11 @@ class CommonsNetFtpGateway @Inject constructor(
                     }
 
                     try {
-                        val output = client.storeFileStream(tempPath)
-                            ?: error("FTP upload failed: ${client.replyString}")
+                        val output = client.storeFileStream(tempPath) ?: throw FtpReplyException(
+                            replyCode = client.replyCode,
+                            replyString = client.replyString ?: "",
+                            message = "FTP upload failed: ${client.replyString}"
+                        )
                         activeDataStream.set(output)
                         output.use { stream ->
                             input.copyToFtp(
@@ -79,9 +80,7 @@ class CommonsNetFtpGateway @Inject constructor(
                         }
                         uploadContext.ensureActive()
                         activeDataStream.set(null)
-                        check(client.completePendingCommand()) {
-                            "FTP upload failed: ${client.replyString}"
-                        }
+                        client.checkAction(client.completePendingCommand(), "FTP upload failed")
                     } catch (error: Throwable) {
                         if (error is CancellationException) throw error
                         if (uploadContext[Job]?.isCancelled == true) {
@@ -105,9 +104,7 @@ class CommonsNetFtpGateway @Inject constructor(
 
                     uploadContext.ensureActive()
 
-                    check(client.rename(tempPath, normalized)) {
-                        "FTP rename failed: ${client.replyString}"
-                    }
+                    client.checkAction(client.rename(tempPath, normalized), "FTP rename failed")
 
                     Result.success(Unit)
                 } catch (error: Throwable) {
@@ -168,9 +165,10 @@ class CommonsNetFtpGateway @Inject constructor(
         runCatching {
             val normalized = remoteRelativePath.toSafeRelativeFtpPath()
             output.use { stream ->
-                check(client.retrieveFile(normalized, stream)) {
-                    "FTP download failed for $normalized: ${client.replyString}"
-                }
+                client.checkAction(
+                    client.retrieveFile(normalized, stream),
+                    "FTP download failed for $normalized"
+                )
             }
         }
     }
@@ -181,9 +179,10 @@ class CommonsNetFtpGateway @Inject constructor(
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
             val normalized = remoteRelativePath.toSafeRelativeFtpPath()
-            check(client.deleteFile(normalized)) {
-                "FTP delete file failed for $normalized: ${client.replyString}"
-            }
+            client.checkAction(
+                client.deleteFile(normalized),
+                "FTP delete file failed for $normalized"
+            )
         }
     }
 
@@ -193,9 +192,7 @@ class CommonsNetFtpGateway @Inject constructor(
     ): Result<FtpBatchOperationResult> = withFtpClient(device) { client ->
         runCatching {
             client.deletePaths(remoteRelativePaths) { path ->
-                check(deleteFile(path)) {
-                    "FTP delete file failed for $path: $replyString"
-                }
+                checkAction(deleteFile(path), "FTP delete file failed for $path")
             }
         }
     }
@@ -206,9 +203,10 @@ class CommonsNetFtpGateway @Inject constructor(
     ): Result<Unit> = withFtpClient(device) { client ->
         runCatching {
             val normalized = remoteRelativePath.toSafeRelativeFtpPath()
-            check(client.removeDirectory(normalized)) {
-                "FTP delete directory failed for $normalized: ${client.replyString}"
-            }
+            client.checkAction(
+                client.removeDirectory(normalized),
+                "FTP delete directory failed for $normalized"
+            )
         }
     }
 
@@ -218,9 +216,7 @@ class CommonsNetFtpGateway @Inject constructor(
     ): Result<FtpBatchOperationResult> = withFtpClient(device) { client ->
         runCatching {
             client.deletePaths(remoteRelativePaths) { path ->
-                check(removeDirectory(path)) {
-                    "FTP delete directory failed for $path: $replyString"
-                }
+                checkAction(removeDirectory(path), "FTP delete directory failed for $path")
             }
         }
     }
@@ -244,9 +240,10 @@ class CommonsNetFtpGateway @Inject constructor(
             }
 
             if (fromExists) {
-                check(client.rename(normalizedFrom, normalizedTo)) {
-                    "FTP rename failed from $normalizedFrom to $normalizedTo: ${client.replyString}"
-                }
+                client.checkAction(
+                    client.rename(normalizedFrom, normalizedTo),
+                    "FTP rename failed from $normalizedFrom to $normalizedTo"
+                )
             }
         }
     }
@@ -266,13 +263,9 @@ class CommonsNetFtpGateway @Inject constructor(
 
             client.connect(device.host, device.port)
             client.soTimeout = DATA_TIMEOUT_MS
-            check(FTPReply.isPositiveCompletion(client.replyCode)) {
-                "FTP refused connection: ${client.replyString}"
-            }
+            client.checkReply("FTP refused connection")
 
-            check(client.login(device.username, "")) {
-                "FTP login failed: ${client.replyString}"
-            }
+            client.checkAction(client.login(device.username, ""), "FTP login failed")
 
             client.enterLocalPassiveMode()
             client.setFileType(FTP.BINARY_FILE_TYPE)
@@ -294,17 +287,13 @@ class CommonsNetFtpGateway @Inject constructor(
 
     private fun FTPClient.openWorkingRoot(device: RemoteDevice) {
         val mountRoot = normalizeFtpRootPath(device.rootPath)
-        check(changeWorkingDirectory(mountRoot)) {
-            "Cannot open $mountRoot: $replyString"
-        }
+        checkAction(changeWorkingDirectory(mountRoot), "Cannot open $mountRoot")
 
         val relativeRoot = normalizeFtpRelativeRootPath(device.relativeRootPath)
         if (relativeRoot.isBlank()) return
 
         makeDirectories(relativeRoot)
-        check(changeWorkingDirectory(relativeRoot)) {
-            "Cannot open ${device.workingRootPath}: $replyString"
-        }
+        checkAction(changeWorkingDirectory(relativeRoot), "Cannot open ${device.workingRootPath}")
     }
 
     private fun FTPClient.makeDirectories(relativePath: String) {
@@ -315,9 +304,7 @@ class CommonsNetFtpGateway @Inject constructor(
             .forEach { part ->
                 if (!changeWorkingDirectory(part)) {
                     makeDirectory(part)
-                    check(changeWorkingDirectory(part)) {
-                        "Cannot create FTP directory $part: $replyString"
-                    }
+                    checkAction(changeWorkingDirectory(part), "Cannot create FTP directory $part")
                 }
             }
         if (original != null) {
@@ -363,6 +350,26 @@ class CommonsNetFtpGateway @Inject constructor(
             successfulPaths = successfulPaths,
             firstError = firstError
         )
+    }
+
+    private fun FTPClient.checkReply(message: String) {
+        if (!FTPReply.isPositiveCompletion(replyCode)) {
+            throw FtpReplyException(
+                replyCode = replyCode,
+                replyString = replyString ?: "",
+                message = "$message: ${replyString?.trim()}"
+            )
+        }
+    }
+
+    private fun FTPClient.checkAction(success: Boolean, message: String) {
+        if (!success) {
+            throw FtpReplyException(
+                replyCode = replyCode,
+                replyString = replyString ?: "",
+                message = "$message: ${replyString?.trim()}"
+            )
+        }
     }
 
     private companion object {
