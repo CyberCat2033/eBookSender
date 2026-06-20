@@ -68,31 +68,35 @@ class AppUpdateManagerImpl @Inject constructor(
     }
 
     override fun checkForUpdates(trigger: AppUpdateCheckTrigger) {
-        updateJobs.launchCheck {
+        val checkStarted = updateJobs.launchCheck {
             _state.update {
                 it.copy(
                     isChecking = true,
+                    checkTrigger = trigger,
                     status = null
                 )
             }
             val result = withContext(Dispatchers.IO) { runCatching { loadAvailableUpdate() } }
             result
                 .onSuccess { update ->
+                    val effectiveTrigger = _state.value.checkTrigger ?: trigger
                     _state.update { state ->
                         if (update == null) {
                             state.withStatus(
-                                status = if (trigger == AppUpdateCheckTrigger.Manual) {
+                                status = if (effectiveTrigger == AppUpdateCheckTrigger.Manual) {
                                     AppUpdateStatus.NoUpdateAvailable
                                 } else {
                                     null
                                 },
                                 isChecking = false,
+                                checkTrigger = null,
                                 availableUpdate = null
                             )
                         } else {
                             state.withStatus(
                                 status = AppUpdateStatus.UpdateAvailable(update),
                                 isChecking = false,
+                                checkTrigger = null,
                                 availableUpdate = update
                             )
                         }
@@ -100,19 +104,25 @@ class AppUpdateManagerImpl @Inject constructor(
                     scheduleStatusClearIfTransient(_state.value.status)
                 }
                 .onFailure { throwable ->
+                    val effectiveTrigger = _state.value.checkTrigger ?: trigger
                     _state.update {
-                        val status = if (trigger == AppUpdateCheckTrigger.Manual) {
+                        val status = if (effectiveTrigger == AppUpdateCheckTrigger.Manual) {
                             AppUpdateStatus.Error(throwable.toUpdateErrorReason())
                         } else {
                             null
                         }
                         it.withStatus(
                             status = status,
-                            isChecking = false
+                            isChecking = false,
+                            checkTrigger = null
                         )
                     }
                     scheduleStatusClearIfTransient(_state.value.status)
                 }
+        }
+
+        if (!checkStarted && trigger == AppUpdateCheckTrigger.Manual) {
+            markActiveCheckAsManual()
         }
     }
 
@@ -251,16 +261,28 @@ class AppUpdateManagerImpl @Inject constructor(
     private fun currentVersionCode(): Long =
         packageManager.getPackageInfoCompat(context.packageName).longVersionCodeCompat()
 
+    private fun markActiveCheckAsManual() {
+        _state.update { state ->
+            if (state.isChecking) {
+                state.copy(checkTrigger = AppUpdateCheckTrigger.Manual, status = null)
+            } else {
+                state
+            }
+        }
+    }
+
     private fun Throwable.toUpdateErrorReason(): AppUpdateErrorReason =
         (this as? AppUpdateException)?.reason ?: AppUpdateErrorReason.Unknown
 
     private fun AppUpdateState.withStatus(
         status: AppUpdateStatus?,
         isChecking: Boolean = this.isChecking,
+        checkTrigger: AppUpdateCheckTrigger? = this.checkTrigger,
         isDownloading: Boolean = this.isDownloading,
         availableUpdate: AvailableAppUpdate? = this.availableUpdate
     ): AppUpdateState = copy(
         isChecking = isChecking,
+        checkTrigger = checkTrigger,
         isDownloading = isDownloading,
         availableUpdate = availableUpdate,
         status = status,

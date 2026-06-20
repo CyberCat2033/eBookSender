@@ -31,12 +31,16 @@ data class AppUpdateState(
     val currentVersionName: String = "",
     val currentVersionCode: Long = 0L,
     val isChecking: Boolean = false,
+    val checkTrigger: AppUpdateCheckTrigger? = null,
     val isDownloading: Boolean = false,
     val downloadProgress: AppUpdateDownloadProgress? = null,
     val availableUpdate: AvailableAppUpdate? = null,
     val status: AppUpdateStatus? = null,
     val statusEventId: Long = 0L
-)
+) {
+    val isManualCheckInProgress: Boolean
+        get() = isChecking && checkTrigger == AppUpdateCheckTrigger.Manual
+}
 
 data class AppUpdateDownloadProgress(val bytesRead: Long = 0L, val totalBytes: Long? = null) {
     val fraction: Float? = totalBytes

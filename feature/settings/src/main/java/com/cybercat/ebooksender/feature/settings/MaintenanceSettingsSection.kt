@@ -90,14 +90,14 @@ internal fun MaintenanceSettingsSection(
                     )
                     onCheckForUpdates()
                 },
-                enabled = !state.appUpdateState.isChecking &&
+                enabled = !state.appUpdateState.isManualCheckInProgress &&
                     !state.appUpdateState.isDownloading,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Outlined.SystemUpdate, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    if (state.appUpdateState.isChecking) {
+                    if (state.appUpdateState.isManualCheckInProgress) {
                         strings.settingsCheckingUpdates
                     } else {
                         strings.settingsCheckUpdates
@@ -115,7 +115,7 @@ internal fun MaintenanceSettingsSection(
                         )
                         onInstallUpdate()
                     },
-                    enabled = !state.appUpdateState.isChecking &&
+                    enabled = !state.appUpdateState.isManualCheckInProgress &&
                         !state.appUpdateState.isDownloading,
                     modifier = Modifier.fillMaxWidth()
                 ) {
