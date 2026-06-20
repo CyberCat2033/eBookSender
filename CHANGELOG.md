@@ -11,6 +11,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 ### Fixed
 
 - Made collapsed catalog group cards expandable from the whole card surface instead of only the chevron button.
+- Long one-line progress, queue, and catalog labels now scroll instead of being cut off.
 
 ## [0.11.6] - 2026-06-20
 

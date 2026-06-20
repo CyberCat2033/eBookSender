@@ -97,22 +97,28 @@ fun ProgressOverlayCard(
                     )
                 }
                 Column(Modifier.weight(1f)) {
-                    Text(
+                    SingleLineMarqueeText(
                         text = title,
                         style = titleStyle,
                         fontWeight = titleFontWeight,
-                        color = contentColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = contentColor
                     )
                     subtitle?.let {
-                        Text(
-                            text = it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = contentColor,
-                            maxLines = subtitleMaxLines,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        if (subtitleMaxLines == 1) {
+                            SingleLineMarqueeText(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = contentColor
+                            )
+                        } else {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = contentColor,
+                                maxLines = subtitleMaxLines,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
                 trailingContent()

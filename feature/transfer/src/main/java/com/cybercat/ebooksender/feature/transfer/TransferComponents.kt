@@ -71,6 +71,7 @@ import com.cybercat.ebooksender.ui.AnimatedAlertDialog
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
 import com.cybercat.ebooksender.ui.LocalDismissDialog
 import com.cybercat.ebooksender.ui.ProgressOverlayCard
+import com.cybercat.ebooksender.ui.SingleLineMarqueeText
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
@@ -483,18 +484,14 @@ fun UploadedSection(
                 ) {
                     items.forEach { item ->
                         Column {
-                            Text(
+                            SingleLineMarqueeText(
                                 text = item.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                style = MaterialTheme.typography.bodyMedium
                             )
-                            Text(
+                            SingleLineMarqueeText(
                                 text = item.plannedPath,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -578,12 +575,10 @@ fun UploadProgressOverlay(
             color = contentColor.copy(alpha = 0.8f)
         )
         if (currentItem != null) {
-            Text(
+            SingleLineMarqueeText(
                 text = currentItem.title,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 color = contentColor.copy(alpha = 0.8f)
             )
         }

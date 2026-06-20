@@ -58,6 +58,7 @@ import com.cybercat.ebooksender.model.UploadItem
 import com.cybercat.ebooksender.model.UploadStatus
 import com.cybercat.ebooksender.ui.AnimatedLinearProgressIndicator
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
+import com.cybercat.ebooksender.ui.SingleLineMarqueeText
 import com.cybercat.ebooksender.ui.UploadPreviewCover
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
@@ -102,12 +103,10 @@ fun UploadItemRow(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
+                        SingleLineMarqueeText(
                             text = item.originalName,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(
@@ -237,7 +236,7 @@ fun UploadItemRow(
                         UploadStatus.Skipped -> strings.sendStatusSkipped
                     }
 
-                    Text(
+                    SingleLineMarqueeText(
                         text = statusText,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
@@ -293,12 +292,10 @@ private fun ItemTypeSummary(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 item.typeDetail()?.let { detail ->
-                    Text(
+                    SingleLineMarqueeText(
                         text = detail,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

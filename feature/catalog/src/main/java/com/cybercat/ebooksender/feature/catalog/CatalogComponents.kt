@@ -66,6 +66,7 @@ import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.model.CatalogFile
 import com.cybercat.ebooksender.model.CatalogGroup
 import com.cybercat.ebooksender.model.MangaSeriesGroup
+import com.cybercat.ebooksender.ui.SingleLineMarqueeText
 import com.cybercat.ebooksender.ui.theme.EmphasizedEasing
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
@@ -485,19 +486,25 @@ internal fun ExpandableHeader(
                 .weight(1f)
                 .then(titleInteractionModifier)
         ) {
-            Text(
+            SingleLineMarqueeText(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                style = MaterialTheme.typography.titleMedium
             )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = subtitleMaxLines,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (subtitleMaxLines == 1) {
+                SingleLineMarqueeText(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = subtitleMaxLines,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         val rotationState by animateFloatAsState(
             targetValue = if (expanded) 180f else 0f,

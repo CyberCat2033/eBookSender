@@ -58,6 +58,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AdaptiveLayout.kt` - shared adaptive width class and screen padding tokens for Compact, Medium, and Expanded layouts.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AppTextFields.kt` - shared Material 3 outlined text fields that preserve selection state, support single-line horizontal scrolling, and expose simple string state to feature screens; use for app text inputs before reaching for raw `OutlinedTextField`.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AdaptiveSingleLineText.kt` - shared single-line text helper that keeps the full localized label by default and switches to a compact localized fallback only after actual layout overflow; used for tight Material controls such as navigation labels and action buttons.
+- `core/ui/src/main/java/com/cybercat/ebooksender/ui/SingleLineMarqueeText.kt` - shared one-line text helper that uses Compose marquee scrolling when bounded text overflows; use for progress, queue, catalog, and other single-line labels where truncation would hide useful content.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/AnimatedAlertDialog.kt` - shared animated dialog pattern.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/ProgressComponents.kt` - shared Material 3 progress primitives, including `ProgressOverlayCard` for active upload/download/update overlays and `AnimatedLinearProgressIndicator` for spring-smoothed determinate progress.
 - `core/ui/src/main/java/com/cybercat/ebooksender/localization/AppStrings.kt` - string access model.
@@ -209,7 +210,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - Shared status messages: `core/ui/.../StatusComponents.kt`.
   - `StatusMessageHost` preserves the last non-empty text and shows/hides it with fade, vertical expand/shrink, and a small vertical slide.
 - Shared progress UI: `core/ui/.../ProgressComponents.kt`.
-  - `ProgressOverlayCard` centralizes the Material 3 surface, leading spinner/icon, cancel button with reject haptic, 560 dp max width, 14 dp content padding, 24 dp spinner/icon, 48 dp cancel button, and 8 dp elevation used by active upload/download/update overlays.
+  - `ProgressOverlayCard` centralizes the Material 3 surface, leading spinner/icon, cancel button with reject haptic, 560 dp max width, 14 dp content padding, 24 dp spinner/icon, 48 dp cancel button, overflow marquee for one-line title/subtitle text, and 8 dp elevation used by active upload/download/update overlays.
   - `AnimatedLinearProgressIndicator` uses a low-stiffness no-bounce spring for determinate progress and falls back to indeterminate Material 3 progress when the progress fraction is unknown.
 - App shell: `app/src/main/java/com/cybercat/ebooksender/ui/EBookSenderApp.kt`.
   - `NavHost` screen transitions use fade-in plus subtle `scaleIn(0.96f)` over 200 ms without a delayed start; exits fade out in 80 ms.
