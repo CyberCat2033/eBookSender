@@ -29,6 +29,5 @@ class MangaSourceRegistry @Inject constructor(
 
     fun homeUrl(sourceId: String): String =
         adapters.firstOrNull { adapter -> adapter.id == sourceId }?.homeUrl
-            ?: adapters.firstOrNull()?.homeUrl
-            ?: ""
+            ?: throw IllegalArgumentException("Unknown manga source: $sourceId")
 }

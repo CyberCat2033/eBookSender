@@ -1,11 +1,14 @@
 package com.cybercat.ebooksender.data.opds
 
+import android.util.Log
 import java.io.File
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+
+private const val TAG = "DownloadOpdsEntriesUseCase"
 
 class DownloadOpdsEntriesUseCase @Inject constructor(private val opdsRepository: OpdsRepository) {
     fun hasDownloadableEntries(entries: List<OpdsEntry>): Boolean =
@@ -61,6 +64,7 @@ class DownloadOpdsEntriesUseCase @Inject constructor(private val opdsRepository:
     } catch (error: CancellationException) {
         throw error
     } catch (error: Throwable) {
+        Log.w(TAG, "Failed to download publication: ${request.entry.title}", error)
         OpdsDownloadOutcome(file = null, failed = true)
     }
 

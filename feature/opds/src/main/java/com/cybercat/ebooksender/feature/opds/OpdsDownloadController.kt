@@ -1,6 +1,7 @@
 package com.cybercat.ebooksender.feature.opds
 
 import android.net.Uri
+import android.util.Log
 import com.cybercat.ebooksender.data.opds.DownloadOpdsEntriesUseCase
 import com.cybercat.ebooksender.data.opds.MatchOpdsAuthSourceUseCase
 import com.cybercat.ebooksender.data.opds.OpdsAcquisition
@@ -20,6 +21,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val TAG = "OpdsDownloadController"
 
 internal class OpdsDownloadController(
     private val opdsRepository: OpdsRepository,
@@ -97,6 +100,7 @@ internal class OpdsDownloadController(
                 )
             } catch (error: Throwable) {
                 if (error is OpdsAuthenticationRequiredException) {
+                    Log.w(TAG, "Authentication required for OPDS download", error)
                     val matchingSource = matchOpdsAuthSource(error)
                     if (matchingSource != null) {
                         opdsState.update { state ->
@@ -108,6 +112,8 @@ internal class OpdsDownloadController(
                         openCredentialsDialog(matchingSource, null)
                         return@launch
                     }
+                } else {
+                    Log.e(TAG, "Failed to download publication", error)
                 }
                 opdsState.update { state ->
                     state.copy(
@@ -221,6 +227,7 @@ internal class OpdsDownloadController(
                 }
                 showStatus(downloadCanceledMessage(addedToQueueCount))
             } catch (error: Throwable) {
+                Log.e(TAG, "Failed to download OPDS entries", error)
                 opdsState.update { state ->
                     state.copy(
                         isDownloading = false,
