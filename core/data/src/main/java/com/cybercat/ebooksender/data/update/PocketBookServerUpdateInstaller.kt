@@ -32,7 +32,7 @@ internal class PocketBookServerUpdateInstaller(
             onProgress(
                 PocketBookServerUpdateProgress(
                     phase = phase,
-                    bytesCompleted = bytes,
+                    bytesCompleted = totalWorkBytes?.let(bytes::coerceAtMost) ?: bytes,
                     totalBytes = totalWorkBytes
                 )
             )
@@ -76,7 +76,9 @@ internal class PocketBookServerUpdateInstaller(
                     completedWorkBytes + uploadedBytes
                 )
             }
-        )
+        )?.let { installedVersion ->
+            return installedVersion
+        }
 
         return versionReader.waitForInstalledVersion(device, update)
             ?: throw PocketBookServerUpdateException(
@@ -114,7 +116,7 @@ internal class PocketBookServerUpdateInstaller(
         file: File,
         stagedRemotePath: String,
         onFallbackUploadProgress: (Long) -> Unit
-    ) {
+    ): PocketBookServerVersionInfo? {
         val applyResult = controlClient.applyUpdate(
             device = device,
             request = PocketBookServerApplyUpdateRequest(
@@ -129,14 +131,15 @@ internal class PocketBookServerUpdateInstaller(
         )
 
         applyResult
-            .onSuccess { return }
+            .onSuccess { return null }
             .onFailure { error ->
                 if (error is CancellationException) throw error
+                val installedVersion = versionReader.waitForInstalledVersion(device, update)
+                if (installedVersion != null) {
+                    return installedVersion
+                }
                 if (error !is PocketBookUpdateEndpointUnavailableException) {
-                    throw PocketBookServerUpdateException(
-                        PocketBookServerUpdateErrorReason.ApplyFailed,
-                        error
-                    )
+                    ensureFallbackWouldNotDowngrade(device, update, error)
                 }
             }
 
@@ -148,6 +151,21 @@ internal class PocketBookServerUpdateInstaller(
             onProgress = onFallbackUploadProgress
         )
         runCatching { ftpGateway.deleteFile(mountRootDevice, stagedRemotePath) }
+        return null
+    }
+
+    private suspend fun ensureFallbackWouldNotDowngrade(
+        device: RemoteDevice,
+        update: AvailablePocketBookServerUpdate,
+        applyError: Throwable
+    ) {
+        val installedVersion = versionReader.readInstalledVersionOrNull(device)
+        if (installedVersion != null && update.versionCode < installedVersion.versionCode) {
+            throw PocketBookServerUpdateException(
+                PocketBookServerUpdateErrorReason.ApplyFailed,
+                applyError
+            )
+        }
     }
 
     private fun String?.toRemoteInstallPath(): String {

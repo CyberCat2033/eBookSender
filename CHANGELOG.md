@@ -2,6 +2,13 @@
 
 All notable user-facing changes to eBookSender are documented in this file.
 
+## [0.11.6] - 2026-06-20
+
+### Fixed
+
+- Fixed PocketBook server updates so the app falls back to direct launcher replacement when the on-device activation endpoint rejects an otherwise verified update.
+- Fixed manga download progress notifications so active background downloads keep a stable foreground notification after the app is minimized.
+
 ## [0.11.5] - 2026-06-20
 
 ### Added

@@ -75,7 +75,10 @@ class PocketBookControlClient @Inject constructor(
                 throw PocketBookUpdateEndpointUnavailableException()
             }
             if (response.code !in 200..299) {
-                throw IOException("PocketBook control POST /update failed: HTTP ${response.code}")
+                throw IOException(
+                    "PocketBook control POST /update failed: HTTP ${response.code}" +
+                        response.body.errorSuffix()
+                )
             }
         }.onFailure { error ->
             if (error is CancellationException) throw error
@@ -241,6 +244,15 @@ class PocketBookControlClient @Inject constructor(
         return output.toByteArray()
     }
 
+    private fun String.errorSuffix(): String {
+        val trimmedBody = trim().replace(Regex("\\s+"), " ")
+        return if (trimmedBody.isBlank()) {
+            ""
+        } else {
+            ": ${trimmedBody.take(MAX_CONTROL_ERROR_BODY_CHARS)}"
+        }
+    }
+
     private fun RemoteDevice.controlPort(): Int =
         (port + 1).takeIf { it in 1..MAX_PORT } ?: DEFAULT_CONTROL_PORT
 
@@ -255,6 +267,7 @@ class PocketBookControlClient @Inject constructor(
         const val HTTP_NOT_FOUND = 404
         const val MAX_HTTP_LINE_BYTES = 8 * 1024
         const val MAX_CONTROL_RESPONSE_BYTES = 64 * 1024
+        const val MAX_CONTROL_ERROR_BODY_CHARS = 512
     }
 }
 

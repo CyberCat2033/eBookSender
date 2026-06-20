@@ -19,17 +19,8 @@ internal class ForegroundServiceNotificationController(
     private val smallIconResId: Int,
     private val nextCompletionNotificationId: () -> Int
 ) {
-    private var active = false
     private var foregroundStarted = false
     private var latestProgressNotification: Notification? = null
-
-    private val visibilityListener: (Boolean) -> Unit = { isVisible ->
-        if (isVisible) {
-            hideProgressNotification()
-        } else {
-            showLatestProgressNotification()
-        }
-    }
 
     fun ensureNotificationChannel() {
         val channel = NotificationChannel(
@@ -55,33 +46,17 @@ internal class ForegroundServiceNotificationController(
         .build()
 
     fun startProgress(notification: Notification) {
-        if (!active) {
-            active = true
-            AppVisibilityTracker.addVisibilityListener(visibilityListener)
-        }
         latestProgressNotification = notification
-        service.startForeground(foregroundNotificationId, notification)
-        foregroundStarted = true
-        AppNotificationVisibilityCleaner.track(foregroundNotificationId)
-        if (AppVisibilityTracker.isAppVisible) {
-            hideProgressNotification()
-        }
+        showLatestProgressNotification()
     }
 
     fun updateProgress(notification: Notification) {
         latestProgressNotification = notification
-        if (!active) return
-        if (AppVisibilityTracker.isAppVisible) {
-            hideProgressNotification()
-        } else {
-            showLatestProgressNotification()
-        }
+        showLatestProgressNotification()
     }
 
     fun finishProgress() {
-        active = false
         latestProgressNotification = null
-        AppVisibilityTracker.removeVisibilityListener(visibilityListener)
         hideProgressNotification()
     }
 
@@ -115,7 +90,6 @@ internal class ForegroundServiceNotificationController(
             service.startForeground(foregroundNotificationId, notification)
             foregroundStarted = true
         }
-        AppNotificationVisibilityCleaner.track(foregroundNotificationId)
     }
 
     private fun hideProgressNotification() {
@@ -124,7 +98,6 @@ internal class ForegroundServiceNotificationController(
             foregroundStarted = false
         }
         notificationManager().cancel(foregroundNotificationId)
-        AppNotificationVisibilityCleaner.untrack(foregroundNotificationId)
     }
 
     private fun contentIntent(): PendingIntent {
