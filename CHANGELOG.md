@@ -12,6 +12,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ### Fixed
 
+- Hide the dynamic color toggle on devices running Android 11 and lower since they do not support dynamic coloring.
 - Fixed naming-rule token hints so books, documents, and manga show only the tokens that apply to that file type.
 - Fixed duplicate loading indicators while deleting selected catalog books.
 - Fixed transfer and manga download progress notifications so they appear while the app is in the background and disappear again when the app is opened.
