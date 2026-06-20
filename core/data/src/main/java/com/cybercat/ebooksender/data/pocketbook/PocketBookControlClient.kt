@@ -11,7 +11,10 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 @Singleton
@@ -63,6 +66,54 @@ class PocketBookControlClient @Inject constructor(
             }
         }
 
+    suspend fun applyUpdate(
+        device: RemoteDevice,
+        request: PocketBookServerApplyUpdateRequest
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = json.encodeToString(request).toByteArray(Charsets.UTF_8)
+            val connection =
+                (
+                    localDeviceNetworkProvider.openConnection(
+                        device.controlUrl("update")
+                    ) as HttpURLConnection
+                    )
+                    .apply {
+                        requestMethod = "POST"
+                        connectTimeout = CONNECT_TIMEOUT_MILLIS
+                        readTimeout = UPDATE_READ_TIMEOUT_MILLIS
+                        useCaches = false
+                        doOutput = true
+                        setRequestProperty("Cache-Control", "no-cache")
+                        setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        setRequestProperty("Accept", "application/json")
+                        setFixedLengthStreamingMode(body.size)
+                    }
+
+            try {
+                connection.outputStream.use { it.write(body) }
+                val code = connection.responseCode
+                runCatching {
+                    if (code in 200..299) {
+                        connection.inputStream
+                    } else {
+                        connection.errorStream
+                    }?.close()
+                }
+                if (code == HttpURLConnection.HTTP_NOT_FOUND) {
+                    throw PocketBookUpdateEndpointUnavailableException()
+                }
+                if (code !in 200..299) {
+                    throw IOException("PocketBook control POST /update failed: HTTP $code")
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+        }
+    }
+
     private suspend fun request(device: RemoteDevice, method: String, path: String): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -112,5 +163,25 @@ class PocketBookControlClient @Inject constructor(
         const val MAX_PORT = 65_535
         const val CONNECT_TIMEOUT_MILLIS = 1_500
         const val READ_TIMEOUT_MILLIS = 2_000
+        const val UPDATE_READ_TIMEOUT_MILLIS = 10_000
     }
 }
+
+@Serializable
+data class PocketBookServerApplyUpdateRequest(
+    @SerialName("sourcePath")
+    val sourcePath: String,
+    @SerialName("versionName")
+    val versionName: String,
+    @SerialName("versionCode")
+    val versionCode: Long,
+    @SerialName("releasedAt")
+    val releasedAt: String,
+    @SerialName("buildId")
+    val buildId: String? = null,
+    @SerialName("sha256")
+    val sha256: String
+)
+
+class PocketBookUpdateEndpointUnavailableException :
+    IOException("PocketBook update endpoint is unavailable")

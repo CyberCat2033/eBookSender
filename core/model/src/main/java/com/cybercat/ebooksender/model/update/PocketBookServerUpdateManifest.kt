@@ -13,6 +13,8 @@ data class PocketBookServerUpdateManifest(
     val versionName: String,
     @SerialName("versionCode")
     val versionCode: Long,
+    @SerialName("buildId")
+    val buildId: String? = null,
     @SerialName("releasedAt")
     val releasedAt: String,
     @SerialName("changelogUrl")
@@ -47,6 +49,8 @@ data class PocketBookServerVersionInfo(
     val versionName: String,
     @SerialName("versionCode")
     val versionCode: Long,
+    @SerialName("buildId")
+    val buildId: String? = null,
     @SerialName("releasedAt")
     val releasedAt: String
 )

@@ -136,47 +136,19 @@ internal fun MaintenanceSettingsSection(
                 )
             }
 
-            Text(
-                text = state.pocketBookServerUpdateState.installedVersion?.let { version ->
-                    strings.get(
-                        "pb_server_current_version",
-                        version.versionName,
-                        version.versionCode
-                    )
-                } ?: strings.pbServerCurrentVersionUnknown,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Button(
-                onClick = {
-                    view.performHapticIfAllowed(
-                        context,
-                        state.settings.enableHaptics,
-                        AppHapticFeedback.Confirm
-                    )
-                    onCheckPocketBookServerUpdates()
-                },
-                enabled = state.isPocketBookConnected &&
-                    !state.pocketBookServerUpdateState.isChecking &&
-                    !state.pocketBookServerUpdateState.isInstalling,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Outlined.SystemUpdate, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
+            if (state.isPocketBookConnected) {
                 Text(
-                    when {
-                        state.pocketBookServerUpdateState.isChecking ->
-                            strings.pbServerCheckingUpdates
-
-                        state.isPocketBookConnected -> strings.pbServerCheckUpdates
-
-                        else -> strings.pbServerConnectRequired
-                    }
+                    text = state.pocketBookServerUpdateState.installedVersion?.let { version ->
+                        strings.get(
+                            "pb_server_current_version",
+                            version.versionName,
+                            version.versionCode
+                        )
+                    } ?: strings.pbServerCurrentVersionUnknown,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
 
-            state.pocketBookServerUpdateState.availableUpdate?.let { update ->
                 Button(
                     onClick = {
                         view.performHapticIfAllowed(
@@ -184,36 +156,61 @@ internal fun MaintenanceSettingsSection(
                             state.settings.enableHaptics,
                             AppHapticFeedback.Confirm
                         )
-                        onInstallPocketBookServerUpdate()
+                        onCheckPocketBookServerUpdates()
                     },
-                    enabled = state.isPocketBookConnected &&
-                        !state.pocketBookServerUpdateState.isChecking &&
+                    enabled = !state.pocketBookServerUpdateState.isChecking &&
                         !state.pocketBookServerUpdateState.isInstalling,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Outlined.Download, contentDescription = null)
+                    Icon(Icons.Outlined.SystemUpdate, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(strings.get("pb_server_install_update", update.versionName))
+                    Text(
+                        if (state.pocketBookServerUpdateState.isChecking) {
+                            strings.pbServerCheckingUpdates
+                        } else {
+                            strings.pbServerCheckUpdates
+                        }
+                    )
                 }
-            }
 
-            val pocketBookServerStatusText =
-                state.pocketBookServerUpdateState.status?.toSettingsText(strings)
-            if (pocketBookServerStatusText != null) {
-                Text(
-                    text = pocketBookServerStatusText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (
-                        state.pocketBookServerUpdateState.status
-                            is PocketBookServerUpdateStatus.Error
+                state.pocketBookServerUpdateState.availableUpdate?.let { update ->
+                    Button(
+                        onClick = {
+                            view.performHapticIfAllowed(
+                                context,
+                                state.settings.enableHaptics,
+                                AppHapticFeedback.Confirm
+                            )
+                            onInstallPocketBookServerUpdate()
+                        },
+                        enabled = !state.pocketBookServerUpdateState.isChecking &&
+                            !state.pocketBookServerUpdateState.isInstalling,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                        Icon(Icons.Outlined.Download, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(strings.get("pb_server_install_update", update.versionName))
+                    }
+                }
+
+                val pocketBookServerStatusText =
+                    state.pocketBookServerUpdateState.status?.toSettingsText(strings)
+                if (pocketBookServerStatusText != null) {
+                    Text(
+                        text = pocketBookServerStatusText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (
+                            state.pocketBookServerUpdateState.status
+                                is PocketBookServerUpdateStatus.Error
+                        ) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             Button(
@@ -403,6 +400,9 @@ private fun PocketBookServerUpdateErrorReason.toSettingsText(
 
     PocketBookServerUpdateErrorReason.UploadFailed ->
         strings.pbServerUpdateErrorUploadFailed
+
+    PocketBookServerUpdateErrorReason.ApplyFailed ->
+        strings.pbServerUpdateErrorApplyFailed
 
     PocketBookServerUpdateErrorReason.Unknown -> strings.pbServerUpdateErrorUnknown
 }

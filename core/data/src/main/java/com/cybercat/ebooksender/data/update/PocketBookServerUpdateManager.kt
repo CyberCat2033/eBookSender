@@ -3,6 +3,8 @@ package com.cybercat.ebooksender.data.update
 import android.content.Context
 import com.cybercat.ebooksender.data.ftp.FtpGateway
 import com.cybercat.ebooksender.data.pocketbook.PocketBookControlClient
+import com.cybercat.ebooksender.data.pocketbook.PocketBookServerApplyUpdateRequest
+import com.cybercat.ebooksender.data.pocketbook.PocketBookUpdateEndpointUnavailableException
 import com.cybercat.ebooksender.di.ApplicationScope
 import com.cybercat.ebooksender.model.DEFAULT_FTP_RELATIVE_ROOT_PATH
 import com.cybercat.ebooksender.model.DeviceProfile
@@ -196,7 +198,7 @@ class PocketBookServerUpdateManager @Inject constructor(
                 )
             }
 
-            manifest.versionCode <= installedVersion.versionCode -> {
+            !manifest.isNewerThan(installedVersion) -> {
                 PocketBookServerUpdateCheckResult(
                     installedVersion = installedVersion,
                     availableUpdate = null,
@@ -276,18 +278,15 @@ class PocketBookServerUpdateManager @Inject constructor(
         manifest: PocketBookServerUpdateManifest
     ): AvailablePocketBookServerUpdate {
         val launcher = manifest.artifacts.firstOrNull { it.type == LAUNCHER_ARTIFACT_TYPE }
-        val version = manifest.artifacts.firstOrNull { it.type == VERSION_ARTIFACT_TYPE }
-        if (launcher == null || version == null) {
+        if (launcher == null) {
             throw PocketBookServerUpdateException(
                 PocketBookServerUpdateErrorReason.MissingArtifacts
             )
         }
         validateArtifact(launcher, EXPECTED_LAUNCHER_INSTALL_PATH, ".app")
-        validateArtifact(version, EXPECTED_VERSION_INSTALL_PATH, ".version")
         return AvailablePocketBookServerUpdate(
             manifest = manifest,
-            launcherArtifact = launcher,
-            versionArtifact = version
+            launcherArtifact = launcher
         )
     }
 
@@ -311,12 +310,8 @@ class PocketBookServerUpdateManager @Inject constructor(
         device: RemoteDevice,
         update: AvailablePocketBookServerUpdate
     ): PocketBookServerVersionInfo {
-        val artifacts = listOf(update.launcherArtifact, update.versionArtifact)
-        val totalArtifactBytes = if (artifacts.all { it.sizeBytes != null }) {
-            artifacts.sumOf { checkNotNull(it.sizeBytes) }
-        } else {
-            null
-        }
+        val artifact = update.launcherArtifact
+        val totalArtifactBytes = artifact.sizeBytes
         val totalWorkBytes = totalArtifactBytes?.times(2L)
         var completedWorkBytes = 0L
 
@@ -333,43 +328,47 @@ class PocketBookServerUpdateManager @Inject constructor(
         }
 
         report(PocketBookServerUpdatePhase.Downloading, 0L)
-        val cachedArtifacts = artifacts.map { artifact ->
-            coroutineContext.ensureActive()
-            val file = getVerifiedArtifactFile(artifact) { bytesRead ->
-                report(PocketBookServerUpdatePhase.Downloading, completedWorkBytes + bytesRead)
-            }
-            completedWorkBytes += artifact.sizeBytes ?: file.length()
-            report(PocketBookServerUpdatePhase.Downloading, completedWorkBytes)
-            artifact to file
+        coroutineContext.ensureActive()
+        val file = getVerifiedArtifactFile(artifact) { bytesRead ->
+            report(PocketBookServerUpdatePhase.Downloading, completedWorkBytes + bytesRead)
         }
+        completedWorkBytes += artifact.sizeBytes ?: file.length()
+        report(PocketBookServerUpdatePhase.Downloading, completedWorkBytes)
 
         val mountRootDevice = device.copy(relativeRootPath = DEFAULT_FTP_RELATIVE_ROOT_PATH)
-        cachedArtifacts.forEach { (artifact, file) ->
-            coroutineContext.ensureActive()
-            val remotePath = artifact.installPath.toRemoteInstallPath()
-            report(PocketBookServerUpdatePhase.Uploading, completedWorkBytes)
-            file.inputStream().use { input ->
-                val result = ftpGateway.uploadAtomically(
-                    device = mountRootDevice,
-                    remoteRelativePath = remotePath,
-                    input = input,
-                    onProgress = { uploadedBytes ->
-                        report(
-                            PocketBookServerUpdatePhase.Uploading,
-                            completedWorkBytes + uploadedBytes
-                        )
-                    }
+        val stagedRemotePath = update.stagedLauncherRemotePath()
+        coroutineContext.ensureActive()
+        report(PocketBookServerUpdatePhase.Uploading, completedWorkBytes)
+        uploadLauncherFile(
+            device = mountRootDevice,
+            remotePath = stagedRemotePath,
+            file = file,
+            onProgress = { uploadedBytes ->
+                report(
+                    PocketBookServerUpdatePhase.Uploading,
+                    completedWorkBytes + uploadedBytes
                 )
-                result.getOrElse { error ->
-                    if (error is CancellationException) throw error
-                    throw PocketBookServerUpdateException(
-                        PocketBookServerUpdateErrorReason.UploadFailed,
-                        error
-                    )
-                }
             }
-            completedWorkBytes += artifact.sizeBytes ?: file.length()
-            report(PocketBookServerUpdatePhase.Uploading, completedWorkBytes)
+        )
+        completedWorkBytes += artifact.sizeBytes ?: file.length()
+        report(PocketBookServerUpdatePhase.Uploading, completedWorkBytes)
+
+        val appliedThroughEndpoint = applyStagedUpdateOrFallback(
+            device = device,
+            mountRootDevice = mountRootDevice,
+            update = update,
+            file = file,
+            stagedRemotePath = stagedRemotePath,
+            onFallbackUploadProgress = { uploadedBytes ->
+                report(
+                    PocketBookServerUpdatePhase.Uploading,
+                    completedWorkBytes + uploadedBytes
+                )
+            }
+        )
+
+        if (appliedThroughEndpoint) {
+            waitForInstalledVersion(device, update)?.let { return it }
         }
 
         return PocketBookServerVersionInfo(
@@ -377,8 +376,90 @@ class PocketBookServerUpdateManager @Inject constructor(
             appName = update.manifest.appName,
             versionName = update.versionName,
             versionCode = update.versionCode,
+            buildId = update.buildId,
             releasedAt = update.manifest.releasedAt
         )
+    }
+
+    private suspend fun uploadLauncherFile(
+        device: RemoteDevice,
+        remotePath: String,
+        file: File,
+        onProgress: (Long) -> Unit
+    ) {
+        file.inputStream().use { input ->
+            val result = ftpGateway.uploadAtomically(
+                device = device,
+                remoteRelativePath = remotePath,
+                input = input,
+                onProgress = onProgress
+            )
+            result.getOrElse { error ->
+                if (error is CancellationException) throw error
+                throw PocketBookServerUpdateException(
+                    PocketBookServerUpdateErrorReason.UploadFailed,
+                    error
+                )
+            }
+        }
+    }
+
+    private suspend fun applyStagedUpdateOrFallback(
+        device: RemoteDevice,
+        mountRootDevice: RemoteDevice,
+        update: AvailablePocketBookServerUpdate,
+        file: File,
+        stagedRemotePath: String,
+        onFallbackUploadProgress: (Long) -> Unit
+    ): Boolean {
+        val applyResult = controlClient.applyUpdate(
+            device = device,
+            request = PocketBookServerApplyUpdateRequest(
+                sourcePath = "$POCKETBOOK_MOUNT_ROOT_WITH_SLASH$stagedRemotePath",
+                versionName = update.versionName,
+                versionCode = update.versionCode,
+                releasedAt = update.manifest.releasedAt,
+                buildId = update.buildId,
+                sha256 = update.launcherArtifact.sha256
+            )
+        )
+
+        applyResult
+            .onSuccess { return true }
+            .onFailure { error ->
+                if (error is CancellationException) throw error
+                if (error !is PocketBookUpdateEndpointUnavailableException) {
+                    throw PocketBookServerUpdateException(
+                        PocketBookServerUpdateErrorReason.ApplyFailed,
+                        error
+                    )
+                }
+            }
+
+        val directInstallPath = update.launcherArtifact.installPath.toRemoteInstallPath()
+        uploadLauncherFile(
+            device = mountRootDevice,
+            remotePath = directInstallPath,
+            file = file,
+            onProgress = onFallbackUploadProgress
+        )
+        runCatching { ftpGateway.deleteFile(mountRootDevice, stagedRemotePath) }
+        return false
+    }
+
+    private suspend fun waitForInstalledVersion(
+        device: RemoteDevice,
+        update: AvailablePocketBookServerUpdate
+    ): PocketBookServerVersionInfo? {
+        repeat(UPDATE_VERSION_POLL_ATTEMPTS) {
+            coroutineContext.ensureActive()
+            delay(UPDATE_VERSION_POLL_DELAY_MS)
+            val version = readInstalledVersionOrNull(device)
+            if (version != null && update.matchesInstalledVersion(version)) {
+                return version
+            }
+        }
+        return null
     }
 
     private suspend fun getVerifiedArtifactFile(
@@ -474,6 +555,13 @@ class PocketBookServerUpdateManager @Inject constructor(
         return File(updateCacheDir(), safeName)
     }
 
+    private fun AvailablePocketBookServerUpdate.stagedLauncherRemotePath(): String {
+        val safeName = launcherArtifact.fileName
+            .substringAfterLast('/')
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+        return "$STAGING_REMOTE_DIR/$versionCode-$safeName"
+    }
+
     private fun String?.toRemoteInstallPath(): String {
         val installPath = this
             ?: throw PocketBookServerUpdateException(
@@ -487,6 +575,31 @@ class PocketBookServerUpdateManager @Inject constructor(
 
     private fun connectedPocketBookOrNull(): RemoteDevice? = connectionManager.connectedDevice.value
         ?.takeIf { it.profile == DeviceProfile.PocketBook }
+
+    private fun PocketBookServerUpdateManifest.isNewerThan(
+        installedVersion: PocketBookServerVersionInfo
+    ): Boolean = when {
+        versionCode > installedVersion.versionCode -> true
+
+        versionCode < installedVersion.versionCode -> false
+
+        else -> buildId.isMeaningfulBuildId() &&
+            installedVersion.buildId.isMeaningfulBuildId() &&
+            buildId != installedVersion.buildId
+    }
+
+    private fun AvailablePocketBookServerUpdate.matchesInstalledVersion(
+        installedVersion: PocketBookServerVersionInfo
+    ): Boolean = installedVersion.appName == POCKETBOOK_SERVER_APP_NAME &&
+        installedVersion.versionCode == versionCode &&
+        installedVersion.versionName == versionName &&
+        (
+            buildId.isNullOrBlank() ||
+                installedVersion.buildId.isNullOrBlank() ||
+                installedVersion.buildId == buildId
+            )
+
+    private fun String?.isMeaningfulBuildId(): Boolean = !isNullOrBlank()
 
     private fun setStatus(status: PocketBookServerUpdateStatus?) {
         _state.update { it.withStatus(status = status) }
@@ -548,15 +661,16 @@ class PocketBookServerUpdateManager @Inject constructor(
         const val UPDATE_CACHE_DIR = "pocketbook-server-updates"
         const val POCKETBOOK_SERVER_APP_NAME = "pb-ftp"
         const val LAUNCHER_ARTIFACT_TYPE = "launcher"
-        const val VERSION_ARTIFACT_TYPE = "version"
         const val EXPECTED_LAUNCHER_INSTALL_PATH = "/mnt/ext1/applications/pb-ftp.app"
-        const val EXPECTED_VERSION_INSTALL_PATH = "/mnt/ext1/applications/pb-ftp.version"
         const val POCKETBOOK_MOUNT_ROOT_WITH_SLASH = "/mnt/ext1/"
+        const val STAGING_REMOTE_DIR = "applications/.pb-ftp-update"
         const val CONNECT_TIMEOUT_MS = 10_000
         const val READ_TIMEOUT_MS = 10_000
         const val DOWNLOAD_READ_TIMEOUT_MS = 30_000
         const val MAX_MANIFEST_BYTES = 512 * 1024
         const val STATUS_AUTO_CLEAR_MS = 3_000L
+        const val UPDATE_VERSION_POLL_ATTEMPTS = 12
+        const val UPDATE_VERSION_POLL_DELAY_MS = 500L
         const val USER_AGENT = "eBookSender"
         val SHA256_PATTERN = Regex("^[a-fA-F0-9]{64}$")
     }
@@ -574,11 +688,11 @@ data class PocketBookServerUpdateState(
 
 data class AvailablePocketBookServerUpdate(
     val manifest: PocketBookServerUpdateManifest,
-    val launcherArtifact: PocketBookServerUpdateArtifact,
-    val versionArtifact: PocketBookServerUpdateArtifact
+    val launcherArtifact: PocketBookServerUpdateArtifact
 ) {
     val versionName: String get() = manifest.versionName
     val versionCode: Long get() = manifest.versionCode
+    val buildId: String? get() = manifest.buildId
     val changelogUrl: String? get() = manifest.changelogUrl
 }
 
@@ -621,6 +735,7 @@ enum class PocketBookServerUpdateErrorReason {
     DownloadFailed,
     ChecksumMismatch,
     UploadFailed,
+    ApplyFailed,
     Unknown
 }
 

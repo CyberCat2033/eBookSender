@@ -118,6 +118,7 @@
   "pb_server_update_error_download_failed": "",
   "pb_server_update_error_checksum_mismatch": "",
   "pb_server_update_error_upload_failed": "",
+  "pb_server_update_error_apply_failed": "",
   "pb_server_update_error_unknown": "",
   "pb_server_update_dialog_title": "",
   "pb_server_update_dialog_body": "",
