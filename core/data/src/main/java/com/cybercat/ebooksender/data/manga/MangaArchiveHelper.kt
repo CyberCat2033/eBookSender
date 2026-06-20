@@ -1,7 +1,8 @@
 package com.cybercat.ebooksender.data.manga
 
 import java.io.File
-import java.io.IOException
+import java.nio.file.FileAlreadyExistsException
+import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.inject.Inject
@@ -13,8 +14,27 @@ import kotlinx.coroutines.sync.withLock
 class MangaArchiveHelper @Inject constructor() {
     private val fileMutex = Mutex()
 
-    suspend fun uniqueFile(directory: File, fileName: String): File = fileMutex.withLock {
-        createUniqueFile(directory, fileName)
+    suspend fun createTempFile(directory: File, fileName: String): File = fileMutex.withLock {
+        directory.mkdirs()
+        File.createTempFile(
+            tempFilePrefix(fileName),
+            tempFileSuffix(fileName),
+            directory
+        )
+    }
+
+    suspend fun writeCbzToUnique(
+        pages: List<DownloadedMangaPage>,
+        directory: File,
+        fileName: String
+    ): File {
+        val tempFile = createTempFile(directory, fileName)
+        try {
+            writeCbz(pages, tempFile)
+            return moveTempToUnique(tempFile, directory, fileName)
+        } finally {
+            tempFile.delete()
+        }
     }
 
     fun writeCbz(pages: List<DownloadedMangaPage>, outputFile: File) {
@@ -33,33 +53,34 @@ class MangaArchiveHelper @Inject constructor() {
 
     suspend fun moveTempToUnique(tempFile: File, directory: File, fileName: String): File =
         fileMutex.withLock {
-            val outputFile = createUniqueFile(directory, fileName)
-            if (!outputFile.delete()) {
-                throw IOException("Cannot prepare output file: ${outputFile.name}")
-            }
-            try {
-                if (!tempFile.renameTo(outputFile)) {
-                    tempFile.copyTo(outputFile, overwrite = true)
-                    tempFile.delete()
+            directory.mkdirs()
+            var candidate = File(directory, fileName)
+            var index = 2
+            while (true) {
+                try {
+                    Files.move(tempFile.toPath(), candidate.toPath())
+                    return@withLock candidate
+                } catch (e: FileAlreadyExistsException) {
+                    val base = fileName.substringBeforeLast('.', fileName)
+                    val extension = fileName.substringAfterLast('.', "")
+                    val suffix = if (extension.isBlank()) "" else ".$extension"
+                    candidate = File(directory, "$base-$index$suffix")
+                    index += 1
                 }
-                outputFile
-            } catch (e: Exception) {
-                outputFile.delete()
-                throw e
             }
+            error("Unreachable unique manga archive target selection")
         }
 
-    private fun createUniqueFile(directory: File, fileName: String): File {
+    private fun tempFilePrefix(fileName: String): String {
         val base = fileName.substringBeforeLast('.', fileName)
+            .take(48)
+            .ifBlank { "manga" }
+        return base.padEnd(3, '_') + "-"
+    }
+
+    private fun tempFileSuffix(fileName: String): String {
         val extension = fileName.substringAfterLast('.', "")
-        var candidate = File(directory, fileName)
-        var index = 2
-        while (candidate.exists() || !candidate.createNewFile()) {
-            val suffix = if (extension.isBlank()) "" else ".$extension"
-            candidate = File(directory, "$base-$index$suffix")
-            index += 1
-        }
-        return candidate
+        return if (extension.isBlank()) ".tmp" else ".$extension.tmp"
     }
 }
 

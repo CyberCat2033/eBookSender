@@ -42,7 +42,7 @@ class DeviceCatalogRepository @Inject constructor(
     private val _catalog = MutableStateFlow(DeviceCatalog())
     val catalog: StateFlow<DeviceCatalog> = _catalog.asStateFlow()
 
-    private val deletedPaths = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val deletedPaths = mutableSetOf<String>()
     private val loadMutex = Mutex()
 
     init {
@@ -51,7 +51,7 @@ class DeviceCatalogRepository @Inject constructor(
                 if (device != null) {
                     refresh(device)
                 } else {
-                    clear()
+                    clearCatalog()
                 }
             }
             .launchIn(scope)
@@ -68,7 +68,9 @@ class DeviceCatalogRepository @Inject constructor(
             .distinctUntilChanged()
             .drop(1)
             .onEach { key ->
-                deletedPaths.clear()
+                loadMutex.withLock {
+                    deletedPaths.clear()
+                }
                 val device = connectionManager.connectedDevice.value
                 if (device != null) {
                     val updatedDevice = device.copy(relativeRootPath = key.relativeRootPath)
@@ -88,18 +90,20 @@ class DeviceCatalogRepository @Inject constructor(
         loadMutex.withLock {
             val result = runCatching { load(device, settings) }
             val loaded = result.getOrDefault(DeviceCatalog(errorMessage = "Load failed"))
-            _catalog.value = loaded.filterDeleted()
+            _catalog.value = loaded.filterDeletedLocked()
         }
     }
 
-    fun clear() {
-        deletedPaths.clear()
-        _catalog.value = DeviceCatalog()
+    private suspend fun clearCatalog() {
+        loadMutex.withLock {
+            deletedPaths.clear()
+            _catalog.value = DeviceCatalog()
+        }
     }
 
-    private fun DeviceCatalog.filterDeleted(): DeviceCatalog {
+    private fun DeviceCatalog.filterDeletedLocked(): DeviceCatalog {
+        if (deletedPaths.isEmpty()) return this
         val deleted = deletedPaths.toSet()
-        if (deleted.isEmpty()) return this
         return copy(
             books = books.mapNotNull { group ->
                 val files = group.files.filterNot { it.path in deleted }
@@ -128,28 +132,32 @@ class DeviceCatalogRepository @Inject constructor(
             val safePaths = paths.map { validateCatalogDeletePath(it, settings) }.distinct()
             if (safePaths.isEmpty()) return@withContext
 
-            val selectedPathSet = safePaths.toSet()
-            val folderCandidates = _catalog.value.deleteFolderCandidates(selectedPathSet)
-            val fileDeleteResult = ftpGateway.deleteFiles(device, safePaths).getOrThrow()
-            var firstError: Throwable? = fileDeleteResult.firstError
-            val successfulPaths = fileDeleteResult.successfulPaths
+            var firstError: Throwable? = null
+            loadMutex.withLock {
+                val selectedPathSet = safePaths.toSet()
+                val folderCandidates = _catalog.value.deleteFolderCandidates(selectedPathSet)
+                val fileDeleteResult = ftpGateway.deleteFiles(device, safePaths).getOrThrow()
+                firstError = fileDeleteResult.firstError
+                val successfulPaths = fileDeleteResult.successfulPaths
 
-            val successfulPathSet = successfulPaths.toSet()
-            val folderPaths = folderCandidates
-                .filter { candidate -> candidate.filePaths.all { it in successfulPathSet } }
-                .map { candidate -> validateCatalogDeleteFolderPath(candidate.path, settings) }
-                .distinct()
-                .sortedByDescending { path -> path.count { it == '/' } }
+                val successfulPathSet = successfulPaths.toSet()
+                val folderPaths = folderCandidates
+                    .filter { candidate -> candidate.filePaths.all { it in successfulPathSet } }
+                    .map { candidate -> validateCatalogDeleteFolderPath(candidate.path, settings) }
+                    .distinct()
+                    .sortedByDescending { path -> path.count { it == '/' } }
 
-            if (folderPaths.isNotEmpty()) {
-                val folderDeleteResult = ftpGateway.deleteDirectories(device, folderPaths)
-                    .getOrThrow()
-                if (firstError == null) {
-                    firstError = folderDeleteResult.firstError
+                if (folderPaths.isNotEmpty()) {
+                    val folderDeleteResult = ftpGateway.deleteDirectories(device, folderPaths)
+                        .getOrThrow()
+                    if (firstError == null) {
+                        firstError = folderDeleteResult.firstError
+                    }
                 }
-            }
 
-            deletedPaths.addAll(successfulPaths)
+                deletedPaths.addAll(successfulPaths)
+                _catalog.value = _catalog.value.filterDeletedLocked()
+            }
             refresh(device)
             firstError?.let { throw it }
         }

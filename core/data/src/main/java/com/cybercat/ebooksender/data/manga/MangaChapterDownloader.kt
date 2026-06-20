@@ -303,14 +303,11 @@ class MangaChapterDownloader @Inject constructor(
                 onPageProgress(pages.size, completedPages, detail)
             }
 
-            val file = archiveHelper.uniqueFile(outputDir, "$baseFileName.cbz")
-            try {
-                archiveHelper.writeCbz(downloadedPages, file)
-            } catch (e: Exception) {
-                file.delete()
-                throw e
-            }
-            return file
+            return archiveHelper.writeCbzToUnique(
+                pages = downloadedPages,
+                directory = outputDir,
+                fileName = "$baseFileName.cbz"
+            )
         } finally {
             // Clean up temporary files and directory recursively
             tempPagesDir.deleteRecursively()
@@ -326,7 +323,7 @@ class MangaChapterDownloader @Inject constructor(
     ): File? {
         if (chapter.downloadUrl.isNullOrBlank()) return null
 
-        val tempFile = archiveHelper.uniqueFile(outputDir, "$baseFileName.download")
+        val tempFile = archiveHelper.createTempFile(outputDir, "$baseFileName.download")
 
         try {
             ensureNetworkAvailable()
@@ -338,7 +335,6 @@ class MangaChapterDownloader @Inject constructor(
                     onProgress("Downloading archive", bytesRead, totalBytes)
                 }
             ) ?: run {
-                tempFile.delete()
                 return null
             }
             return archiveHelper.moveTempToUnique(
@@ -347,10 +343,8 @@ class MangaChapterDownloader @Inject constructor(
                 fileName = "$baseFileName.${archive.fileExtension}"
             )
         } catch (error: CancellationException) {
-            tempFile.delete()
             throw error
         } catch (error: IOException) {
-            tempFile.delete()
             if (error is MangaBrowserSessionRefreshRequiredException) {
                 throw error
             }
@@ -361,6 +355,8 @@ class MangaChapterDownloader @Inject constructor(
             }
             onProgress("Archive unavailable, downloading pages", 0L, null)
             return null
+        } finally {
+            tempFile.delete()
         }
     }
 
