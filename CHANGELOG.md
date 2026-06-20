@@ -26,3 +26,4 @@ All notable user-facing changes to eBookSender are documented in this file.
 - Hid the misleading "Not started" reading status for generic FTP catalog entries where reading progress is unavailable.
 - Fixed transfer and manga download progress notifications so they stay visible for the whole background batch instead of disappearing between chapters or items, and still disappear when the app is opened.
 - Fixed stale FTP connection state by periodically checking the connected device and clearing the catalog/status when the server is no longer reachable.
+- Fixed PocketBook server updates so the app no longer reports success until the updated server actually reports its new version.

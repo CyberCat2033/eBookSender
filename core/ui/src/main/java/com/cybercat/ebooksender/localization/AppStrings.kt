@@ -160,6 +160,9 @@ class AppStrings(
     val pbServerUpdateErrorApplyFailed: String get() = get(
         "pb_server_update_error_apply_failed"
     )
+    val pbServerUpdateErrorRestartNotConfirmed: String get() = get(
+        "pb_server_update_error_restart_not_confirmed"
+    )
     val pbServerUpdateErrorUnknown: String get() = get("pb_server_update_error_unknown")
     val categoryBooks: String get() = get("category_books")
     val categoryDocuments: String get() = get("category_documents")

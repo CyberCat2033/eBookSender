@@ -139,6 +139,7 @@
   "pb_server_update_error_checksum_mismatch": "Обновление сервера PocketBook не прошло проверку целостности.",
   "pb_server_update_error_upload_failed": "Не удалось отправить обновление на PocketBook.",
   "pb_server_update_error_apply_failed": "Не удалось активировать обновление на PocketBook.",
+  "pb_server_update_error_restart_not_confirmed": "Обновление отправлено, но новый сервер PocketBook ещё не сообщил свою версию. Перезапустите pb-ftp на PocketBook и проверьте снова.",
   "pb_server_update_error_unknown": "Не удалось обновить сервер PocketBook.",
   "pb_server_update_dialog_title": "Обновить сервер PocketBook до %1$s?",
   "pb_server_update_dialog_body": "Лаунчер на PocketBook будет обновлён до %1$s (%2$d). Не закрывайте pb-ftp на устройстве до завершения отправки.",

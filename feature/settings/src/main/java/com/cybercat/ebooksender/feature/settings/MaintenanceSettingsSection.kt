@@ -404,5 +404,8 @@ private fun PocketBookServerUpdateErrorReason.toSettingsText(
     PocketBookServerUpdateErrorReason.ApplyFailed ->
         strings.pbServerUpdateErrorApplyFailed
 
+    PocketBookServerUpdateErrorReason.RestartNotConfirmed ->
+        strings.pbServerUpdateErrorRestartNotConfirmed
+
     PocketBookServerUpdateErrorReason.Unknown -> strings.pbServerUpdateErrorUnknown
 }

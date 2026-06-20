@@ -396,17 +396,16 @@ class PocketBookServerUpdateManager @Inject constructor(
         )
 
         if (appliedThroughEndpoint) {
-            waitForInstalledVersion(device, update)?.let { return it }
+            return waitForInstalledVersion(device, update)
+                ?: throw PocketBookServerUpdateException(
+                    PocketBookServerUpdateErrorReason.RestartNotConfirmed
+                )
         }
 
-        return PocketBookServerVersionInfo(
-            schemaVersion = 1,
-            appName = update.manifest.appName,
-            versionName = update.versionName,
-            versionCode = update.versionCode,
-            buildId = update.buildId,
-            releasedAt = update.manifest.releasedAt
-        )
+        return waitForInstalledVersion(device, update)
+            ?: throw PocketBookServerUpdateException(
+                PocketBookServerUpdateErrorReason.RestartNotConfirmed
+            )
     }
 
     private suspend fun uploadLauncherFile(
@@ -724,6 +723,7 @@ enum class PocketBookServerUpdateErrorReason {
     ChecksumMismatch,
     UploadFailed,
     ApplyFailed,
+    RestartNotConfirmed,
     Unknown
 }
 
