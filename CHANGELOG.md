@@ -4,6 +4,8 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ## [Unreleased]
 
+## [0.11.7] - 2026-06-21
+
 ### Added
 
 - Added a project disclaimer covering warranties, user responsibility, third-party sources, FTP security, content rights, and data backups.
