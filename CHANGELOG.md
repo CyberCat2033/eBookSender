@@ -16,5 +16,6 @@ All notable user-facing changes to eBookSender are documented in this file.
 - Hide the dynamic color toggle on devices running Android 11 and lower since they do not support dynamic coloring.
 - Fixed naming-rule token hints so books, documents, and manga show only the tokens that apply to that file type.
 - Fixed duplicate loading indicators while deleting selected catalog books.
+- Hid the misleading "Not started" reading status for generic FTP catalog entries where reading progress is unavailable.
 - Fixed transfer and manga download progress notifications so they stay visible for the whole background batch instead of disappearing between chapters or items, and still disappear when the app is opened.
 - Fixed stale FTP connection state by periodically checking the connected device and clearing the catalog/status when the server is no longer reachable.

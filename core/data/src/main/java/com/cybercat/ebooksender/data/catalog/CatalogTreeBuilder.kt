@@ -110,6 +110,7 @@ class CatalogTreeBuilder @Inject constructor() {
         modifiedAtMillis = modifiedAtMillis,
         title = title?.takeIf { it.isNotBlank() && it != name.bookTitleWithoutExtension() },
         authors = authors,
+        readingProgressAvailable = true,
         readProgressPercent = readProgressPercent,
         completed = completed,
         lastOpenedAtMillis = lastOpenedAtMillis,

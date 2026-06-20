@@ -631,7 +631,9 @@ internal fun FileList(
                                     }
                                 }
 
-                                else -> strings.catalogStatusNotStarted
+                                file.readingProgressAvailable -> strings.catalogStatusNotStarted
+
+                                else -> null
                             }
 
                             val relativeTime = file.lastOpenedAtMillis?.let { time ->
@@ -651,19 +653,23 @@ internal fun FileList(
                                 if (!series.isNullOrBlank()) {
                                     add(strings.get("catalog_label_series", series))
                                 }
-                                add(progressDetailText)
+                                if (progressDetailText != null) {
+                                    add(progressDetailText)
+                                }
                                 if (lastReadText != null) {
                                     add(lastReadText)
                                 }
                             }
 
-                            Text(
-                                text = subtitleParts.joinToString(" | "),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            if (subtitleParts.isNotEmpty()) {
+                                Text(
+                                    text = subtitleParts.joinToString(" | "),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
 
