@@ -49,14 +49,9 @@ internal class MangaDownloadNotificationManager(
             current,
             total
         )
-        val progressText = progress.chapterTitle
-            .takeIf { it.isNotBlank() }
-            ?.let { title -> "$text - $title" }
-            ?: text
-
         notificationController.updateProgress(
             progressNotification(
-                text = progressText,
+                text = text,
                 progress = progress.notificationPercent(),
                 indeterminate = false
             )

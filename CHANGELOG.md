@@ -12,6 +12,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ### Fixed
 
+- Removed chapter title from manga download notifications for cleaner text.
 - Optimized manga chapter downloads by streaming pages to disk instead of keeping all page bytes in RAM, significantly reducing memory pressure and preventing Out of Memory crashes.
 - Clean up partially downloaded and empty `.cbz` manga files if archiving fails or is canceled.
 - Fixed a potential race condition in catalog loading and refreshed view updates.
