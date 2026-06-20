@@ -6,6 +6,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLDecoder
 
+private const val FALLBACK_BOOK_NAME = "book"
+
 internal fun normalizeOpdsUrl(url: String): String {
     val trimmed = url.trim()
     if (trimmed.isBlank()) throw IllegalArgumentException("OPDS URL is empty")
@@ -31,9 +33,9 @@ internal fun chooseOpdsDownloadFileName(
     val baseName = dispositionName
         ?: urlName
         ?: entry.title.ifBlank { acquisition.title.orEmpty() }
-        ?: "book"
+        ?: FALLBACK_BOOK_NAME
 
-    val sanitized = baseName.sanitizeDownloadFileName().ifBlank { "book" }
+    val sanitized = baseName.sanitizeDownloadFileName().ifBlank { FALLBACK_BOOK_NAME }
     return if (sanitized.bookExtension().isNotBlank()) {
         sanitized
     } else {
@@ -43,7 +45,7 @@ internal fun chooseOpdsDownloadFileName(
 }
 
 internal fun uniqueOpdsDownloadFile(directory: File, desiredName: String): File {
-    val name = desiredName.sanitizeDownloadFileName().ifBlank { "book" }
+    val name = desiredName.sanitizeDownloadFileName().ifBlank { FALLBACK_BOOK_NAME }
     var candidate = File(directory, name)
     if (!candidate.exists()) return candidate
 

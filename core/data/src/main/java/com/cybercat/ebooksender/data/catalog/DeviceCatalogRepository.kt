@@ -85,11 +85,11 @@ class DeviceCatalogRepository @Inject constructor(
     suspend fun refresh(device: RemoteDevice) {
         _catalog.update { it.copy(isLoading = true) }
         val settings = settingsRepository.settings.first()
-        val result = loadMutex.withLock {
-            runCatching { load(device, settings) }
+        loadMutex.withLock {
+            val result = runCatching { load(device, settings) }
+            val loaded = result.getOrDefault(DeviceCatalog(errorMessage = "Load failed"))
+            _catalog.value = loaded.filterDeleted()
         }
-        val loaded = result.getOrDefault(DeviceCatalog(errorMessage = "Load failed"))
-        _catalog.value = loaded.filterDeleted()
     }
 
     fun clear() {

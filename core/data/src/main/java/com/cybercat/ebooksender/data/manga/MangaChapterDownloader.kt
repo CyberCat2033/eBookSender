@@ -207,6 +207,7 @@ class MangaChapterDownloader @Inject constructor(
     private suspend fun downloadPages(
         adapter: MangaSourceAdapter,
         pages: List<MangaPage>,
+        tempDir: File,
         pageSemaphore: Semaphore,
         onPageProgress: suspend (Int, String?) -> Unit
     ): List<DownloadedMangaPage> = coroutineScope {
@@ -222,10 +223,13 @@ class MangaChapterDownloader @Inject constructor(
                             totalPages = pages.size,
                             onPageProgress = onPageProgress
                         )
+                        // Write to a temporary file immediately to keep memory usage minimal
+                        val tempFile = File.createTempFile("page_${page.index}_", ".tmp", tempDir)
+                        tempFile.writeBytes(downloaded.bytes)
                         onPageProgress(completedPages.incrementAndGet(), null)
                         DownloadedMangaPage(
                             index = page.index,
-                            bytes = downloaded.bytes,
+                            file = tempFile,
                             fileExtension = downloaded.fileExtension
                         )
                     }
@@ -265,7 +269,7 @@ class MangaChapterDownloader @Inject constructor(
                     completedPages.get(),
                     "Retry page ${page.index + 1}/$totalPages ($nextAttempt/$PAGE_DOWNLOAD_ATTEMPTS)"
                 )
-                delay(PAGE_RETRY_DELAY_MILLIS * nextAttempt)
+                delay(PAGE_RETRY_DELAY_MILLIS * (1L shl attempt))
             }
         }
         throw lastError ?: IOException("Page download failed")
@@ -282,17 +286,37 @@ class MangaChapterDownloader @Inject constructor(
         ensureNetworkAvailable()
         val pages = adapter.getChapterPages(chapter.chapterId)
             .ifEmpty { throw IOException("No pages found: ${chapter.title}") }
-        val downloadedPages = downloadPages(
-            adapter = adapter,
-            pages = pages,
-            pageSemaphore = pageSemaphore
-        ) { completedPages, detail ->
-            onPageProgress(pages.size, completedPages, detail)
-        }
 
-        val file = archiveHelper.uniqueFile(outputDir, "$baseFileName.cbz")
-        archiveHelper.writeCbz(downloadedPages, file)
-        return file
+        val tempPagesDir = File(
+            outputDir,
+            "temp_pages_${chapter.chapterId}_${System.currentTimeMillis()}"
+        ).apply {
+            mkdirs()
+        }
+        var downloadedPages = emptyList<DownloadedMangaPage>()
+        try {
+            downloadedPages = downloadPages(
+                adapter = adapter,
+                pages = pages,
+                tempDir = tempPagesDir,
+                pageSemaphore = pageSemaphore
+            ) { completedPages, detail ->
+                onPageProgress(pages.size, completedPages, detail)
+            }
+
+            val file = archiveHelper.uniqueFile(outputDir, "$baseFileName.cbz")
+            try {
+                archiveHelper.writeCbz(downloadedPages, file)
+            } catch (e: Exception) {
+                file.delete()
+                throw e
+            }
+            return file
+        } finally {
+            // Clean up temporary files and directory
+            downloadedPages.forEach { it.file.delete() }
+            tempPagesDir.delete()
+        }
     }
 
     private suspend fun downloadChapterArchive(

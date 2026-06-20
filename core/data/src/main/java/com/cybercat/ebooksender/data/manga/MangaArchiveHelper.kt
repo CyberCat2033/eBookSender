@@ -24,40 +24,32 @@ class MangaArchiveHelper @Inject constructor() {
         return candidate
     }
 
-    fun writeCbz(
-        pages: List<DownloadedMangaPage>,
-        outputFile: File,
-    ) {
+    fun writeCbz(pages: List<DownloadedMangaPage>, outputFile: File) {
         ZipOutputStream(outputFile.outputStream().buffered()).use { zip ->
             pages.forEachIndexed { index, page ->
                 val extension = page.fileExtension.lowercase().trimStart('.').ifBlank { "jpg" }
                 val entryName = "${(index + 1).toString().padStart(4, '0')}.$extension"
                 zip.putNextEntry(ZipEntry(entryName))
-                zip.write(page.bytes)
+                page.file.inputStream().buffered().use { input ->
+                    input.copyTo(zip)
+                }
                 zip.closeEntry()
             }
         }
     }
 
-    fun moveTempToUnique(
-        tempFile: File,
-        directory: File,
-        fileName: String,
-    ): File = synchronized(fileLock) {
-        val outputFile = uniqueFile(directory, fileName)
-        if (!outputFile.delete()) {
-            throw IOException("Cannot prepare output file: ${outputFile.name}")
+    fun moveTempToUnique(tempFile: File, directory: File, fileName: String): File =
+        synchronized(fileLock) {
+            val outputFile = uniqueFile(directory, fileName)
+            if (!outputFile.delete()) {
+                throw IOException("Cannot prepare output file: ${outputFile.name}")
+            }
+            if (!tempFile.renameTo(outputFile)) {
+                tempFile.copyTo(outputFile, overwrite = true)
+                tempFile.delete()
+            }
+            outputFile
         }
-        if (!tempFile.renameTo(outputFile)) {
-            tempFile.copyTo(outputFile, overwrite = true)
-            tempFile.delete()
-        }
-        outputFile
-    }
 }
 
-data class DownloadedMangaPage(
-    val index: Int,
-    val bytes: ByteArray,
-    val fileExtension: String,
-)
+data class DownloadedMangaPage(val index: Int, val file: File, val fileExtension: String)
