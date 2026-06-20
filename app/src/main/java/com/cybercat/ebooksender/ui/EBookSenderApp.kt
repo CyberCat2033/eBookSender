@@ -65,7 +65,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.cybercat.ebooksender.data.update.AppUpdateState
 import com.cybercat.ebooksender.data.update.AvailableAppUpdate
+import com.cybercat.ebooksender.data.update.AvailablePocketBookServerUpdate
 import com.cybercat.ebooksender.data.update.PocketBookServerUpdateState
+import com.cybercat.ebooksender.data.update.PocketBookServerUpdateStatus
 import com.cybercat.ebooksender.feature.catalog.CatalogScreen
 import com.cybercat.ebooksender.feature.catalog.CatalogViewModel
 import com.cybercat.ebooksender.feature.manga.MangaViewModel
@@ -118,6 +120,9 @@ fun EBookSenderApp(
     onInstallUpdate: () -> Unit,
     onCancelUpdateDownload: () -> Unit,
     pocketBookServerUpdateState: PocketBookServerUpdateState,
+    onLoadPocketBookServerUpdateChangelog:
+    suspend (AvailablePocketBookServerUpdate, String) -> String?,
+    onInstallPocketBookServerUpdate: () -> Unit,
     onCancelPocketBookServerUpdate: () -> Unit,
     rootViewModel: RootViewModel = hiltViewModel()
 ) {
@@ -135,6 +140,7 @@ fun EBookSenderApp(
     val navigationClickGate = remember { NavigationClickGate() }
     var topScrollJob by remember { mutableStateOf<Job?>(null) }
     var dismissedUpdateEventId by remember { mutableStateOf<Long?>(null) }
+    var dismissedPocketBookServerUpdateEventId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(sharedUris) {
         if (sharedUris.isNotEmpty()) {
@@ -293,9 +299,69 @@ fun EBookSenderApp(
                         onDismiss = { dismissedUpdateEventId = appUpdateState.statusEventId }
                     )
                 }
+
+                val pocketBookServerStatus = pocketBookServerUpdateState.status
+                if (pocketBookServerStatus != null &&
+                    dismissedPocketBookServerUpdateEventId !=
+                    pocketBookServerUpdateState.statusEventId
+                ) {
+                    PocketBookServerUpdateDialog(
+                        status = pocketBookServerStatus,
+                        enableHaptics = settings.enableHaptics,
+                        loadChangelog = onLoadPocketBookServerUpdateChangelog,
+                        onInstall = onInstallPocketBookServerUpdate,
+                        onDismiss = {
+                            dismissedPocketBookServerUpdateEventId =
+                                pocketBookServerUpdateState.statusEventId
+                        }
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun PocketBookServerUpdateDialog(
+    status: PocketBookServerUpdateStatus,
+    enableHaptics: Boolean,
+    loadChangelog: suspend (AvailablePocketBookServerUpdate, String) -> String?,
+    onInstall: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val strings = com.cybercat.ebooksender.localization.LocalStrings.current
+    val update = when (status) {
+        is PocketBookServerUpdateStatus.UpdateAvailable -> status.update
+        is PocketBookServerUpdateStatus.InstalledVersionUnknown -> status.update
+        else -> null
+    } ?: return
+    val isVersionUnknown = status is PocketBookServerUpdateStatus.InstalledVersionUnknown
+    val languageCode = strings.languageCode
+
+    UpdateAvailableDialog(
+        versionCode = update.versionCode,
+        title = strings.get("pb_server_update_dialog_title", update.versionName),
+        body = if (isVersionUnknown) {
+            strings.get(
+                "pb_server_update_dialog_body_unknown",
+                update.versionName,
+                update.versionCode
+            )
+        } else {
+            strings.get(
+                "pb_server_update_dialog_body",
+                update.versionName,
+                update.versionCode
+            )
+        },
+        confirmLabel = strings.get("pb_server_update_dialog_install"),
+        dismissLabel = strings.updateDialogLater,
+        enableHaptics = enableHaptics,
+        hasChangelog = update.changelogUrlFor(languageCode) != null,
+        loadChangelog = { code -> loadChangelog(update, code) },
+        onConfirm = onInstall,
+        onDismiss = onDismiss
+    )
 }
 
 @Composable

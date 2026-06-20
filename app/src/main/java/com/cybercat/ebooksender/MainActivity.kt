@@ -66,6 +66,10 @@ class MainActivity : ComponentActivity() {
                     onInstallUpdate = appUpdateManager::installAvailableUpdate,
                     onCancelUpdateDownload = appUpdateManager::cancelUpdateDownload,
                     pocketBookServerUpdateState = pocketBookServerUpdateState,
+                    onLoadPocketBookServerUpdateChangelog =
+                        pocketBookServerUpdateManager::loadChangelog,
+                    onInstallPocketBookServerUpdate =
+                        pocketBookServerUpdateManager::installAvailableUpdate,
                     onCancelPocketBookServerUpdate =
                         pocketBookServerUpdateManager::cancelInstall
                 )

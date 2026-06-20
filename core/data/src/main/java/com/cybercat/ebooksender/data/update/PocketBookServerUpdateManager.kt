@@ -32,6 +32,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -50,17 +52,41 @@ class PocketBookServerUpdateManager @Inject constructor(
     private var checkJob: Job? = null
     private var installJob: Job? = null
     private var statusClearJob: Job? = null
+    private var lastAutoCheckedConnectionKey: String? = null
 
     private val _state = MutableStateFlow(PocketBookServerUpdateState())
     val state: StateFlow<PocketBookServerUpdateState> = _state.asStateFlow()
 
-    fun checkForUpdates() {
+    init {
+        applicationScope.launch {
+            connectionManager.connectedDevice
+                .map { device -> device?.takeIf { it.profile == DeviceProfile.PocketBook } }
+                .map { device -> device?.autoUpdateConnectionKey() }
+                .distinctUntilChanged()
+                .collect { connectionKey ->
+                    if (connectionKey == null) {
+                        lastAutoCheckedConnectionKey = null
+                        return@collect
+                    }
+                    if (connectionKey != lastAutoCheckedConnectionKey) {
+                        lastAutoCheckedConnectionKey = connectionKey
+                        checkForUpdates(PocketBookServerUpdateCheckTrigger.DeviceConnected)
+                    }
+                }
+        }
+    }
+
+    fun checkForUpdates(
+        trigger: PocketBookServerUpdateCheckTrigger = PocketBookServerUpdateCheckTrigger.Manual
+    ) {
         if (checkJob?.isActive == true) return
         checkJob = applicationScope.launch {
             val device = connectedPocketBookOrNull()
             if (device == null) {
-                setStatus(PocketBookServerUpdateStatus.NoPocketBookConnected)
-                scheduleStatusClearIfTransient(_state.value.status)
+                if (trigger == PocketBookServerUpdateCheckTrigger.Manual) {
+                    setStatus(PocketBookServerUpdateStatus.NoPocketBookConnected)
+                    scheduleStatusClearIfTransient(_state.value.status)
+                }
                 return@launch
             }
 
@@ -72,8 +98,17 @@ class PocketBookServerUpdateManager @Inject constructor(
             result
                 .onSuccess { checkResult ->
                     _state.update { state ->
+                        val status = when {
+                            trigger == PocketBookServerUpdateCheckTrigger.Manual -> {
+                                checkResult.status
+                            }
+
+                            checkResult.status.isPromptingUpdate -> checkResult.status
+
+                            else -> null
+                        }
                         state.withStatus(
-                            status = checkResult.status,
+                            status = status,
                             isChecking = false,
                             installedVersion = checkResult.installedVersion,
                             availableUpdate = checkResult.availableUpdate
@@ -84,10 +119,15 @@ class PocketBookServerUpdateManager @Inject constructor(
                 .onFailure { error ->
                     if (error is CancellationException) throw error
                     _state.update {
-                        it.withStatus(
-                            status = PocketBookServerUpdateStatus.Error(
+                        val status = if (trigger == PocketBookServerUpdateCheckTrigger.Manual) {
+                            PocketBookServerUpdateStatus.Error(
                                 error.toPocketBookServerUpdateErrorReason()
-                            ),
+                            )
+                        } else {
+                            null
+                        }
+                        it.withStatus(
+                            status = status,
                             isChecking = false
                         )
                     }
@@ -173,12 +213,28 @@ class PocketBookServerUpdateManager @Inject constructor(
     }
 
     suspend fun clearUpdateCache(): Long = withContext(Dispatchers.IO) {
-        val dir = updateCacheDir()
-        val size = dir.folderSize()
-        if (size > 0L) {
-            runCatching { dir.deleteRecursively() }
+        val dirs = listOf(updateCacheDir(), changelogCacheDir())
+        val size = dirs.sumOf { dir -> dir.folderSize() }
+        dirs.forEach { dir ->
+            if (dir.exists()) {
+                runCatching { dir.deleteRecursively() }
+            }
         }
         size
+    }
+
+    suspend fun loadChangelog(
+        update: AvailablePocketBookServerUpdate,
+        languageCode: String
+    ): String? = update.changelogUrlFor(languageCode)?.let { changelogUrl ->
+        UpdateChangelogLoader.load(
+            changelogUrl = changelogUrl,
+            cacheDir = changelogCacheDir(),
+            versionCode = update.versionCode,
+            versionName = update.versionName,
+            languageCode = languageCode,
+            userAgent = USER_AGENT
+        )
     }
 
     private suspend fun findAvailableUpdate(
@@ -607,6 +663,8 @@ class PocketBookServerUpdateManager @Inject constructor(
 
     private fun updateCacheDir(): File = File(context.cacheDir, UPDATE_CACHE_DIR)
 
+    private fun changelogCacheDir(): File = File(context.cacheDir, CHANGELOG_CACHE_DIR)
+
     private fun Throwable.toPocketBookServerUpdateErrorReason(): PocketBookServerUpdateErrorReason =
         (this as? PocketBookServerUpdateException)?.reason
             ?: PocketBookServerUpdateErrorReason.Unknown
@@ -656,9 +714,17 @@ class PocketBookServerUpdateManager @Inject constructor(
         }
     }
 
+    private fun RemoteDevice.autoUpdateConnectionKey(): String = listOf(
+        host,
+        port.toString(),
+        username,
+        rootPath
+    ).joinToString("|")
+
     private companion object {
         const val UPDATE_MANIFEST_URL = "https://cybercat2033.github.io/pb-ftp/updates/latest.json"
         const val UPDATE_CACHE_DIR = "pocketbook-server-updates"
+        const val CHANGELOG_CACHE_DIR = "pocketbook-server-update-changelogs"
         const val POCKETBOOK_SERVER_APP_NAME = "pb-ftp"
         const val LAUNCHER_ARTIFACT_TYPE = "launcher"
         const val EXPECTED_LAUNCHER_INSTALL_PATH = "/mnt/ext1/applications/pb-ftp.app"
@@ -694,6 +760,13 @@ data class AvailablePocketBookServerUpdate(
     val versionCode: Long get() = manifest.versionCode
     val buildId: String? get() = manifest.buildId
     val changelogUrl: String? get() = manifest.changelogUrl
+    val changelogUrls: Map<String, String> get() = manifest.changelogUrls
+
+    fun changelogUrlFor(languageCode: String): String? = localizedUpdateUrl(
+        urls = changelogUrls,
+        fallbackUrl = changelogUrl,
+        languageCode = languageCode
+    )
 }
 
 data class PocketBookServerUpdateProgress(
@@ -738,6 +811,15 @@ enum class PocketBookServerUpdateErrorReason {
     ApplyFailed,
     Unknown
 }
+
+enum class PocketBookServerUpdateCheckTrigger {
+    DeviceConnected,
+    Manual
+}
+
+private val PocketBookServerUpdateStatus.isPromptingUpdate: Boolean
+    get() = this is PocketBookServerUpdateStatus.UpdateAvailable ||
+        this is PocketBookServerUpdateStatus.InstalledVersionUnknown
 
 private data class PocketBookServerUpdateCheckResult(
     val installedVersion: PocketBookServerVersionInfo?,

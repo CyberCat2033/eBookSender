@@ -21,4 +21,11 @@ class ConnectionManager @Inject constructor() {
     fun disconnect() {
         _connectedDevice.value = null
     }
+
+    @Synchronized
+    fun disconnectIfCurrent(device: RemoteDevice) {
+        if (_connectedDevice.value == device) {
+            _connectedDevice.value = null
+        }
+    }
 }

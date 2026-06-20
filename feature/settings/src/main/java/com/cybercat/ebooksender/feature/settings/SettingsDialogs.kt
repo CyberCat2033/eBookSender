@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import com.cybercat.ebooksender.data.update.PocketBookServerUpdateStatus
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.ui.AnimatedAlertDialog
@@ -187,80 +186,6 @@ internal fun SettingsResetWarningDialog(
                 }
             ) {
                 Text(strings.settingsDialogCancel)
-            }
-        }
-    )
-}
-
-@Composable
-internal fun PocketBookServerUpdateDialog(
-    status: PocketBookServerUpdateStatus,
-    enableHaptics: Boolean,
-    onInstall: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val context = LocalContext.current
-    val view = LocalView.current
-    val strings = LocalStrings.current
-    val update = when (status) {
-        is PocketBookServerUpdateStatus.UpdateAvailable -> status.update
-        is PocketBookServerUpdateStatus.InstalledVersionUnknown -> status.update
-        else -> null
-    } ?: return
-    val isVersionUnknown = status is PocketBookServerUpdateStatus.InstalledVersionUnknown
-
-    AnimatedAlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(strings.get("pb_server_update_dialog_title", update.versionName))
-        },
-        text = {
-            Text(
-                if (isVersionUnknown) {
-                    strings.get(
-                        "pb_server_update_dialog_body_unknown",
-                        update.versionName,
-                        update.versionCode
-                    )
-                } else {
-                    strings.get(
-                        "pb_server_update_dialog_body",
-                        update.versionName,
-                        update.versionCode
-                    )
-                }
-            )
-        },
-        confirmButton = {
-            val dismiss = LocalDismissDialog.current
-            TextButton(
-                onClick = {
-                    view.performHapticIfAllowed(
-                        context,
-                        enableHaptics,
-                        AppHapticFeedback.Confirm
-                    )
-                    onInstall()
-                    dismiss()
-                }
-            ) {
-                Text(strings.get("pb_server_update_dialog_install"))
-            }
-        },
-        dismissButton = {
-            val dismiss = LocalDismissDialog.current
-            TextButton(
-                onClick = {
-                    view.performHapticIfAllowed(
-                        context,
-                        enableHaptics,
-                        AppHapticFeedback.Press
-                    )
-                    onDismiss()
-                    dismiss()
-                }
-            ) {
-                Text(strings.updateDialogLater)
             }
         }
     )

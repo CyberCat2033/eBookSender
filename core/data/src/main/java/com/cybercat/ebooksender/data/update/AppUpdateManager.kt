@@ -50,14 +50,24 @@ data class AvailableAppUpdate(val manifest: AppUpdateManifest, val artifact: App
     val changelogUrl: String? get() = manifest.changelogUrl
     val changelogUrls: Map<String, String> get() = manifest.changelogUrls
 
-    fun changelogUrlFor(languageCode: String): String? {
-        val normalizedCode = languageCode.lowercase()
-        val baseCode = normalizedCode.substringBefore('-')
-        return changelogUrls[normalizedCode]
-            ?: changelogUrls[baseCode]
-            ?: changelogUrls["en"]
-            ?: changelogUrl
-    }
+    fun changelogUrlFor(languageCode: String): String? = localizedUpdateUrl(
+        urls = changelogUrls,
+        fallbackUrl = changelogUrl,
+        languageCode = languageCode
+    )
+}
+
+internal fun localizedUpdateUrl(
+    urls: Map<String, String>,
+    fallbackUrl: String?,
+    languageCode: String
+): String? {
+    val normalizedCode = languageCode.lowercase()
+    val baseCode = normalizedCode.substringBefore('-')
+    return urls[normalizedCode]
+        ?: urls[baseCode]
+        ?: urls["en"]
+        ?: fallbackUrl
 }
 
 sealed class AppUpdateStatus {
