@@ -2,11 +2,15 @@ package com.cybercat.ebooksender.transfer
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 class MetadataExtractionDispatcher(
-    scope: CoroutineScope,
-    parallelism: Int,
+    private val scope: CoroutineScope,
+    private val parallelism: Int,
     private val shouldLoadMetadata: (String) -> Boolean,
     private val loadMetadata: suspend (String) -> Unit
 ) {
@@ -14,15 +18,8 @@ class MetadataExtractionDispatcher(
     private val pendingItemIds = ArrayDeque<String>()
     private val queuedItemIds = mutableSetOf<String>()
     private val runningItemIds = mutableSetOf<String>()
+    private val workerJobs = mutableSetOf<Job>()
     private var queueSignal = CompletableDeferred<Unit>()
-
-    init {
-        repeat(parallelism) {
-            scope.launch {
-                processQueue()
-            }
-        }
-    }
 
     fun enqueue(itemIds: Iterable<String>) {
         val signal = synchronized(queueLock) {
@@ -41,7 +38,10 @@ class MetadataExtractionDispatcher(
             if (enqueued) queueSignal else null
         }
 
-        signal?.complete(Unit)
+        signal?.let {
+            ensureWorkersStarted()
+            it.complete(Unit)
+        }
     }
 
     fun prioritize(itemIds: List<String>) {
@@ -71,10 +71,28 @@ class MetadataExtractionDispatcher(
             }
         }
 
-        signal?.complete(Unit)
+        signal?.let {
+            ensureWorkersStarted()
+            it.complete(Unit)
+        }
+    }
+
+    private fun ensureWorkersStarted() {
+        val newJobs = synchronized(queueLock) {
+            workerJobs.removeAll { job -> !job.isActive }
+            List((parallelism - workerJobs.size).coerceAtLeast(0)) {
+                scope.launch(start = CoroutineStart.LAZY) {
+                    processQueue()
+                }
+            }.also { jobs ->
+                workerJobs += jobs
+            }
+        }
+        newJobs.forEach(Job::start)
     }
 
     private suspend fun processQueue() {
+        val workerJob = currentCoroutineContext()[Job]
         while (true) {
             val (itemId, signal) = synchronized(queueLock) {
                 val nextItemId = pendingItemIds.removeFirstOrNull()
@@ -91,7 +109,13 @@ class MetadataExtractionDispatcher(
             }
 
             if (itemId == null) {
-                signal.await()
+                val signaled = withTimeoutOrNull(WORKER_IDLE_TIMEOUT_MILLIS) {
+                    signal.await()
+                    true
+                } == true
+                if (!signaled && shouldStopIdleWorker(workerJob)) {
+                    return
+                }
                 continue
             }
 
@@ -105,5 +129,17 @@ class MetadataExtractionDispatcher(
                 }
             }
         }
+    }
+
+    private fun shouldStopIdleWorker(workerJob: Job?): Boolean = synchronized(queueLock) {
+        if (pendingItemIds.isNotEmpty()) return@synchronized false
+        if (workerJob != null) {
+            workerJobs.remove(workerJob)
+        }
+        true
+    }
+
+    private companion object {
+        const val WORKER_IDLE_TIMEOUT_MILLIS = 30_000L
     }
 }

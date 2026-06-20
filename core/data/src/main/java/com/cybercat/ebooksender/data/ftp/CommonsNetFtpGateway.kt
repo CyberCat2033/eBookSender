@@ -142,20 +142,21 @@ class CommonsNetFtpGateway @Inject constructor(
     ): Result<List<FtpEntry>> = withFtpClient(device) { client ->
         runCatching {
             val normalizedPath = remoteRelativePath.toSafeRelativeFtpPathOrBlank()
-            client.listFiles(normalizedPath)
-                .mapNotNull { file ->
-                    val safeName = file.name?.toSafeFtpEntryNameOrNull() ?: return@mapNotNull null
-                    val childPath = buildSafeChildFtpPath(normalizedPath, safeName)
-                        ?: return@mapNotNull null
-                    FtpEntry(
-                        name = safeName,
-                        path = childPath,
-                        isDirectory = file.isDirectory,
-                        size = file.size,
-                        modifiedAtMillis = file.timestamp?.timeInMillis
-                    )
+            client.listSafeEntries(normalizedPath)
+        }
+    }
+
+    override suspend fun listEntries(
+        device: RemoteDevice,
+        remoteRelativePaths: Collection<String>
+    ): Result<Map<String, List<FtpEntry>>> = withFtpClient(device) { client ->
+        runCatching {
+            remoteRelativePaths
+                .distinct()
+                .associateWith { path ->
+                    val normalizedPath = path.toSafeRelativeFtpPathOrBlank()
+                    client.listSafeEntries(normalizedPath)
                 }
-                .sortedWith(compareBy<FtpEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
         }
     }
 
@@ -186,6 +187,19 @@ class CommonsNetFtpGateway @Inject constructor(
         }
     }
 
+    override suspend fun deleteFiles(
+        device: RemoteDevice,
+        remoteRelativePaths: Collection<String>
+    ): Result<FtpBatchOperationResult> = withFtpClient(device) { client ->
+        runCatching {
+            client.deletePaths(remoteRelativePaths) { path ->
+                check(deleteFile(path)) {
+                    "FTP delete file failed for $path: $replyString"
+                }
+            }
+        }
+    }
+
     override suspend fun deleteDirectory(
         device: RemoteDevice,
         remoteRelativePath: String
@@ -194,6 +208,19 @@ class CommonsNetFtpGateway @Inject constructor(
             val normalized = remoteRelativePath.toSafeRelativeFtpPath()
             check(client.removeDirectory(normalized)) {
                 "FTP delete directory failed for $normalized: ${client.replyString}"
+            }
+        }
+    }
+
+    override suspend fun deleteDirectories(
+        device: RemoteDevice,
+        remoteRelativePaths: Collection<String>
+    ): Result<FtpBatchOperationResult> = withFtpClient(device) { client ->
+        runCatching {
+            client.deletePaths(remoteRelativePaths) { path ->
+                check(removeDirectory(path)) {
+                    "FTP delete directory failed for $path: $replyString"
+                }
             }
         }
     }
@@ -296,6 +323,46 @@ class CommonsNetFtpGateway @Inject constructor(
         if (original != null) {
             changeWorkingDirectory(original)
         }
+    }
+
+    private fun FTPClient.listSafeEntries(normalizedPath: String): List<FtpEntry> =
+        listFiles(normalizedPath)
+            .mapNotNull { file ->
+                val safeName = file.name?.toSafeFtpEntryNameOrNull() ?: return@mapNotNull null
+                val childPath = buildSafeChildFtpPath(normalizedPath, safeName)
+                    ?: return@mapNotNull null
+                FtpEntry(
+                    name = safeName,
+                    path = childPath,
+                    isDirectory = file.isDirectory,
+                    size = file.size,
+                    modifiedAtMillis = file.timestamp?.timeInMillis
+                )
+            }
+            .sortedWith(compareBy<FtpEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+
+    private fun FTPClient.deletePaths(
+        remoteRelativePaths: Collection<String>,
+        deletePath: FTPClient.(String) -> Unit
+    ): FtpBatchOperationResult {
+        val successfulPaths = mutableListOf<String>()
+        var firstError: Throwable? = null
+
+        remoteRelativePaths.distinct().forEach { path ->
+            val normalized = path.toSafeRelativeFtpPath()
+            runCatching {
+                deletePath(normalized)
+            }.onSuccess {
+                successfulPaths += normalized
+            }.onFailure { error ->
+                if (firstError == null) firstError = error
+            }
+        }
+
+        return FtpBatchOperationResult(
+            successfulPaths = successfulPaths,
+            firstError = firstError
+        )
     }
 
     private companion object {

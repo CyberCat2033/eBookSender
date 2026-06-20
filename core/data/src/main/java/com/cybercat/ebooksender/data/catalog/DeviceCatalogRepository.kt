@@ -130,17 +130,9 @@ class DeviceCatalogRepository @Inject constructor(
 
             val selectedPathSet = safePaths.toSet()
             val folderCandidates = _catalog.value.deleteFolderCandidates(selectedPathSet)
-            var firstError: Throwable? = null
-            val successfulPaths = mutableListOf<String>()
-            safePaths.forEach { path ->
-                ftpGateway.deleteFile(device, path)
-                    .onSuccess {
-                        successfulPaths.add(path)
-                    }
-                    .onFailure { error ->
-                        if (firstError == null) firstError = error
-                    }
-            }
+            val fileDeleteResult = ftpGateway.deleteFiles(device, safePaths).getOrThrow()
+            var firstError: Throwable? = fileDeleteResult.firstError
+            val successfulPaths = fileDeleteResult.successfulPaths
 
             val successfulPathSet = successfulPaths.toSet()
             val folderPaths = folderCandidates
@@ -149,11 +141,12 @@ class DeviceCatalogRepository @Inject constructor(
                 .distinct()
                 .sortedByDescending { path -> path.count { it == '/' } }
 
-            folderPaths.forEach { folderPath ->
-                ftpGateway.deleteDirectory(device, folderPath)
-                    .onFailure { error ->
-                        if (firstError == null) firstError = error
-                    }
+            if (folderPaths.isNotEmpty()) {
+                val folderDeleteResult = ftpGateway.deleteDirectories(device, folderPaths)
+                    .getOrThrow()
+                if (firstError == null) {
+                    firstError = folderDeleteResult.firstError
+                }
             }
 
             deletedPaths.addAll(successfulPaths)

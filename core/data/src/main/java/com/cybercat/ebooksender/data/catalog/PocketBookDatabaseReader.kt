@@ -3,6 +3,7 @@ package com.cybercat.ebooksender.data.catalog
 import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import com.cybercat.ebooksender.data.ftp.FtpEntry
 import com.cybercat.ebooksender.data.ftp.FtpGateway
 import com.cybercat.ebooksender.data.pocketbook.PocketBookLibraryPaths
 import com.cybercat.ebooksender.model.AppSettings
@@ -12,6 +13,7 @@ import com.cybercat.ebooksender.model.normalizeFtpRelativeRootPath
 import com.cybercat.ebooksender.model.normalizeFtpRootPath
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.util.Properties
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,36 +34,125 @@ class PocketBookDatabaseReader @Inject constructor(
 
     private suspend fun downloadDatabaseSnapshot(device: RemoteDevice): File {
         val directory = File(context.cacheDir, CACHE_DIRECTORY).apply { mkdirs() }
+        val remoteFiles = ftpGateway.listEntries(
+            device = device,
+            remoteRelativePath = PocketBookLibraryPaths.REMOTE_DATABASE_DIRECTORY
+        ).getOrNull()
+            ?.filter { entry -> !entry.isDirectory && entry.name in DATABASE_FILES }
+            ?.associateBy { entry -> entry.name }
+
+        if (remoteFiles != null && canReuseSnapshot(directory, remoteFiles)) {
+            return File(directory, PocketBookLibraryPaths.DATABASE_NAME)
+        }
 
         DATABASE_FILES.forEach { name ->
             File(directory, name).delete()
+            File(directory, "$name.download").delete()
         }
-
         val dbFile = File(directory, PocketBookLibraryPaths.DATABASE_NAME)
-        dbFile.outputStream().use { outputStream ->
-            ftpGateway.downloadFile(
-                device = device,
-                remoteRelativePath =
-                    "${PocketBookLibraryPaths.REMOTE_DATABASE_DIRECTORY}/${PocketBookLibraryPaths.DATABASE_NAME}",
-                output = outputStream
-            ).getOrThrow()
-        }
+        downloadSnapshotFile(device, directory, PocketBookLibraryPaths.DATABASE_NAME)
+            .getOrThrow()
 
-        OPTIONAL_DATABASE_FILES.forEach { name ->
-            val file = File(directory, name)
-            file.outputStream().use { outputStream ->
-                ftpGateway.downloadFile(
-                    device = device,
-                    remoteRelativePath =
-                        "${PocketBookLibraryPaths.REMOTE_DATABASE_DIRECTORY}/$name",
-                    output = outputStream
-                ).onFailure {
-                    file.delete()
-                }
+        OPTIONAL_DATABASE_FILES
+            .filter { name -> remoteFiles == null || remoteFiles.containsKey(name) }
+            .forEach { name ->
+                downloadSnapshotFile(device, directory, name)
+                    .onFailure {
+                        File(directory, name).delete()
+                        File(directory, "$name.download").delete()
+                    }
             }
+
+        if (remoteFiles == null) {
+            File(directory, SNAPSHOT_METADATA_FILE).delete()
+        } else {
+            saveSnapshotMetadata(
+                directory = directory,
+                files = remoteFiles
+                    .filterKeys { name -> File(directory, name).isFile }
+                    .mapValues { (_, entry) -> entry.toSnapshotFileMetadata() }
+            )
         }
 
         return dbFile
+    }
+
+    private suspend fun downloadSnapshotFile(
+        device: RemoteDevice,
+        directory: File,
+        name: String
+    ): Result<Unit> = runCatching {
+        val target = File(directory, name)
+        val temporary = File(directory, "$name.download")
+        temporary.outputStream().use { outputStream ->
+            ftpGateway.downloadFile(
+                device = device,
+                remoteRelativePath = "${PocketBookLibraryPaths.REMOTE_DATABASE_DIRECTORY}/$name",
+                output = outputStream
+            ).getOrThrow()
+        }
+        if (target.exists()) {
+            check(target.delete()) { "Cannot replace cached PocketBook database file $name" }
+        }
+        check(temporary.renameTo(target)) {
+            "Cannot finalize cached PocketBook database file $name"
+        }
+    }
+
+    private fun canReuseSnapshot(directory: File, remoteFiles: Map<String, FtpEntry>): Boolean {
+        val cachedMetadata = readSnapshotMetadata(directory)
+        if (PocketBookLibraryPaths.DATABASE_NAME !in remoteFiles) return false
+
+        return DATABASE_FILES.all { name ->
+            val localFile = File(directory, name)
+            val remoteMetadata = remoteFiles[name]?.toSnapshotFileMetadata()
+            if (remoteMetadata == null) {
+                !localFile.exists() && name !in cachedMetadata
+            } else {
+                localFile.isFile &&
+                    localFile.length() == remoteMetadata.size &&
+                    cachedMetadata[name] == remoteMetadata
+            }
+        }
+    }
+
+    private fun readSnapshotMetadata(directory: File): Map<String, SnapshotFileMetadata> {
+        val file = File(directory, SNAPSHOT_METADATA_FILE)
+        if (!file.isFile) return emptyMap()
+
+        val properties = Properties()
+        runCatching {
+            file.inputStream().use(properties::load)
+        }.getOrElse {
+            return emptyMap()
+        }
+
+        return DATABASE_FILES.mapNotNull { name ->
+            val size = properties.getProperty("$name.size")?.toLongOrNull()
+                ?: return@mapNotNull null
+            val modifiedAtMillis = properties
+                .getProperty("$name.modifiedAtMillis")
+                ?.takeIf(String::isNotBlank)
+                ?.toLongOrNull()
+            name to SnapshotFileMetadata(
+                size = size,
+                modifiedAtMillis = modifiedAtMillis
+            )
+        }.toMap()
+    }
+
+    private fun saveSnapshotMetadata(directory: File, files: Map<String, SnapshotFileMetadata>) {
+        val properties = Properties()
+        files.forEach { (name, metadata) ->
+            properties.setProperty("$name.size", metadata.size.toString())
+            properties.setProperty(
+                "$name.modifiedAtMillis",
+                metadata.modifiedAtMillis?.toString().orEmpty()
+            )
+        }
+        File(directory, SNAPSHOT_METADATA_FILE).outputStream().use { output ->
+            properties.store(output, null)
+        }
     }
 
     private fun readDatabaseFiles(
@@ -146,6 +237,7 @@ class PocketBookDatabaseReader @Inject constructor(
 
     private companion object {
         const val CACHE_DIRECTORY = "pocketbook-catalog"
+        const val SNAPSHOT_METADATA_FILE = "snapshot.properties"
 
         val OPTIONAL_DATABASE_FILES = listOf(
             "${PocketBookLibraryPaths.DATABASE_NAME}-wal",
@@ -189,6 +281,13 @@ class PocketBookDatabaseReader @Inject constructor(
     private class UnsupportedCatalogDatabaseException(message: String) :
         IllegalStateException(message)
 }
+
+private data class SnapshotFileMetadata(val size: Long, val modifiedAtMillis: Long?)
+
+private fun FtpEntry.toSnapshotFileMetadata() = SnapshotFileMetadata(
+    size = size,
+    modifiedAtMillis = modifiedAtMillis
+)
 
 private fun RemoteDevice.storageRootPrefix(settings: AppSettings): String {
     val mountRoot = normalizeFtpRootPath(rootPath).takeUnless { it == "/" }

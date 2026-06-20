@@ -50,13 +50,17 @@ class CatalogFolderScanner @Inject constructor(private val ftpGateway: FtpGatewa
 
         val folderGroups = rootEntries
             .filter(FtpEntry::isDirectory)
-            .mapNotNull { group ->
-                val files = ftpGateway.listEntries(device, group.path)
-                    .getOrDefault(emptyList())
-                    .filterNot(FtpEntry::isDirectory)
-                    .filter { it.isKnownBookFile() }
-                    .map { it.toCatalogFile() }
-                files.toCatalogGroupOrNull(name = group.name, path = group.path)
+            .let { groups ->
+                val filesByPath = groups.entriesByPath(device)
+
+                groups.mapNotNull { group ->
+                    val files = filesByPath[group.path]
+                        .orEmpty()
+                        .filterNot(FtpEntry::isDirectory)
+                        .filter { it.isKnownBookFile() }
+                        .map { it.toCatalogFile() }
+                    files.toCatalogGroupOrNull(name = group.name, path = group.path)
+                }
             }
 
         return buildCatalogGroupsWithFallback(
@@ -70,18 +74,23 @@ class CatalogFolderScanner @Inject constructor(private val ftpGateway: FtpGatewa
     private suspend fun loadMangaSeries(
         device: RemoteDevice,
         root: String
-    ): List<MangaSeriesGroup> = ftpGateway.listEntries(device, root)
-        .getOrThrow()
-        .filter(FtpEntry::isDirectory)
-        .mapNotNull { series ->
-            val files = ftpGateway.listEntries(device, series.path)
-                .getOrDefault(emptyList())
-                .filterNot(FtpEntry::isDirectory)
-                .filter { it.name.contentExtension() in MangaArchiveExtensions }
-                .map { it.toCatalogFile() }
-            files.toMangaSeriesGroupOrNull(name = series.name, path = series.path)
-        }
-        .sortedWith(NaturalSort.by { it.name })
+    ): List<MangaSeriesGroup> {
+        val seriesEntries = ftpGateway.listEntries(device, root)
+            .getOrThrow()
+            .filter(FtpEntry::isDirectory)
+        val filesByPath = seriesEntries.entriesByPath(device)
+
+        return seriesEntries
+            .mapNotNull { series ->
+                val files = filesByPath[series.path]
+                    .orEmpty()
+                    .filterNot(FtpEntry::isDirectory)
+                    .filter { it.name.contentExtension() in MangaArchiveExtensions }
+                    .map { it.toCatalogFile() }
+                files.toMangaSeriesGroupOrNull(name = series.name, path = series.path)
+            }
+            .sortedWith(NaturalSort.by { it.name })
+    }
 
     private fun FtpEntry.toCatalogFile(): CatalogFile = CatalogFile(
         name = name,
@@ -92,4 +101,15 @@ class CatalogFolderScanner @Inject constructor(private val ftpGateway: FtpGatewa
 
     private fun FtpEntry.isKnownBookFile(): Boolean =
         name.contentExtension() in AllSupportedExtensions
+
+    private suspend fun List<FtpEntry>.entriesByPath(
+        device: RemoteDevice
+    ): Map<String, List<FtpEntry>> = if (isEmpty()) {
+        emptyMap()
+    } else {
+        ftpGateway.listEntries(
+            device = device,
+            remoteRelativePaths = map(FtpEntry::path)
+        ).getOrDefault(emptyMap())
+    }
 }

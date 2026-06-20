@@ -24,6 +24,19 @@ interface FtpGateway {
         remoteRelativePath: String
     ): Result<List<FtpEntry>>
 
+    suspend fun listEntries(
+        device: RemoteDevice,
+        remoteRelativePaths: Collection<String>
+    ): Result<Map<String, List<FtpEntry>>> {
+        val entriesByPath = mutableMapOf<String, List<FtpEntry>>()
+        remoteRelativePaths.distinct().forEach { path ->
+            listEntries(device, path)
+                .onSuccess { entries -> entriesByPath[path] = entries }
+                .onFailure { error -> return Result.failure(error) }
+        }
+        return Result.success(entriesByPath)
+    }
+
     suspend fun downloadFile(
         device: RemoteDevice,
         remoteRelativePath: String,
@@ -32,7 +45,49 @@ interface FtpGateway {
 
     suspend fun deleteFile(device: RemoteDevice, remoteRelativePath: String): Result<Unit>
 
+    suspend fun deleteFiles(
+        device: RemoteDevice,
+        remoteRelativePaths: Collection<String>
+    ): Result<FtpBatchOperationResult> {
+        val successfulPaths = mutableListOf<String>()
+        var firstError: Throwable? = null
+        remoteRelativePaths.distinct().forEach { path ->
+            deleteFile(device, path)
+                .onSuccess { successfulPaths += path }
+                .onFailure { error ->
+                    if (firstError == null) firstError = error
+                }
+        }
+        return Result.success(
+            FtpBatchOperationResult(
+                successfulPaths = successfulPaths,
+                firstError = firstError
+            )
+        )
+    }
+
     suspend fun deleteDirectory(device: RemoteDevice, remoteRelativePath: String): Result<Unit>
+
+    suspend fun deleteDirectories(
+        device: RemoteDevice,
+        remoteRelativePaths: Collection<String>
+    ): Result<FtpBatchOperationResult> {
+        val successfulPaths = mutableListOf<String>()
+        var firstError: Throwable? = null
+        remoteRelativePaths.distinct().forEach { path ->
+            deleteDirectory(device, path)
+                .onSuccess { successfulPaths += path }
+                .onFailure { error ->
+                    if (firstError == null) firstError = error
+                }
+        }
+        return Result.success(
+            FtpBatchOperationResult(
+                successfulPaths = successfulPaths,
+                firstError = firstError
+            )
+        )
+    }
 
     suspend fun rename(device: RemoteDevice, fromPath: String, toPath: String): Result<Unit>
 }
@@ -46,3 +101,5 @@ data class FtpEntry(
     val size: Long,
     val modifiedAtMillis: Long?
 )
+
+data class FtpBatchOperationResult(val successfulPaths: List<String>, val firstError: Throwable?)
