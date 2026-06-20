@@ -308,6 +308,7 @@ internal fun NamingTemplateBlock(
     previewTemplate: String,
     exampleTokens: Map<String, String>,
     folderName: String,
+    groupFolder: String,
     extension: String = "epub",
     onFocusChanged: (Boolean) -> Unit = {},
     validation: (String) -> String
@@ -327,6 +328,7 @@ internal fun NamingTemplateBlock(
             template = previewTemplate,
             exampleTokens = exampleTokens,
             folderName = folderName,
+            groupFolder = groupFolder,
             extension = extension
         )
     }
@@ -338,6 +340,7 @@ internal fun NamingPreview(
     template: String,
     exampleTokens: Map<String, String>,
     folderName: String,
+    groupFolder: String,
     extension: String = "epub"
 ) {
     val previewTokens = exampleTokens + ("ext" to extension)
@@ -345,8 +348,6 @@ internal fun NamingPreview(
         previewTokens.entries.fold(template.ifBlank { "{title}" }) { current, (key, value) ->
             current.replace("{$key}", value)
         }
-    val groupFolder =
-        previewTokens["author"] ?: previewTokens["tag"] ?: previewTokens["series"] ?: "..."
     val path = "$folderName/$groupFolder/$rendered.$extension"
 
     Column(

@@ -35,6 +35,9 @@ class AppStrings(
 
     val settingsNamingSection: String get() = get("settings_naming_section")
     val settingsNamingTokens: String get() = get("settings_naming_tokens")
+    val settingsNamingBooksTokens: String get() = get("settings_naming_books_tokens")
+    val settingsNamingDocsTokens: String get() = get("settings_naming_docs_tokens")
+    val settingsNamingMangaTokens: String get() = get("settings_naming_manga_tokens")
     val settingsNamingBooksTemplate: String get() = get("settings_naming_books_template")
     val settingsNamingDocsTemplate: String get() = get("settings_naming_docs_template")
     val settingsNamingMangaTemplate: String get() = get("settings_naming_manga_template")
