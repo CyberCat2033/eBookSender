@@ -19,6 +19,8 @@ data class PocketBookServerUpdateManifest(
     val releasedAt: String,
     @SerialName("changelogUrl")
     val changelogUrl: String? = null,
+    @SerialName("changelogUrls")
+    val changelogUrls: Map<String, String> = emptyMap(),
     @SerialName("artifacts")
     val artifacts: List<PocketBookServerUpdateArtifact>
 )

@@ -78,7 +78,6 @@ fun SettingsScreen(
     val hadPendingRename = remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showMangaLoginModeDialog by remember { mutableStateOf(false) }
-    var dismissedPocketBookServerUpdateEventId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(state.pendingRename) {
         val hasPending = state.pendingRename != null
@@ -160,22 +159,6 @@ fun SettingsScreen(
             enableHaptics = state.settings.enableHaptics,
             onMangaLoginModeChanged = onMangaLoginModeChanged,
             onDismiss = { showMangaLoginModeDialog = false }
-        )
-    }
-
-    val pocketBookServerStatus = state.pocketBookServerUpdateState.status
-    if (pocketBookServerStatus != null &&
-        dismissedPocketBookServerUpdateEventId !=
-        state.pocketBookServerUpdateState.statusEventId
-    ) {
-        PocketBookServerUpdateDialog(
-            status = pocketBookServerStatus,
-            enableHaptics = state.settings.enableHaptics,
-            onInstall = onInstallPocketBookServerUpdate,
-            onDismiss = {
-                dismissedPocketBookServerUpdateEventId =
-                    state.pocketBookServerUpdateState.statusEventId
-            }
         )
     }
 

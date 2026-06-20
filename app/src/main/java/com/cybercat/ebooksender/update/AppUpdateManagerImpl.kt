@@ -15,6 +15,7 @@ import com.cybercat.ebooksender.data.update.AppUpdateManager
 import com.cybercat.ebooksender.data.update.AppUpdateState
 import com.cybercat.ebooksender.data.update.AppUpdateStatus
 import com.cybercat.ebooksender.data.update.AvailableAppUpdate
+import com.cybercat.ebooksender.data.update.UpdateChangelogLoader
 import com.cybercat.ebooksender.di.ApplicationScope
 import com.cybercat.ebooksender.model.update.AppUpdateArtifact
 import com.cybercat.ebooksender.model.update.AppUpdateManifest
@@ -209,24 +210,15 @@ class AppUpdateManagerImpl @Inject constructor(
     }
 
     override suspend fun loadChangelog(update: AvailableAppUpdate, languageCode: String): String? =
-        withContext(Dispatchers.IO) {
-            val changelogUrl = update.changelogUrlFor(languageCode) ?: return@withContext null
-            runCatching {
-                val cacheFile = cachedChangelogFile(update, languageCode)
-                val markdown = if (cacheFile.isFile) {
-                    cacheFile.readText()
-                } else {
-                    fetchChangelog(changelogUrl).also { markdown ->
-                        cacheFile.parentFile?.mkdirs()
-                        cacheFile.writeText(markdown)
-                        cleanupStaleChangelogs(keep = cacheFile)
-                    }
-                }
-                extractVersionChangelog(
-                    markdown = markdown,
-                    versionName = update.versionName
-                )
-            }.getOrNull()?.takeIf { it.isNotBlank() }
+        update.changelogUrlFor(languageCode)?.let { changelogUrl ->
+            UpdateChangelogLoader.load(
+                changelogUrl = changelogUrl,
+                cacheDir = changelogCacheDir(),
+                versionCode = update.versionCode,
+                versionName = update.versionName,
+                languageCode = languageCode,
+                userAgent = USER_AGENT
+            )
         }
 
     override suspend fun clearUpdateCache(): Long = withContext(Dispatchers.IO) {
@@ -281,37 +273,6 @@ class AppUpdateManagerImpl @Inject constructor(
         }
     }
 
-    private fun fetchChangelog(changelogUrl: String): String {
-        val url = URL(changelogUrl)
-        if (url.protocol != "https") {
-            throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-        }
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            instanceFollowRedirects = true
-            requestMethod = "GET"
-            useCaches = false
-            setRequestProperty("Accept", "text/markdown, text/plain, */*")
-            setRequestProperty("Cache-Control", "no-cache")
-            setRequestProperty("Pragma", "no-cache")
-            setRequestProperty("User-Agent", USER_AGENT)
-        }
-        try {
-            val code = connection.responseCode
-            if (code !in 200..299) throw AppUpdateException(AppUpdateErrorReason.Network)
-            val contentType = connection.contentType.orEmpty().lowercase()
-            if (contentType.contains("text/html")) {
-                throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-            }
-            return connection.inputStream.use { it.readLimitedText(MAX_CHANGELOG_BYTES) }
-        } catch (exception: IOException) {
-            throw AppUpdateException(AppUpdateErrorReason.Network, exception)
-        } finally {
-            connection.disconnect()
-        }
-    }
-
     private fun validateManifest(manifest: AppUpdateManifest) {
         if (manifest.schemaVersion != 1 ||
             manifest.packageName != context.packageName ||
@@ -340,46 +301,6 @@ class AppUpdateManagerImpl @Inject constructor(
         return Build.SUPPORTED_ABIS.firstNotNullOfOrNull { abi -> artifactsByAbi[abi] }
             ?: artifactsByAbi[UNIVERSAL_ABI]
     }
-
-    private fun extractVersionChangelog(markdown: String, versionName: String): String {
-        val lines = markdown.lineSequence().toList()
-        val versionHeading = Regex(
-            "^##\\s+\\[?${Regex.escape(versionName)}(?:]|\\b).*$"
-        )
-        val unreleasedHeading = Regex(
-            pattern = "^##\\s+\\[?Unreleased(?:]|\\b).*$",
-            option = RegexOption.IGNORE_CASE
-        )
-        val startIndex = lines.indexOfFirst { line ->
-            val trimmed = line.trim()
-            versionHeading.matches(trimmed) || unreleasedHeading.matches(trimmed)
-        }
-
-        val sectionLines = if (startIndex >= 0) {
-            lines.drop(startIndex + 1)
-                .takeWhile { line -> !line.trim().matches(SECOND_LEVEL_HEADING_PATTERN) }
-        } else {
-            lines.dropWhile { line ->
-                val trimmed = line.trim()
-                trimmed.isEmpty() || trimmed.startsWith("#")
-            }
-        }
-
-        return formatChangelogSection(sectionLines)
-    }
-
-    private fun formatChangelogSection(lines: List<String>): String =
-        lines.joinToString("\n") { line ->
-            val trimmed = line.trim()
-            when {
-                trimmed.startsWith("###") -> trimmed.trimStart('#').trim()
-                trimmed.startsWith("- ") -> "- ${trimmed.drop(2)}"
-                trimmed.startsWith("* ") -> "- ${trimmed.drop(2)}"
-                else -> trimmed
-            }
-        }
-            .replace(Regex("\n{3,}"), "\n\n")
-            .trim()
 
     private suspend fun getVerifiedApk(update: AvailableAppUpdate): File {
         val apk = cachedApkFile(update)
@@ -520,23 +441,8 @@ class AppUpdateManagerImpl @Inject constructor(
         return File(updateCacheDir(), "${update.versionCode}-$safeName")
     }
 
-    private fun cachedChangelogFile(update: AvailableAppUpdate, languageCode: String): File {
-        val safeLanguage = languageCode
-            .lowercase()
-            .replace(Regex("[^a-z0-9._-]"), "_")
-            .ifBlank { "en" }
-        return File(changelogCacheDir(), "${update.versionCode}-$safeLanguage.md")
-    }
-
     private fun cleanupStaleApks(keep: File?) {
         val dir = updateCacheDir()
-        dir.listFiles().orEmpty().forEach { file ->
-            if (file != keep) runCatching { file.deleteRecursively() }
-        }
-    }
-
-    private fun cleanupStaleChangelogs(keep: File?) {
-        val dir = changelogCacheDir()
         dir.listFiles().orEmpty().forEach { file ->
             if (file != keep) runCatching { file.deleteRecursively() }
         }
@@ -644,11 +550,9 @@ class AppUpdateManagerImpl @Inject constructor(
         const val READ_TIMEOUT_MS = 10_000
         const val DOWNLOAD_READ_TIMEOUT_MS = 30_000
         const val MAX_MANIFEST_BYTES = 512 * 1024
-        const val MAX_CHANGELOG_BYTES = 96 * 1024
         const val STATUS_AUTO_CLEAR_MS = 3_000L
         const val USER_AGENT = "eBookSender/${BuildConfig.VERSION_NAME}"
         val SHA256_PATTERN = Regex("^[a-fA-F0-9]{64}$")
-        val SECOND_LEVEL_HEADING_PATTERN = Regex("^##\\s+.*$")
     }
 }
 
