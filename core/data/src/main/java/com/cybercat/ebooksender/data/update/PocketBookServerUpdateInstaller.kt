@@ -150,11 +150,6 @@ internal class PocketBookServerUpdateInstaller(
         runCatching { ftpGateway.deleteFile(mountRootDevice, stagedRemotePath) }
     }
 
-    private fun AvailablePocketBookServerUpdate.stagedLauncherRemotePath(): String {
-        val safeName = launcherArtifact.fileName.toSafeUpdateFileName()
-        return "${PocketBookServerUpdateConfig.STAGING_REMOTE_DIR}/$versionCode-$safeName"
-    }
-
     private fun String?.toRemoteInstallPath(): String {
         val installPath = this
             ?: throw PocketBookServerUpdateException(
@@ -170,4 +165,9 @@ internal class PocketBookServerUpdateInstaller(
             PocketBookServerUpdateConfig.POCKETBOOK_MOUNT_ROOT_WITH_SLASH
         )
     }
+}
+
+internal fun AvailablePocketBookServerUpdate.stagedLauncherRemotePath(): String {
+    val safeName = launcherArtifact.fileName.toSafeUpdateFileName()
+    return "${PocketBookServerUpdateConfig.STAGING_REMOTE_DIR}/$safeName"
 }

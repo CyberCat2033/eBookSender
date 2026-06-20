@@ -27,3 +27,4 @@ All notable user-facing changes to eBookSender are documented in this file.
 - Fixed transfer and manga download progress notifications so they stay visible for the whole background batch instead of disappearing between chapters or items, and still disappear when the app is opened.
 - Fixed stale FTP connection state by periodically checking the connected device and clearing the catalog/status when the server is no longer reachable.
 - Fixed PocketBook server updates so the app no longer reports success until the updated server actually reports its new version.
+- Fixed PocketBook server update staging so the uploaded launcher keeps the final `pb-ftp.app` name instead of a version-prefixed file name.
