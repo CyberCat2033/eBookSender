@@ -267,7 +267,7 @@ class MangaChapterDownloader @Inject constructor(
                 ensureNetworkAvailable()
                 onPageProgress(
                     completedPages.get(),
-                    "Retry page ${page.index + 1}/$totalPages ($nextAttempt/$PAGE_DOWNLOAD_ATTEMPTS)"
+                    "retry_page:${page.index + 1}:$totalPages:$nextAttempt:$PAGE_DOWNLOAD_ATTEMPTS"
                 )
                 delay(PAGE_RETRY_DELAY_MILLIS * (1L shl attempt))
             }

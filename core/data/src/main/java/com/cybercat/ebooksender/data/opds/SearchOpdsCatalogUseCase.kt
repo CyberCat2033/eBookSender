@@ -109,7 +109,7 @@ class SearchOpdsCatalogUseCase @Inject constructor(
             }
 
             if (template.isNullOrBlank()) {
-                throw IOException("OpenSearch template was not found")
+                throw OpenSearchTemplateNotFoundException()
             }
 
             return resolveOpdsTemplateUrl(url, template)
@@ -130,3 +130,5 @@ data class SearchOpdsCatalogResult(val currentUrl: String, val catalog: OpdsCata
 class OpdsSearchCatalogUnavailableException : Exception()
 
 private data class SearchOpdsCatalog(val url: String, val catalog: OpdsCatalog)
+
+class OpenSearchTemplateNotFoundException : IOException("OpenSearch template was not found")

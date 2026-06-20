@@ -365,6 +365,9 @@ class AppStrings(
     val opdsErrorNoSearchSupport: String get() = get("opds_error_no_search_support")
     val opdsErrorCannotOpenSearch: String get() = get("opds_error_cannot_open_search")
     val opdsErrorCannotBuildSearchUrl: String get() = get("opds_error_cannot_build_search_url")
+    val opdsErrorOpenSearchTemplateNotFound: String get() = get(
+        "opds_error_opensearch_template_not_found"
+    )
     val opdsStatusAddedToQueue: String get() = get("opds_status_added_to_queue")
     val opdsErrorCannotDownload: String get() = get("opds_error_cannot_download")
     val opdsErrorNoDownloadableEntries: String get() = get("opds_error_no_downloadable_entries")
@@ -404,6 +407,7 @@ class AppStrings(
     )
     val mangaStatusAddedToQueue: String get() = get("manga_status_added_to_queue")
     val mangaErrorCannotDownload: String get() = get("manga_error_cannot_download")
+    val errorUnknown: String get() = get("error_unknown")
     val mangaStatusLoginSuccess: String get() = get("manga_status_login_success")
     val mangaProgressCompleted: String get() = get("manga_progress_completed")
 
@@ -421,6 +425,9 @@ class AppStrings(
     )
     val mangaProgressStepDownloadingChapter: String get() = get(
         "manga_progress_step_downloading_chapter"
+    )
+    val mangaProgressStepRetryPage: String get() = get(
+        "manga_progress_step_retry_page"
     )
     val mangaProgressAllChaptersSaved: String get() = get("manga_progress_all_chapters_saved")
     val mangaProgressChaptersDone: String get() = get("manga_progress_chapters_done")

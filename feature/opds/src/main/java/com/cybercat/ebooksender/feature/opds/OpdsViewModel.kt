@@ -11,6 +11,7 @@ import com.cybercat.ebooksender.data.opds.OpdsEntry
 import com.cybercat.ebooksender.data.opds.OpdsLink
 import com.cybercat.ebooksender.data.opds.OpdsRepository
 import com.cybercat.ebooksender.data.opds.OpdsSearchCatalogUnavailableException
+import com.cybercat.ebooksender.data.opds.OpenSearchTemplateNotFoundException
 import com.cybercat.ebooksender.data.opds.SearchOpdsCatalogUseCase
 import com.cybercat.ebooksender.data.transfer.UploadQueueManager
 import com.cybercat.ebooksender.util.launchTemporaryStatus
@@ -402,6 +403,9 @@ class OpdsViewModel @Inject constructor(
                 val message = when (error) {
                     is OpdsSearchCatalogUnavailableException ->
                         localizationManager.currentStrings.value.opdsErrorCannotOpenSearch
+
+                    is OpenSearchTemplateNotFoundException ->
+                        localizationManager.currentStrings.value.opdsErrorOpenSearchTemplateNotFound
 
                     else ->
                         error.message

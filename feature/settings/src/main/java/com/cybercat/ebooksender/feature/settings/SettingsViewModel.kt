@@ -264,10 +264,15 @@ class SettingsViewModel @Inject constructor(
                 }
 
                 is DeviceFolderRenameUseCase.Result.Error -> {
+                    val displayError = if (result.message == "unknown error") {
+                        localizationManager.currentStrings.value.errorUnknown
+                    } else {
+                        result.message
+                    }
                     showTemporaryStatus(
                         localizationManager.currentStrings.value.get(
                             "settings_rename_failed_error",
-                            result.message
+                            displayError
                         )
                     )
                     false

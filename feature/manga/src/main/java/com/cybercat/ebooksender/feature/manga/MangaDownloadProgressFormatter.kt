@@ -89,27 +89,49 @@ internal object MangaDownloadProgressFormatter {
         )
     }
 
-    private fun MangaDownloadProgress.localizedStep(strings: AppStrings): String? = when {
-        detail.equals("Preparing", ignoreCase = true) -> strings.mangaProgressStepPreparing
+    private fun MangaDownloadProgress.localizedStep(strings: AppStrings): String? {
+        val currentDetail = detail
+        return when {
+            currentDetail.equals("Preparing", ignoreCase = true) -> strings.mangaProgressStepPreparing
 
-        detail.equals(
-            ARCHIVE_DOWNLOAD_DETAIL,
-            ignoreCase = true
-        ) -> strings.mangaProgressStepDownloadingArchive
+            currentDetail.equals(
+                ARCHIVE_DOWNLOAD_DETAIL,
+                ignoreCase = true
+            ) -> strings.mangaProgressStepDownloadingArchive
 
-        detail.equals(
-            "Archive downloaded",
-            ignoreCase = true
-        ) -> strings.mangaProgressStepArchiveSaved
+            currentDetail.equals(
+                "Archive downloaded",
+                ignoreCase = true
+            ) -> strings.mangaProgressStepArchiveSaved
 
-        detail.equals("Archive unavailable, downloading pages", ignoreCase = true) ->
-            strings.mangaProgressStepSwitchingToPages
+            currentDetail.equals("Archive unavailable, downloading pages", ignoreCase = true) ->
+                strings.mangaProgressStepSwitchingToPages
 
-        !detail.isNullOrBlank() -> detail
+            currentDetail?.startsWith("retry_page:") == true -> {
+                val parts = currentDetail.split(":")
+                if (parts.size == 5) {
+                    val pageIndex = parts[1].toIntOrNull() ?: 0
+                    val totalPages = parts[2].toIntOrNull() ?: 0
+                    val attempt = parts[3].toIntOrNull() ?: 0
+                    val maxAttempts = parts[4].toIntOrNull() ?: 0
+                    strings.get(
+                        "manga_progress_step_retry_page",
+                        pageIndex,
+                        totalPages,
+                        attempt,
+                        maxAttempts
+                    )
+                } else {
+                    currentDetail
+                }
+            }
 
-        totalPages > 0 -> strings.mangaProgressStepDownloadingPages
+            !currentDetail.isNullOrBlank() -> currentDetail
 
-        else -> strings.mangaProgressStepDownloadingChapter
+            totalPages > 0 -> strings.mangaProgressStepDownloadingPages
+
+            else -> strings.mangaProgressStepDownloadingChapter
+        }
     }
 
     private const val ARCHIVE_DOWNLOAD_DETAIL = "Downloading archive"
