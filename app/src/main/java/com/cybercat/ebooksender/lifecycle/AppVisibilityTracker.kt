@@ -1,14 +1,11 @@
 package com.cybercat.ebooksender.lifecycle
 
 import android.app.Activity
-import android.app.ActivityManager
 import android.app.Application
-import android.content.Context
 import android.os.Bundle
 import java.util.concurrent.CopyOnWriteArraySet
 
 internal object AppVisibilityTracker {
-    private var appContext: Context? = null
     private val listeners = CopyOnWriteArraySet<(Boolean) -> Unit>()
 
     @Volatile
@@ -21,21 +18,11 @@ internal object AppVisibilityTracker {
     private var visible = false
 
     val isAppVisible: Boolean
-        get() {
-            if (visible) return true
-            val context = appContext ?: return false
-            val info = ActivityManager.RunningAppProcessInfo()
-            runCatching {
-                ActivityManager.getMyMemoryState(info)
-            }
-            return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
-        }
+        get() = visible
 
     fun register(application: Application) {
         if (registered) return
         registered = true
-        appContext = application.applicationContext
-        visible = readProcessVisibility()
         application.registerActivityLifecycleCallbacks(
             object : Application.ActivityLifecycleCallbacks {
                 override fun onActivityStarted(activity: Activity) {
@@ -75,14 +62,5 @@ internal object AppVisibilityTracker {
         if (visible == isVisible) return
         visible = isVisible
         listeners.forEach { listener -> listener(isVisible) }
-    }
-
-    private fun readProcessVisibility(): Boolean {
-        val context = appContext ?: return false
-        val info = ActivityManager.RunningAppProcessInfo()
-        runCatching {
-            ActivityManager.getMyMemoryState(info)
-        }
-        return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
     }
 }
