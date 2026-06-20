@@ -79,12 +79,12 @@ These instructions define the required working rules for Codex in this repositor
 - Check `git status --short` before making changes.
 - In this environment, `.git` is read-only inside the sandbox. Run git commands that write to `.git` (for example `git add` and `git commit`) with `sandbox_permissions: "require_escalated"` immediately instead of first trying them inside the sandbox.
 - Never overwrite, reset, or revert user changes unless explicitly requested.
-- Before switching to an existing task branch or starting new work on it, update local `main`/`master` first and bring the task branch up to that current state.
+- Before checking out, creating, or starting work on any task branch, update local `main`/`master` first and bring the task branch up to that current state. Do not begin work on an outdated branch.
 - Do all work on a task-appropriate branch, not directly on `main`/`master`, unless the user explicitly asks otherwise.
 - For refactoring, minor cleanup, and small maintenance tasks, use the dedicated `refactoring` branch. Use `refactor/<short-name>` only when a separate refactoring branch is clearly useful.
 - For new features, create a dedicated branch named `feature/<short-name>`.
 - For bug fixes, create a dedicated branch named `bugfix/<short-name>`.
-- After finishing and verifying a feature, refactoring, or bug-fix branch, merge it back into `main`/`master` when everything is in order and the user has not asked to leave the branch separate. For new large features, wait for the user to verify the release version installed on a phone before merging.
+- After finishing, verifying, and committing a feature, refactoring, or bug-fix branch, merge it back into `main`/`master` when everything is in order and the user has not asked to leave the branch separate. After a successful merge, delete the merged task branch, including the dedicated `refactoring` branch when it was used for that task. Recreate it from updated `main`/`master` for future refactoring work. For new large features, wait for the user to verify the release version installed on a phone before merging.
 - If only a few minor changes (e.g., 1-2 cosmetic edits, tiny bug fix) have accumulated, wait for more changes before committing (always check for accumulated changes after finishing a task).
 - Commit every completed code change that modifies more than five lines, unless the user explicitly asks not to commit.
 - Use professional commit messages: write a concise imperative subject that names the actual change, keep it specific enough to stand alone in history, and avoid vague subjects such as `fix`, `update`, or `changes`. For non-trivial commits, add a body that explains why the change was needed, summarizes important behavior or migration details, and calls out verification or risk when relevant.

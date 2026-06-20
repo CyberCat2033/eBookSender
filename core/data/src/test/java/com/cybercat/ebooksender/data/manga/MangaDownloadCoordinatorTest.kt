@@ -9,6 +9,26 @@ import org.junit.Test
 
 class MangaDownloadCoordinatorTest {
     @Test
+    fun submitReplacesPendingRequest() {
+        val coordinator = MangaDownloadCoordinator()
+
+        val firstRequestId = coordinator.submit(
+            targets = listOf(sampleTarget("chapter-1")),
+            kind = MangaDownloadRequestKind.SelectedChapters
+        )
+        val secondRequestId = coordinator.submit(
+            targets = listOf(sampleTarget("chapter-2")),
+            kind = MangaDownloadRequestKind.SubscriptionUpdates
+        )
+
+        assertEquals(null, coordinator.takeRequest(firstRequestId))
+        val request = coordinator.takeRequest(secondRequestId)
+        assertEquals(secondRequestId, request?.id)
+        assertEquals(MangaDownloadRequestKind.SubscriptionUpdates, request?.kind)
+        assertEquals(listOf("chapter-2"), request?.targets?.map { it.chapter.chapterId })
+    }
+
+    @Test
     fun emittedEventsAreRetainedUntilTheCollectorStarts() = runBlocking {
         val coordinator = MangaDownloadCoordinator()
         val expected = MangaDownloadEvent.Completed(
@@ -61,5 +81,25 @@ class MangaDownloadCoordinatorTest {
         detail = "Downloading archive",
         archiveBytesRead = index * 256L * 1024L,
         archiveTotalBytes = 100L * 256L * 1024L
+    )
+
+    private fun sampleTarget(chapterId: String) = MangaChapterDownloadTarget(
+        series = MangaSeriesDetails(
+            sourceId = "source",
+            seriesId = "series",
+            title = "Series",
+            coverUrl = null,
+            description = null
+        ),
+        chapter = MangaChapter(
+            sourceId = "source",
+            seriesId = "series",
+            chapterId = chapterId,
+            stableKey = "series|$chapterId",
+            title = "Chapter",
+            numberForSort = null,
+            publishedAtMillis = null,
+            downloadUrl = "https://example.test/$chapterId"
+        )
     )
 }

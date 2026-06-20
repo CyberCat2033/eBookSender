@@ -22,7 +22,6 @@ import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,13 +45,18 @@ class PocketBookServerUpdateManager @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
     private val manifestLoader = UpdateManifestLoader(json)
     private val artifactDownloader = UpdateArtifactDownloader()
-    private var checkJob: Job? = null
-    private var installJob: Job? = null
-    private var statusClearJob: Job? = null
     private var lastAutoCheckedConnectionKey: String? = null
 
     private val _state = MutableStateFlow(PocketBookServerUpdateState())
     val state: StateFlow<PocketBookServerUpdateState> = _state.asStateFlow()
+    private val updateJobs = UpdateJobController(
+        scope = applicationScope,
+        state = _state,
+        updateState = { reducer -> _state.update(reducer) },
+        statusEventId = PocketBookServerUpdateState::statusEventId,
+        clearStatus = { it.copy(status = null) },
+        statusAutoClearDelayMs = STATUS_AUTO_CLEAR_MS
+    )
 
     init {
         applicationScope.launch {
@@ -76,15 +80,14 @@ class PocketBookServerUpdateManager @Inject constructor(
     fun checkForUpdates(
         trigger: PocketBookServerUpdateCheckTrigger = PocketBookServerUpdateCheckTrigger.Manual
     ) {
-        if (checkJob?.isActive == true) return
-        checkJob = applicationScope.launch {
+        updateJobs.launchCheck {
             val device = connectedPocketBookOrNull()
             if (device == null) {
                 if (trigger == PocketBookServerUpdateCheckTrigger.Manual) {
                     setStatus(PocketBookServerUpdateStatus.NoPocketBookConnected)
                     scheduleStatusClearIfTransient(_state.value.status)
                 }
-                return@launch
+                return@launchCheck
             }
 
             _state.update { it.copy(isChecking = true, status = null) }
@@ -134,7 +137,6 @@ class PocketBookServerUpdateManager @Inject constructor(
     }
 
     fun installAvailableUpdate() {
-        if (installJob?.isActive == true) return
         val update = state.value.availableUpdate ?: return
         val device = connectedPocketBookOrNull()
         if (device == null) {
@@ -143,7 +145,7 @@ class PocketBookServerUpdateManager @Inject constructor(
             return
         }
 
-        installJob = applicationScope.launch {
+        updateJobs.launchInstall {
             _state.update {
                 it.withStatus(
                     status = PocketBookServerUpdateStatus.Installing(update),
@@ -193,20 +195,19 @@ class PocketBookServerUpdateManager @Inject constructor(
     }
 
     fun cancelInstall() {
-        val job = installJob?.takeIf { it.isActive } ?: return
-        _state.update {
-            it.withStatus(
-                status = PocketBookServerUpdateStatus.InstallCanceled,
-                isInstalling = false
-            ).copy(installProgress = null)
+        updateJobs.cancelActiveInstallIfPresent {
+            _state.update {
+                it.withStatus(
+                    status = PocketBookServerUpdateStatus.InstallCanceled,
+                    isInstalling = false
+                ).copy(installProgress = null)
+            }
+            scheduleStatusClearIfTransient(_state.value.status)
         }
-        scheduleStatusClearIfTransient(_state.value.status)
-        job.cancel()
     }
 
     fun clearStatus() {
-        statusClearJob?.cancel()
-        _state.update { it.copy(status = null) }
+        updateJobs.clearStatus()
     }
 
     suspend fun clearUpdateCache(): Long =
@@ -615,29 +616,17 @@ class PocketBookServerUpdateManager @Inject constructor(
     )
 
     private fun scheduleStatusClearIfTransient(status: PocketBookServerUpdateStatus?) {
-        val shouldClear = when (status) {
-            PocketBookServerUpdateStatus.NoPocketBookConnected,
-            PocketBookServerUpdateStatus.NoUpdateAvailable,
-            PocketBookServerUpdateStatus.InstallCanceled,
-            is PocketBookServerUpdateStatus.Installed,
-            is PocketBookServerUpdateStatus.Error -> true
+        updateJobs.scheduleStatusClearIf(
+            when (status) {
+                PocketBookServerUpdateStatus.NoPocketBookConnected,
+                PocketBookServerUpdateStatus.NoUpdateAvailable,
+                PocketBookServerUpdateStatus.InstallCanceled,
+                is PocketBookServerUpdateStatus.Installed,
+                is PocketBookServerUpdateStatus.Error -> true
 
-            else -> false
-        }
-        if (!shouldClear) return
-
-        statusClearJob?.cancel()
-        val eventId = _state.value.statusEventId
-        statusClearJob = applicationScope.launch {
-            delay(STATUS_AUTO_CLEAR_MS)
-            _state.update { state ->
-                if (state.statusEventId == eventId) {
-                    state.copy(status = null)
-                } else {
-                    state
-                }
+                else -> false
             }
-        }
+        )
     }
 
     private fun RemoteDevice.autoUpdateConnectionKey(): String = listOf(

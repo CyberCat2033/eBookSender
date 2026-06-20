@@ -19,6 +19,7 @@ import com.cybercat.ebooksender.data.update.AvailableAppUpdate
 import com.cybercat.ebooksender.data.update.UpdateArtifactDownloadRequest
 import com.cybercat.ebooksender.data.update.UpdateArtifactDownloader
 import com.cybercat.ebooksender.data.update.UpdateChangelogLoader
+import com.cybercat.ebooksender.data.update.UpdateJobController
 import com.cybercat.ebooksender.data.update.UpdateManifestLoader
 import com.cybercat.ebooksender.data.update.UpdateManifestRequest
 import com.cybercat.ebooksender.data.update.clearUpdateCacheDirectories
@@ -35,8 +36,6 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,9 +53,6 @@ class AppUpdateManagerImpl @Inject constructor(
     private val manifestLoader = UpdateManifestLoader(json)
     private val artifactDownloader = UpdateArtifactDownloader()
     private val packageManager = context.packageManager
-    private var checkJob: Job? = null
-    private var installJob: Job? = null
-    private var statusClearJob: Job? = null
     private var pendingInstallPermissionUpdate: AvailableAppUpdate? = null
 
     private val _state = MutableStateFlow(
@@ -66,6 +62,14 @@ class AppUpdateManagerImpl @Inject constructor(
         )
     )
     override val state: StateFlow<AppUpdateState> = _state.asStateFlow()
+    private val updateJobs = UpdateJobController(
+        scope = applicationScope,
+        state = _state,
+        updateState = { reducer -> _state.update(reducer) },
+        statusEventId = AppUpdateState::statusEventId,
+        clearStatus = { it.copy(status = null) },
+        statusAutoClearDelayMs = STATUS_AUTO_CLEAR_MS
+    )
 
     init {
         applicationScope.launch(Dispatchers.IO) {
@@ -74,8 +78,7 @@ class AppUpdateManagerImpl @Inject constructor(
     }
 
     override fun checkForUpdates(trigger: AppUpdateCheckTrigger) {
-        if (checkJob?.isActive == true) return
-        checkJob = applicationScope.launch {
+        updateJobs.launchCheck {
             _state.update {
                 it.copy(
                     isChecking = true,
@@ -124,9 +127,8 @@ class AppUpdateManagerImpl @Inject constructor(
     }
 
     override fun installAvailableUpdate() {
-        if (installJob?.isActive == true) return
         val update = state.value.availableUpdate ?: return
-        installJob = applicationScope.launch {
+        updateJobs.launchInstall {
             _state.update {
                 it.withStatus(
                     status = AppUpdateStatus.Downloading(update),
@@ -205,12 +207,11 @@ class AppUpdateManagerImpl @Inject constructor(
     }
 
     override fun cancelUpdateDownload() {
-        installJob?.cancel()
+        updateJobs.cancelInstall()
     }
 
     override fun clearStatus() {
-        statusClearJob?.cancel()
-        _state.update { it.copy(status = null) }
+        updateJobs.clearStatus()
     }
 
     override suspend fun loadChangelog(update: AvailableAppUpdate, languageCode: String): String? =
@@ -476,28 +477,16 @@ class AppUpdateManagerImpl @Inject constructor(
     )
 
     private fun scheduleStatusClearIfTransient(status: AppUpdateStatus?) {
-        val shouldClear = when (status) {
-            AppUpdateStatus.NoUpdateAvailable,
-            AppUpdateStatus.DownloadCanceled,
-            is AppUpdateStatus.Error,
-            is AppUpdateStatus.ReadyToInstall -> true
+        updateJobs.scheduleStatusClearIf(
+            when (status) {
+                AppUpdateStatus.NoUpdateAvailable,
+                AppUpdateStatus.DownloadCanceled,
+                is AppUpdateStatus.Error,
+                is AppUpdateStatus.ReadyToInstall -> true
 
-            else -> false
-        }
-        if (!shouldClear) return
-
-        statusClearJob?.cancel()
-        val eventId = _state.value.statusEventId
-        statusClearJob = applicationScope.launch {
-            delay(STATUS_AUTO_CLEAR_MS)
-            _state.update { state ->
-                if (state.statusEventId == eventId) {
-                    state.copy(status = null)
-                } else {
-                    state
-                }
+                else -> false
             }
-        }
+        )
     }
 
     private companion object {

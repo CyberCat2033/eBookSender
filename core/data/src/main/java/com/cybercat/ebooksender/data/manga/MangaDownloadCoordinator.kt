@@ -1,23 +1,23 @@
 package com.cybercat.ebooksender.data.manga
 
+import com.cybercat.ebooksender.data.request.RequestCoordinator
+import com.cybercat.ebooksender.data.request.RequestSubmitPolicy
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
 
 @Singleton
 class MangaDownloadCoordinator @Inject constructor() {
-    private val pendingRequest = AtomicReference<MangaDownloadRequest?>(null)
-
-    private val _events = Channel<MangaDownloadEvent>(capacity = Channel.UNLIMITED)
-    val events = _events.receiveAsFlow()
+    private val requestCoordinator = RequestCoordinator<MangaDownloadRequest, MangaDownloadEvent>(
+        requestId = MangaDownloadRequest::id,
+        submitPolicy = RequestSubmitPolicy.ReplacePending
+    )
+    val events = requestCoordinator.events
 
     fun submit(targets: List<MangaChapterDownloadTarget>, kind: MangaDownloadRequestKind): String {
         require(targets.isNotEmpty()) { "No manga chapters selected" }
         val id = UUID.randomUUID().toString()
-        pendingRequest.set(
+        requestCoordinator.submit(
             MangaDownloadRequest(
                 id = id,
                 kind = kind,
@@ -27,15 +27,9 @@ class MangaDownloadCoordinator @Inject constructor() {
         return id
     }
 
-    fun takeRequest(id: String?): MangaDownloadRequest? {
-        val current = pendingRequest.get() ?: return null
-        if (current.id != id) return null
-        return if (pendingRequest.compareAndSet(current, null)) current else null
-    }
+    fun takeRequest(id: String?): MangaDownloadRequest? = requestCoordinator.takeRequest(id)
 
-    fun emit(event: MangaDownloadEvent) {
-        check(_events.trySend(event).isSuccess) { "Manga download event channel is unavailable" }
-    }
+    fun emit(event: MangaDownloadEvent) = requestCoordinator.emit(event)
 }
 
 interface MangaDownloadLauncher {
