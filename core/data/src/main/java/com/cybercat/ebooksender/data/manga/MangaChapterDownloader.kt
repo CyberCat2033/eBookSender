@@ -293,9 +293,8 @@ class MangaChapterDownloader @Inject constructor(
         ).apply {
             mkdirs()
         }
-        var downloadedPages = emptyList<DownloadedMangaPage>()
         try {
-            downloadedPages = downloadPages(
+            val downloadedPages = downloadPages(
                 adapter = adapter,
                 pages = pages,
                 tempDir = tempPagesDir,
@@ -313,9 +312,8 @@ class MangaChapterDownloader @Inject constructor(
             }
             return file
         } finally {
-            // Clean up temporary files and directory
-            downloadedPages.forEach { it.file.delete() }
-            tempPagesDir.delete()
+            // Clean up temporary files and directory recursively
+            tempPagesDir.deleteRecursively()
         }
     }
 

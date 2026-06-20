@@ -44,11 +44,16 @@ class MangaArchiveHelper @Inject constructor() {
             if (!outputFile.delete()) {
                 throw IOException("Cannot prepare output file: ${outputFile.name}")
             }
-            if (!tempFile.renameTo(outputFile)) {
-                tempFile.copyTo(outputFile, overwrite = true)
-                tempFile.delete()
+            try {
+                if (!tempFile.renameTo(outputFile)) {
+                    tempFile.copyTo(outputFile, overwrite = true)
+                    tempFile.delete()
+                }
+                outputFile
+            } catch (e: Exception) {
+                outputFile.delete()
+                throw e
             }
-            outputFile
         }
 }
 
