@@ -83,7 +83,7 @@ class UpdateArtifactDownloadRequest(
     val readTimeoutMs: Int,
     val accept: String? = null,
     val useCaches: Boolean = false,
-    val cancellationMessage: String = "Update artifact download canceled",
+    val cancellationMessage: String? = null,
     val downloadFailedException: (Throwable?) -> Exception,
     val onProgress: (bytesRead: Long, totalBytes: Long?) -> Unit = { _, _ -> }
 )

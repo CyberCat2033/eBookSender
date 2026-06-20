@@ -1,13 +1,6 @@
 package com.cybercat.ebooksender.update
 
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageInfo
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
-import androidx.core.content.FileProvider
 import com.cybercat.ebooksender.BuildConfig
 import com.cybercat.ebooksender.data.update.AppUpdateCheckTrigger
 import com.cybercat.ebooksender.data.update.AppUpdateDownloadProgress
@@ -16,21 +9,14 @@ import com.cybercat.ebooksender.data.update.AppUpdateManager
 import com.cybercat.ebooksender.data.update.AppUpdateState
 import com.cybercat.ebooksender.data.update.AppUpdateStatus
 import com.cybercat.ebooksender.data.update.AvailableAppUpdate
-import com.cybercat.ebooksender.data.update.UpdateArtifactDownloadRequest
 import com.cybercat.ebooksender.data.update.UpdateArtifactDownloader
 import com.cybercat.ebooksender.data.update.UpdateChangelogLoader
 import com.cybercat.ebooksender.data.update.UpdateJobController
 import com.cybercat.ebooksender.data.update.UpdateManifestLoader
-import com.cybercat.ebooksender.data.update.UpdateManifestRequest
 import com.cybercat.ebooksender.data.update.clearUpdateCacheDirectories
-import com.cybercat.ebooksender.data.update.toSafeUpdateFileName
-import com.cybercat.ebooksender.data.update.updateFileSha256
 import com.cybercat.ebooksender.di.ApplicationScope
-import com.cybercat.ebooksender.model.update.AppUpdateArtifact
-import com.cybercat.ebooksender.model.update.AppUpdateManifest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
-import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -53,7 +39,10 @@ class AppUpdateManagerImpl @Inject constructor(
     private val manifestLoader = UpdateManifestLoader(json)
     private val artifactDownloader = UpdateArtifactDownloader()
     private val packageManager = context.packageManager
-    private var pendingInstallPermissionUpdate: AvailableAppUpdate? = null
+    private val manifestResolver = AppUpdateManifestResolver(context, manifestLoader)
+    private val apkRepository = AppUpdateApkRepository(context, artifactDownloader)
+    private val packageVerifier = AppUpdatePackageVerifier(context)
+    private val installerLauncher = AppUpdateInstallerLauncher(context)
 
     private val _state = MutableStateFlow(
         AppUpdateState(
@@ -68,7 +57,7 @@ class AppUpdateManagerImpl @Inject constructor(
         updateState = { reducer -> _state.update(reducer) },
         statusEventId = AppUpdateState::statusEventId,
         clearStatus = { it.copy(status = null) },
-        statusAutoClearDelayMs = STATUS_AUTO_CLEAR_MS
+        statusAutoClearDelayMs = AppUpdateConfig.STATUS_AUTO_CLEAR_MS
     )
 
     init {
@@ -139,21 +128,24 @@ class AppUpdateManagerImpl @Inject constructor(
                 runCatching {
                     val latestUpdate = loadAvailableUpdate()
                         ?: throw AppUpdateException(AppUpdateErrorReason.NoCompatibleArtifact)
-                    val apk = getVerifiedApk(latestUpdate)
-                    verifyApkPackage(apk)
+                    val apk = apkRepository.getVerifiedApk(
+                        update = latestUpdate,
+                        onProgress = ::updateDownloadProgress
+                    )
+                    packageVerifier.verifyApkPackage(apk, currentVersionCode())
                     latestUpdate to apk
                 }
             }
             result
                 .onSuccess { (latestUpdate, apk) ->
-                    val installLaunchResult = launchInstaller(latestUpdate, apk)
+                    val installLaunchResult = installerLauncher.launchInstaller(latestUpdate, apk)
                     val status = when (installLaunchResult) {
-                        InstallLaunchResult.InstallerStarted ->
+                        AppUpdateInstallLaunchResult.InstallerStarted ->
                             AppUpdateStatus.ReadyToInstall(latestUpdate)
 
-                        InstallLaunchResult.PermissionRequired -> null
+                        AppUpdateInstallLaunchResult.PermissionRequired -> null
 
-                        InstallLaunchResult.InstallUnavailable ->
+                        AppUpdateInstallLaunchResult.InstallUnavailable ->
                             AppUpdateStatus.Error(AppUpdateErrorReason.InstallUnavailable)
                     }
                     _state.update {
@@ -188,14 +180,9 @@ class AppUpdateManagerImpl @Inject constructor(
     }
 
     override fun resumePendingInstall() {
-        val update = pendingInstallPermissionUpdate ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !packageManager.canRequestPackageInstalls()
-        ) {
-            return
-        }
+        if (!installerLauncher.canResumePendingInstall()) return
+        val update = installerLauncher.consumePendingPermissionUpdate() ?: return
 
-        pendingInstallPermissionUpdate = null
         _state.update {
             it.withStatus(
                 status = AppUpdateStatus.UpdateAvailable(update),
@@ -222,106 +209,15 @@ class AppUpdateManagerImpl @Inject constructor(
                 versionCode = update.versionCode,
                 versionName = update.versionName,
                 languageCode = languageCode,
-                userAgent = USER_AGENT
+                userAgent = AppUpdateConfig.USER_AGENT
             )
         }
 
     override suspend fun clearUpdateCache(): Long =
         clearUpdateCacheDirectories(listOf(updateCacheDir(), changelogCacheDir()))
 
-    private fun loadAvailableUpdate(): AvailableAppUpdate? {
-        val manifest = fetchManifest()
-        validateManifest(manifest)
-        if (manifest.versionCode <= currentVersionCode()) return null
-
-        val artifact = selectArtifact(manifest)
-            ?: throw AppUpdateException(AppUpdateErrorReason.NoCompatibleArtifact)
-        validateArtifact(artifact)
-        return AvailableAppUpdate(manifest, artifact)
-    }
-
-    private fun fetchManifest(): AppUpdateManifest = manifestLoader.load(
-        UpdateManifestRequest(
-            url = BuildConfig.UPDATE_MANIFEST_URL,
-            serializer = AppUpdateManifest.serializer(),
-            userAgent = USER_AGENT,
-            connectTimeoutMs = CONNECT_TIMEOUT_MS,
-            readTimeoutMs = READ_TIMEOUT_MS,
-            maxBytes = MAX_MANIFEST_BYTES,
-            invalidManifestException = { cause ->
-                AppUpdateException(AppUpdateErrorReason.InvalidManifest, cause)
-            },
-            networkException = { cause ->
-                AppUpdateException(AppUpdateErrorReason.Network, cause)
-            }
-        )
-    )
-
-    private fun validateManifest(manifest: AppUpdateManifest) {
-        if (manifest.schemaVersion != 1 ||
-            manifest.packageName != context.packageName ||
-            manifest.versionName.isBlank() ||
-            manifest.versionCode <= 0 ||
-            manifest.minSdk > Build.VERSION.SDK_INT ||
-            manifest.artifacts.isEmpty()
-        ) {
-            throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-        }
-    }
-
-    private fun validateArtifact(artifact: AppUpdateArtifact) {
-        val url = URL(artifact.url)
-        if (url.protocol != "https" ||
-            artifact.fileName.isBlank() ||
-            !artifact.fileName.endsWith(".apk", ignoreCase = true) ||
-            !SHA256_PATTERN.matches(artifact.sha256)
-        ) {
-            throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-        }
-    }
-
-    private fun selectArtifact(manifest: AppUpdateManifest): AppUpdateArtifact? {
-        val artifactsByAbi = manifest.artifacts.associateBy { it.abi }
-        return Build.SUPPORTED_ABIS.firstNotNullOfOrNull { abi -> artifactsByAbi[abi] }
-            ?: artifactsByAbi[UNIVERSAL_ABI]
-    }
-
-    private suspend fun getVerifiedApk(update: AvailableAppUpdate): File {
-        val apk = cachedApkFile(update)
-        val expectedHash = update.artifact.sha256.lowercase()
-        if (apk.isFile && apk.updateFileSha256() == expectedHash) {
-            cleanupStaleApks(keep = apk)
-            return apk
-        }
-
-        cleanupStaleApks(keep = null)
-        downloadApk(update, apk)
-        val actualHash = apk.updateFileSha256()
-        if (actualHash != expectedHash) {
-            runCatching { apk.delete() }
-            throw AppUpdateException(AppUpdateErrorReason.ChecksumMismatch)
-        }
-        cleanupStaleApks(keep = apk)
-        return apk
-    }
-
-    private suspend fun downloadApk(update: AvailableAppUpdate, target: File) {
-        artifactDownloader.download(
-            UpdateArtifactDownloadRequest(
-                url = update.artifact.url,
-                target = target,
-                userAgent = USER_AGENT,
-                connectTimeoutMs = CONNECT_TIMEOUT_MS,
-                readTimeoutMs = DOWNLOAD_READ_TIMEOUT_MS,
-                accept = "application/vnd.android.package-archive",
-                useCaches = true,
-                downloadFailedException = { cause ->
-                    AppUpdateException(AppUpdateErrorReason.DownloadFailed, cause)
-                },
-                onProgress = ::updateDownloadProgress
-            )
-        )
-    }
+    private fun loadAvailableUpdate(): AvailableAppUpdate? =
+        manifestResolver.loadAvailableUpdate(currentVersionCode())
 
     private fun updateDownloadProgress(bytesRead: Long, totalBytes: Long?) {
         _state.update { state ->
@@ -334,119 +230,17 @@ class AppUpdateManagerImpl @Inject constructor(
         }
     }
 
-    private fun verifyApkPackage(apk: File) {
-        val archiveInfo = packageManager.getPackageArchiveInfoCompat(apk.absolutePath)
-            ?: throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-        if (archiveInfo.packageName != context.packageName) {
-            throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-        }
-        val archiveVersionCode = archiveInfo.longVersionCodeCompat()
-        if (archiveVersionCode <= currentVersionCode()) {
-            throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-        }
-
-        val installedInfo = packageManager.getPackageInfoCompat(context.packageName)
-        val installedSignatures = installedInfo.signingCertificateBytes()
-        val archiveSignatures = archiveInfo.signingCertificateBytes()
-        if (installedSignatures.isEmpty() || installedSignatures != archiveSignatures) {
-            throw AppUpdateException(AppUpdateErrorReason.SignatureMismatch)
-        }
-    }
-
-    private fun launchInstaller(update: AvailableAppUpdate, apk: File): InstallLaunchResult {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !packageManager.canRequestPackageInstalls()
-        ) {
-            pendingInstallPermissionUpdate = update
-            val settingsIntent = Intent(
-                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                Uri.parse("package:${context.packageName}")
-            ).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            return runCatching { context.startActivity(settingsIntent) }
-                .fold(
-                    onSuccess = { InstallLaunchResult.PermissionRequired },
-                    onFailure = {
-                        pendingInstallPermissionUpdate = null
-                        InstallLaunchResult.InstallUnavailable
-                    }
-                )
-        }
-
-        val uri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            apk
-        )
-
-        @Suppress("DEPRECATION")
-        val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-            data = uri
-            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-            putExtra(Intent.EXTRA_RETURN_RESULT, false)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        return runCatching { context.startActivity(installIntent) }
-            .fold(
-                onSuccess = { InstallLaunchResult.InstallerStarted },
-                onFailure = { InstallLaunchResult.InstallUnavailable }
-            )
-    }
-
-    private fun cachedApkFile(update: AvailableAppUpdate): File {
-        val safeName = update.artifact.fileName.toSafeUpdateFileName()
-        return File(updateCacheDir(), "${update.versionCode}-$safeName")
-    }
-
-    private fun cleanupStaleApks(keep: File?) {
-        val dir = updateCacheDir()
-        dir.listFiles().orEmpty().forEach { file ->
-            if (file != keep) runCatching { file.deleteRecursively() }
-        }
-    }
-
     private fun cleanupInstalledUpdateCache() {
-        cleanupInstalledCachedApks()
-        cleanupInstalledCachedChangelogs()
+        apkRepository.cleanupInstalledUpdateCache(
+            currentVersionCode = currentVersionCode(),
+            changelogCacheDir = changelogCacheDir()
+        )
     }
 
-    private fun cleanupInstalledCachedApks() {
-        val installedVersionCode = currentVersionCode()
-        updateCacheDir().listFiles().orEmpty().forEach { file ->
-            if (!file.isFile || !file.name.endsWith(".apk", ignoreCase = true)) {
-                runCatching { file.deleteRecursively() }
-                return@forEach
-            }
+    private fun updateCacheDir(): File = File(context.cacheDir, AppUpdateConfig.UPDATE_CACHE_DIR)
 
-            val archiveInfo = packageManager.getPackageArchiveInfoCompat(file.absolutePath)
-            val shouldDelete = archiveInfo == null ||
-                archiveInfo.packageName != context.packageName ||
-                archiveInfo.longVersionCodeCompat() <= installedVersionCode
-            if (shouldDelete) {
-                runCatching { file.delete() }
-            }
-        }
-    }
-
-    private fun cleanupInstalledCachedChangelogs() {
-        val installedVersionCode = currentVersionCode()
-        changelogCacheDir().listFiles().orEmpty().forEach { file ->
-            val cachedVersionCode = file.name.substringBefore('-').toLongOrNull()
-            if (!file.isFile ||
-                !file.name.endsWith(".md", ignoreCase = true) ||
-                cachedVersionCode == null ||
-                cachedVersionCode <= installedVersionCode
-            ) {
-                runCatching { file.deleteRecursively() }
-            }
-        }
-    }
-
-    private fun updateCacheDir(): File = File(context.cacheDir, UPDATE_CACHE_DIR)
-
-    private fun changelogCacheDir(): File = File(context.cacheDir, CHANGELOG_CACHE_DIR)
+    private fun changelogCacheDir(): File =
+        File(context.cacheDir, AppUpdateConfig.CHANGELOG_CACHE_DIR)
 
     private fun currentVersionName(): String {
         val info = packageManager.getPackageInfoCompat(context.packageName)
@@ -488,62 +282,4 @@ class AppUpdateManagerImpl @Inject constructor(
             }
         )
     }
-
-    private companion object {
-        const val UPDATE_CACHE_DIR = "update-apks"
-        const val CHANGELOG_CACHE_DIR = "update-changelogs"
-        const val UNIVERSAL_ABI = "universal"
-        const val CONNECT_TIMEOUT_MS = 10_000
-        const val READ_TIMEOUT_MS = 10_000
-        const val DOWNLOAD_READ_TIMEOUT_MS = 30_000
-        const val MAX_MANIFEST_BYTES = 512 * 1024
-        const val STATUS_AUTO_CLEAR_MS = 3_000L
-        const val USER_AGENT = "eBookSender/${BuildConfig.VERSION_NAME}"
-        val SHA256_PATTERN = Regex("^[a-fA-F0-9]{64}$")
-    }
 }
-
-private enum class InstallLaunchResult {
-    InstallerStarted,
-    PermissionRequired,
-    InstallUnavailable
-}
-
-private class AppUpdateException(val reason: AppUpdateErrorReason, cause: Throwable? = null) :
-    Exception(cause)
-
-private fun PackageManager.getPackageInfoCompat(packageName: String): PackageInfo =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-    } else {
-        @Suppress("DEPRECATION")
-        getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
-    }
-
-private fun PackageManager.getPackageArchiveInfoCompat(path: String): PackageInfo? =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        getPackageArchiveInfo(path, PackageManager.GET_SIGNING_CERTIFICATES)
-    } else {
-        @Suppress("DEPRECATION")
-        getPackageArchiveInfo(path, PackageManager.GET_SIGNATURES)
-    }
-
-private fun PackageInfo.longVersionCodeCompat(): Long =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        longVersionCode
-    } else {
-        @Suppress("DEPRECATION")
-        versionCode.toLong()
-    }
-
-private fun PackageInfo.signingCertificateBytes(): Set<List<Byte>> =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        signingInfo?.apkContentsSigners.orEmpty().map { signature ->
-            signature.toByteArray().asList()
-        }.toSet()
-    } else {
-        @Suppress("DEPRECATION")
-        signatures.orEmpty().map { signature ->
-            signature.toByteArray().asList()
-        }.toSet()
-    }
