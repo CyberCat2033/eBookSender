@@ -14,6 +14,7 @@ import com.cybercat.ebooksender.data.update.UpdateChangelogLoader
 import com.cybercat.ebooksender.data.update.UpdateJobController
 import com.cybercat.ebooksender.data.update.UpdateManifestLoader
 import com.cybercat.ebooksender.data.update.clearUpdateCacheDirectories
+import com.cybercat.ebooksender.data.update.nextUpdateStatusEventId
 import com.cybercat.ebooksender.di.ApplicationScope
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -263,11 +264,11 @@ class AppUpdateManagerImpl @Inject constructor(
         isDownloading = isDownloading,
         availableUpdate = availableUpdate,
         status = status,
-        statusEventId = if (status == null && this.status == null) {
-            statusEventId
-        } else {
-            statusEventId + 1L
-        }
+        statusEventId = nextUpdateStatusEventId(
+            currentStatus = this.status,
+            nextStatus = status,
+            currentEventId = statusEventId
+        )
     )
 
     private fun scheduleStatusClearIfTransient(status: AppUpdateStatus?) {

@@ -2,9 +2,9 @@ name: Release
 
 # При пуше тега v* (например v0.2.0) проверяет SemVer-формат тега,
 # запускает unit-тесты, собирает подписанные release-APK для ARM ABI
-# и universal APK, затем публикует их в GitHub Releases и обновляет
-# GitHub Pages манифест updates/latest.json и localized changelog-файлы
-# для автообновлений.
+# и universal APK, затем публикует их в GitHub Releases с changelog текущей
+# версии на английском и русском, обновляет GitHub Pages манифест
+# updates/latest.json и localized changelog-файлы для автообновлений.
 # Сборка debug APK на main/PR — в workflow ci.yml.
 #
 # Требуются секреты репозитория (Settings → Secrets and variables → Actions):
@@ -167,16 +167,70 @@ jobs:
           }
           EOF
 
+      - name: Prepare GitHub Release notes
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.version }}"
+          ARTIFACT_DIR="release-artifacts"
+          EN_NOTES="$ARTIFACT_DIR/changelog-en.md"
+          RU_NOTES="$ARTIFACT_DIR/changelog-ru.md"
+          RELEASE_NOTES="$ARTIFACT_DIR/release-notes.md"
+
+          extract_changelog_section() {
+            local changelog_file="$1"
+            local version="$2"
+            local output_file="$3"
+
+            if ! awk -v version="$version" '
+              $1 == "##" && $2 == "[" version "]" {
+                found = 1
+                printing = 1
+                next
+              }
+              printing && /^##[[:space:]]+\[/ {
+                exit
+              }
+              printing {
+                print
+              }
+              END {
+                if (!found) {
+                  exit 44
+                }
+              }
+            ' "$changelog_file" > "$output_file"; then
+              echo "::error::Could not find changelog section for version $version in $changelog_file."
+              exit 1
+            fi
+
+            if [ ! -s "$output_file" ]; then
+              echo "::error::Changelog section for version $version in $changelog_file is empty."
+              exit 1
+            fi
+          }
+
+          extract_changelog_section CHANGELOG.md "$VERSION" "$EN_NOTES"
+          extract_changelog_section CHANGELOG.ru.md "$VERSION" "$RU_NOTES"
+
+          {
+            echo "# eBookSender v$VERSION"
+            echo
+            echo "## English"
+            cat "$EN_NOTES"
+            echo
+            echo "## Русский"
+            cat "$RU_NOTES"
+          } > "$RELEASE_NOTES"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: v${{ steps.version.outputs.version }}
           tag_name: ${{ github.ref_name }}
           files: ${{ steps.apks.outputs.files }}
-          generate_release_notes: true
+          body_path: release-artifacts/release-notes.md
           fail_on_unmatched_files: true
-          # generate_release_notes: GitHub сам соберёт список PR/коммитов
-          # с прошлого релиза по этот тег.
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

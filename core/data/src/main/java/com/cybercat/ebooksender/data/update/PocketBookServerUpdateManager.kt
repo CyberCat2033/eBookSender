@@ -262,11 +262,11 @@ class PocketBookServerUpdateManager @Inject constructor(
         installedVersion = installedVersion,
         availableUpdate = availableUpdate,
         status = status,
-        statusEventId = if (status == null && this.status == null) {
-            statusEventId
-        } else {
-            statusEventId + 1L
-        }
+        statusEventId = nextUpdateStatusEventId(
+            currentStatus = this.status,
+            nextStatus = status,
+            currentEventId = statusEventId
+        )
     )
 
     private fun scheduleStatusClearIfTransient(status: PocketBookServerUpdateStatus?) {
