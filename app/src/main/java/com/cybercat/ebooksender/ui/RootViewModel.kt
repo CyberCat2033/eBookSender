@@ -4,10 +4,12 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cybercat.ebooksender.data.settings.SettingsRepository
+import com.cybercat.ebooksender.data.transfer.UploadQueueEvent
 import com.cybercat.ebooksender.data.transfer.UploadQueueManager
 import com.cybercat.ebooksender.model.AppSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -16,7 +18,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class RootViewModel @Inject constructor(
     settingsRepository: SettingsRepository,
-    private val uploadQueueManager: UploadQueueManager,
+    private val uploadQueueManager: UploadQueueManager
 ) : ViewModel() {
 
     val settings: StateFlow<AppSettings> = settingsRepository.settings
@@ -25,6 +27,8 @@ class RootViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = AppSettings()
         )
+
+    val uploadQueueEvents: SharedFlow<UploadQueueEvent> = uploadQueueManager.events
 
     fun addUris(uris: List<Uri>) {
         viewModelScope.launch {

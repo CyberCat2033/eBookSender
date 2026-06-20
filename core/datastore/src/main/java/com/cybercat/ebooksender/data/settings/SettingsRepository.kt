@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.cybercat.ebooksender.model.AppSettings
 import com.cybercat.ebooksender.model.AppTheme
+import com.cybercat.ebooksender.model.CatalogFallbackNames
 import com.cybercat.ebooksender.model.DEFAULT_FTP_RELATIVE_ROOT_PATH
 import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.model.normalizeFtpRelativeRootPath
@@ -28,8 +29,10 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
             booksFolderName = preferences[BOOKS_FOLDER_NAME] ?: "Books",
             documentsFolderName = preferences[DOCUMENTS_FOLDER_NAME] ?: "Documents",
             mangaFolderName = preferences[MANGA_FOLDER_NAME] ?: "Manga",
-            defaultDocumentsTag = preferences[DEFAULT_DOCUMENTS_TAG] ?: "Untagged",
-            defaultMangaSeries = preferences[DEFAULT_MANGA_SERIES] ?: "Unknown_Series",
+            defaultDocumentsTag = preferences[DEFAULT_DOCUMENTS_TAG]
+                ?: CatalogFallbackNames.UNTAGGED_DOCUMENTS,
+            defaultMangaSeries = preferences[DEFAULT_MANGA_SERIES]
+                ?: CatalogFallbackNames.UNKNOWN_MANGA_SERIES,
             bookFileNameTemplate = preferences[BOOK_FILE_NAME_TEMPLATE] ?: "{title}",
             documentsFileNameTemplate = preferences[DOCUMENTS_FILE_NAME_TEMPLATE] ?: "{title}",
             mangaFileNameTemplate = preferences[MANGA_FILE_NAME_TEMPLATE] ?: "{series}_{volume}",
@@ -125,13 +128,15 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
 
     suspend fun setDefaultDocumentsTag(value: String) {
         context.settingsDataStore.edit { preferences ->
-            preferences[DEFAULT_DOCUMENTS_TAG] = value.ifBlank { "Untagged" }
+            preferences[DEFAULT_DOCUMENTS_TAG] =
+                value.ifBlank { CatalogFallbackNames.UNTAGGED_DOCUMENTS }
         }
     }
 
     suspend fun setDefaultMangaSeries(value: String) {
         context.settingsDataStore.edit { preferences ->
-            preferences[DEFAULT_MANGA_SERIES] = value.ifBlank { "Unknown_Series" }
+            preferences[DEFAULT_MANGA_SERIES] =
+                value.ifBlank { CatalogFallbackNames.UNKNOWN_MANGA_SERIES }
         }
     }
 

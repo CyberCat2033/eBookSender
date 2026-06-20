@@ -7,6 +7,7 @@ import com.cybercat.ebooksender.domain.MangaArchiveExtensions
 import com.cybercat.ebooksender.domain.NaturalSort
 import com.cybercat.ebooksender.domain.contentExtension
 import com.cybercat.ebooksender.model.AppSettings
+import com.cybercat.ebooksender.model.CatalogFallbackNames
 import com.cybercat.ebooksender.model.CatalogFile
 import com.cybercat.ebooksender.model.CatalogGroup
 import com.cybercat.ebooksender.model.DeviceCatalog
@@ -67,7 +68,11 @@ class CatalogFolderScanner @Inject constructor(private val ftpGateway: FtpGatewa
             null
         } else {
             CatalogGroup(
-                name = if (root == settings.documentsFolderName) "Untagged" else "Unknown Author",
+                name = if (root == settings.documentsFolderName) {
+                    CatalogFallbackNames.UNTAGGED_DOCUMENTS
+                } else {
+                    CatalogFallbackNames.UNKNOWN_AUTHOR
+                },
                 path = root,
                 files = rootFiles.sortedWith(NaturalSort.by { it.path })
             )

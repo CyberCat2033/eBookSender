@@ -3,10 +3,12 @@ package com.cybercat.ebooksender.data.transfer
 import android.net.Uri
 import com.cybercat.ebooksender.model.BookCategory
 import com.cybercat.ebooksender.model.UploadItem
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 interface UploadQueueManager {
     val queue: StateFlow<List<UploadItem>>
+    val events: SharedFlow<UploadQueueEvent>
     fun addUris(uris: List<Uri>)
     fun addPreparedItems(items: List<UploadItem>)
     fun prioritizeMetadata(itemIds: List<String>)

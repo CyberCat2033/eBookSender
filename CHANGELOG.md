@@ -12,6 +12,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ### Fixed
 
+- Disabled app-data backup and blocked app-wide cleartext HTTP by default; PocketBook local control HTTP remains limited to private/local device addresses.
 - Hide the dynamic color toggle on devices running Android 11 and lower since they do not support dynamic coloring.
 - Fixed naming-rule token hints so books, documents, and manga show only the tokens that apply to that file type.
 - Fixed duplicate loading indicators while deleting selected catalog books.

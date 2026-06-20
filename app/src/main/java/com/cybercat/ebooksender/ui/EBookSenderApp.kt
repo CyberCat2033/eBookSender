@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.SystemClock
+import android.widget.Toast
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -63,6 +64,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.cybercat.ebooksender.data.transfer.SkippedUploadFile
+import com.cybercat.ebooksender.data.transfer.UploadFileSkipReason
+import com.cybercat.ebooksender.data.transfer.UploadFilesSkipped
+import com.cybercat.ebooksender.data.transfer.UploadQueueEvent
 import com.cybercat.ebooksender.data.update.AppUpdateState
 import com.cybercat.ebooksender.data.update.AvailableAppUpdate
 import com.cybercat.ebooksender.data.update.AvailablePocketBookServerUpdate
@@ -77,6 +82,8 @@ import com.cybercat.ebooksender.feature.settings.SettingsScreen
 import com.cybercat.ebooksender.feature.settings.SettingsViewModel
 import com.cybercat.ebooksender.feature.transfer.SendScreen
 import com.cybercat.ebooksender.feature.transfer.TransferViewModel
+import com.cybercat.ebooksender.localization.AppStrings
+import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.model.AppSettings
 import com.cybercat.ebooksender.model.AppTheme
 import com.cybercat.ebooksender.ui.navigation.MainDestination
@@ -127,6 +134,7 @@ fun EBookSenderApp(
     rootViewModel: RootViewModel = hiltViewModel()
 ) {
     val settings by rootViewModel.settings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -177,6 +185,15 @@ fun EBookSenderApp(
         darkTheme = darkTheme,
         useDynamicColor = settings.useDynamicColor
     ) {
+        val strings = LocalStrings.current
+        LaunchedEffect(rootViewModel, strings) {
+            rootViewModel.uploadQueueEvents.collect { event ->
+                event.toToastMessage(strings)?.let { message ->
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
         SyncSystemBarsWithTheme(darkTheme = darkTheme)
         BoxWithConstraints(Modifier.fillMaxSize()) {
             CompositionLocalProvider(
@@ -320,6 +337,34 @@ fun EBookSenderApp(
         }
     }
 }
+
+private fun UploadQueueEvent.toToastMessage(strings: AppStrings): String? = when (this) {
+    is UploadFilesSkipped -> skippedFilesMessage(strings)
+}
+
+private fun UploadFilesSkipped.skippedFilesMessage(strings: AppStrings): String {
+    val skippedFileLabels = files.map { file ->
+        "${file.displayName} (${file.skipReasonLabel(strings, maxFileSizeMb)})"
+    }
+    val tooLargeOrUnsupported = strings.get(
+        "send_skip_reason_unsupported_or_too_large",
+        maxFileSizeMb
+    )
+    return if (skippedFileLabels.size == 1) {
+        strings.get("send_skipped_file", skippedFileLabels.first())
+    } else {
+        strings.get("send_skipped_files_summary", skippedFileLabels.size, tooLargeOrUnsupported)
+    }
+}
+
+private fun SkippedUploadFile.skipReasonLabel(strings: AppStrings, maxFileSizeMb: Int): String =
+    when (reason) {
+        UploadFileSkipReason.UnsupportedFormat ->
+            strings.get("send_skip_reason_unsupported_format")
+
+        UploadFileSkipReason.TooLarge ->
+            strings.get("send_skip_reason_too_large", maxFileSizeMb)
+    }
 
 @Composable
 private fun PocketBookServerUpdateDialog(

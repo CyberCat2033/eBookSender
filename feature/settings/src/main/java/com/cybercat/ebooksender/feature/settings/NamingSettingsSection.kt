@@ -18,6 +18,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.cybercat.ebooksender.localization.LocalStrings
+import com.cybercat.ebooksender.model.CatalogFallbackNames
 
 @Composable
 internal fun NamingSettingsSection(
@@ -133,7 +134,9 @@ internal fun NamingSettingsSection(
                         onValueChange = onDefaultDocumentsTagChanged,
                         label = strings.settingsNamingDocsTag,
                         imeAction = ImeAction.Next,
-                        validation = { it.trim().ifBlank { "Untagged" } }
+                        validation = {
+                            it.trim().ifBlank { CatalogFallbackNames.UNTAGGED_DOCUMENTS }
+                        }
                     )
                     NamingTemplateBlock(
                         value = state.settings.documentsFileNameTemplate,
@@ -176,7 +179,9 @@ internal fun NamingSettingsSection(
                         onValueChange = onDefaultMangaSeriesChanged,
                         label = strings.settingsNamingMangaSeries,
                         imeAction = ImeAction.Next,
-                        validation = { it.trim().ifBlank { "Unknown_Series" } }
+                        validation = {
+                            it.trim().ifBlank { CatalogFallbackNames.UNKNOWN_MANGA_SERIES }
+                        }
                     )
                     NamingTemplateBlock(
                         value = state.settings.mangaFileNameTemplate,

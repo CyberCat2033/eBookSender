@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.cybercat.ebooksender.data.settings.SettingsRepository
+import com.cybercat.ebooksender.data.transfer.SkippedUploadFile
+import com.cybercat.ebooksender.data.transfer.UploadFilesSkipped
+import com.cybercat.ebooksender.data.transfer.UploadQueueEvent
 import com.cybercat.ebooksender.data.transfer.UploadQueueManager
 import com.cybercat.ebooksender.di.ApplicationScope
 import com.cybercat.ebooksender.domain.FileClassifier
@@ -12,9 +15,9 @@ import com.cybercat.ebooksender.domain.PathPlanner
 import com.cybercat.ebooksender.domain.bookExtension
 import com.cybercat.ebooksender.domain.bookTitleWithoutExtension
 import com.cybercat.ebooksender.metadata.MetadataExtractor
-import com.cybercat.ebooksender.localization.LocalizationManager
 import com.cybercat.ebooksender.model.AppSettings
 import com.cybercat.ebooksender.model.BookCategory
+import com.cybercat.ebooksender.model.CatalogFallbackNames
 import com.cybercat.ebooksender.model.UploadItem
 import com.cybercat.ebooksender.model.UploadStatus
 import com.cybercat.ebooksender.model.toDomain
@@ -24,10 +27,11 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
@@ -35,8 +39,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -50,32 +52,32 @@ class UploadQueueManagerImpl @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val downloadCacheManager: DownloadCacheManager,
     private val localFileResolver: LocalFileResolver,
+    private val uploadItemValidator: UploadItemValidator,
     private val mangaTitleParser: MangaTitleParser,
-    private val queueStorageRepository: QueueStorageRepository,
-    private val localizationManager: LocalizationManager
+    private val queueStorageRepository: QueueStorageRepository
 ) : UploadQueueManager {
     private val _queue = MutableStateFlow<List<UploadItem>>(emptyList())
     override val queue: StateFlow<List<UploadItem>> = _queue.asStateFlow()
 
-    private val metadataExtractionSemaphore = Semaphore(METADATA_EXTRACTION_PARALLELISM)
-    private val metadataQueueLock = Any()
-    private val pendingMetadataItemIds = ArrayDeque<String>()
-    private val queuedMetadataItemIds = mutableSetOf<String>()
-    private val runningMetadataItemIds = mutableSetOf<String>()
-    private var metadataQueueSignal = CompletableDeferred<Unit>()
+    private val _events = MutableSharedFlow<UploadQueueEvent>(
+        extraBufferCapacity = 8
+    )
+    override val events: SharedFlow<UploadQueueEvent> = _events
 
     private var activeSettings = AppSettings()
     private var queueRestored = false
     private var lastCleanedQueueItemIds = emptySet<String>()
 
+    private val metadataDispatcher = MetadataExtractionDispatcher(
+        scope = scope,
+        parallelism = METADATA_EXTRACTION_PARALLELISM,
+        shouldLoadMetadata = ::shouldLoadMetadata,
+        loadMetadata = ::loadMetadata
+    )
+
     init {
         scope.launch {
             restorePersistedQueueState()
-        }
-        repeat(METADATA_EXTRACTION_PARALLELISM) {
-            scope.launch {
-                processMetadataQueue()
-            }
         }
 
         _queue
@@ -106,63 +108,39 @@ class UploadQueueManagerImpl @Inject constructor(
 
         val settings = activeSettings
         val existing = _queue.value.queueIdentityKeys()
-        val skippedFiles = mutableListOf<String>()
+        val skippedFiles = mutableListOf<SkippedUploadFile>()
 
         val newItems = uris
             .distinctBy { it.toString() }
             .mapNotNull { uri ->
-                val uriString = uri.toString()
-                if (uriString in existing) {
-                    null
-                } else {
-                    val displayName = localFileResolver.resolveDisplayName(uri)
-                        ?: uri.lastPathSegment
-                        ?: "Book-${UUID.randomUUID()}"
-                    val extension = displayName.bookExtension().lowercase().trim()
-                    val strings = localizationManager.currentStrings.value
-
-                    val isSupported =
-                        extension in com.cybercat.ebooksender.domain.AllSupportedExtensions ||
-                            (
-                                extension.endsWith(".zip") &&
-                                    extension.removeSuffix(".zip") in
-                                    com.cybercat.ebooksender.domain.AllSupportedExtensions
-                                )
-                    val fileSize = localFileResolver.resolveFileSize(uri)
-                    val isTooBig = fileSize > MAX_FILE_SIZE_BYTES
-
-                    if (!isSupported || isTooBig) {
-                        val reason = when {
-                            !isSupported -> strings.get("send_skip_reason_unsupported_format")
-                            else -> strings.get("send_skip_reason_too_large", MAX_FILE_SIZE_MB)
-                        }
-                        skippedFiles.add("$displayName ($reason)")
-                        null
-                    } else {
+                when (
+                    val result = uploadItemValidator.validate(
+                        uri = uri,
+                        existingIdentityKeys = existing,
+                        maxFileSizeBytes = MAX_FILE_SIZE_BYTES
+                    )
+                ) {
+                    is UploadItemValidator.Result.Accepted -> {
                         localFileResolver.persistReadPermission(uri)
-                        createUploadItem(uri, displayName, settings)
+                        createUploadItem(uri, result.displayName, settings)
+                    }
+
+                    UploadItemValidator.Result.Duplicate -> null
+
+                    is UploadItemValidator.Result.Skipped -> {
+                        skippedFiles += result.file
+                        null
                     }
                 }
             }
 
         if (skippedFiles.isNotEmpty()) {
-            val strings = localizationManager.currentStrings.value
-            val tooLargeOrUnsupported = strings.get(
-                "send_skip_reason_unsupported_or_too_large",
-                MAX_FILE_SIZE_MB
+            _events.tryEmit(
+                UploadFilesSkipped(
+                    files = skippedFiles,
+                    maxFileSizeMb = MAX_FILE_SIZE_MB
+                )
             )
-            val message = if (skippedFiles.size == 1) {
-                strings.get("send_skipped_file", skippedFiles.first())
-            } else {
-                strings.get("send_skipped_files_summary", skippedFiles.size, tooLargeOrUnsupported)
-            }
-            scope.launch(Dispatchers.Main) {
-                android.widget.Toast.makeText(
-                    context,
-                    message,
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-            }
         }
 
         if (newItems.isEmpty()) return
@@ -171,7 +149,7 @@ class UploadQueueManagerImpl @Inject constructor(
             (current + newItems).deduplicateQueue()
         }
 
-        enqueueMetadataLoads(newItems.map(UploadItem::id))
+        metadataDispatcher.enqueue(newItems.map(UploadItem::id))
     }
 
     override fun addPreparedItems(items: List<UploadItem>) {
@@ -195,39 +173,13 @@ class UploadQueueManagerImpl @Inject constructor(
             (current + newItems).deduplicateQueue()
         }
 
-        enqueueMetadataLoads(newItems.map(UploadItem::id))
+        metadataDispatcher.enqueue(newItems.map(UploadItem::id))
     }
 
     override fun prioritizeMetadata(itemIds: List<String>) {
         if (itemIds.isEmpty()) return
 
-        val signal = synchronized(metadataQueueLock) {
-            val prioritizedIds = itemIds.filter { itemId ->
-                itemId !in runningMetadataItemIds && shouldLoadMetadata(itemId)
-            }
-            if (prioritizedIds.isEmpty()) {
-                null
-            } else {
-                val currentPendingIds = pendingMetadataItemIds.toList()
-                val currentPendingIdSet = currentPendingIds.toSet()
-                val prioritizedIdSet = prioritizedIds.toSet()
-                pendingMetadataItemIds.clear()
-
-                prioritizedIds.forEach { itemId ->
-                    if (itemId in currentPendingIdSet || queuedMetadataItemIds.add(itemId)) {
-                        pendingMetadataItemIds.addLast(itemId)
-                    }
-                }
-                currentPendingIds.forEach { itemId ->
-                    if (itemId !in prioritizedIdSet) {
-                        pendingMetadataItemIds.addLast(itemId)
-                    }
-                }
-                metadataQueueSignal
-            }
-        }
-
-        signal?.complete(Unit)
+        metadataDispatcher.prioritize(itemIds)
     }
 
     override fun removeItem(id: String) {
@@ -435,7 +387,7 @@ class UploadQueueManagerImpl @Inject constructor(
         persistQueueSnapshot(_queue.value)
 
         val itemIdsNeedingMetadataReload = restoredQueueState.metadataReloadItemIds
-        enqueueMetadataLoads(itemIdsNeedingMetadataReload)
+        metadataDispatcher.enqueue(itemIdsNeedingMetadataReload)
     }
 
     private suspend fun persistQueueSnapshot(items: List<UploadItem>) {
@@ -475,7 +427,11 @@ class UploadQueueManagerImpl @Inject constructor(
             extension = extension,
             category = category,
             title = title,
-            author = if (category == BookCategory.Books) "Unknown Author" else null,
+            author = if (category == BookCategory.Books) {
+                CatalogFallbackNames.UNKNOWN_AUTHOR
+            } else {
+                null
+            },
             documentsTag = if (category ==
                 BookCategory.Documents
             ) {
@@ -492,11 +448,11 @@ class UploadQueueManagerImpl @Inject constructor(
         return replan(preliminary, settings)
     }
 
-    private suspend fun loadMetadata(item: UploadItem) {
-        val metadata = metadataExtractionSemaphore.withPermit {
-            if (!shouldLoadMetadata(item.id)) return@withPermit null
-            metadataExtractor.extract(item.sourceUri, item.originalName)
-        } ?: return
+    private suspend fun loadMetadata(itemId: String) {
+        val item = _queue.value.firstOrNull { currentItem -> currentItem.id == itemId } ?: return
+        if (!shouldLoadMetadata(item.id)) return
+
+        val metadata = metadataExtractor.extract(item.sourceUri, item.originalName)
         val preview = metadata.preview
 
         if (preview != null && _queue.value.any { currentItem -> currentItem.id == item.id }) {
@@ -554,63 +510,6 @@ class UploadQueueManagerImpl @Inject constructor(
 
     private fun shouldLoadMetadata(itemId: String): Boolean = _queue.value.any { item ->
         item.id == itemId && item.status != UploadStatus.Uploaded
-    }
-
-    private fun enqueueMetadataLoads(itemIds: Iterable<String>) {
-        val signal = synchronized(metadataQueueLock) {
-            var enqueued = false
-            itemIds.forEach { itemId ->
-                if (
-                    itemId !in queuedMetadataItemIds &&
-                    itemId !in runningMetadataItemIds &&
-                    shouldLoadMetadata(itemId)
-                ) {
-                    pendingMetadataItemIds.addLast(itemId)
-                    queuedMetadataItemIds += itemId
-                    enqueued = true
-                }
-            }
-            if (enqueued) {
-                metadataQueueSignal
-            } else {
-                null
-            }
-        }
-
-        signal?.complete(Unit)
-    }
-
-    private suspend fun processMetadataQueue() {
-        while (true) {
-            val (itemId, signal) = synchronized(metadataQueueLock) {
-                val nextItemId = pendingMetadataItemIds.removeFirstOrNull()
-                if (nextItemId != null) {
-                    queuedMetadataItemIds.remove(nextItemId)
-                    runningMetadataItemIds += nextItemId
-                    nextItemId to metadataQueueSignal
-                } else {
-                    if (metadataQueueSignal.isCompleted) {
-                        metadataQueueSignal = CompletableDeferred()
-                    }
-                    null to metadataQueueSignal
-                }
-            }
-
-            if (itemId == null) {
-                signal.await()
-                continue
-            }
-
-            try {
-                _queue.value.firstOrNull { item -> item.id == itemId }?.let { item ->
-                    loadMetadata(item)
-                }
-            } finally {
-                synchronized(metadataQueueLock) {
-                    runningMetadataItemIds.remove(itemId)
-                }
-            }
-        }
     }
 
     private fun replan(item: UploadItem, settings: AppSettings): UploadItem =

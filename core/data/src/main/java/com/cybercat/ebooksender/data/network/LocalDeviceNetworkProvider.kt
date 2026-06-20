@@ -8,6 +8,7 @@ import com.cybercat.ebooksender.data.settings.SettingsRepository
 import com.cybercat.ebooksender.network.LocalNetworkBypassUnavailableException
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.IOException
+import java.net.InetAddress
 import java.net.Socket
 import java.net.URL
 import java.net.URLConnection
@@ -19,7 +20,7 @@ import kotlinx.coroutines.flow.first
 @Singleton
 class LocalDeviceNetworkProvider @Inject constructor(
     @ApplicationContext context: Context,
-    private val settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository
 ) {
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -29,8 +30,10 @@ class LocalDeviceNetworkProvider @Inject constructor(
         return network?.openConnection(url) ?: url.openConnection()
     }
 
-    suspend fun socketFactory(): SocketFactory? =
-        selectedNetwork()?.socketFactory
+    suspend fun socketFactory(): SocketFactory? = selectedNetwork()?.socketFactory
+
+    suspend fun resolveAllByName(host: String): Array<InetAddress> =
+        selectedNetwork()?.getAllByName(host) ?: InetAddress.getAllByName(host)
 
     private suspend fun selectedNetwork(): Network? {
         if (!settingsRepository.settings.first().bypassVpnForLocalConnections) {
@@ -66,15 +69,14 @@ class LocalDeviceNetworkProvider @Inject constructor(
         connectivityManager.getNetworkCapabilities(network)
             ?.directLocalNetworkScore() != null
 
-    private fun Network.canBindSocket(): Boolean =
-        try {
-            Socket().use(::bindSocket)
-            true
-        } catch (_: IOException) {
-            false
-        } catch (_: RuntimeException) {
-            false
-        }
+    private fun Network.canBindSocket(): Boolean = try {
+        Socket().use(::bindSocket)
+        true
+    } catch (_: IOException) {
+        false
+    } catch (_: RuntimeException) {
+        false
+    }
 
     private fun NetworkCapabilities.directLocalNetworkScore(): Int? {
         if (hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return null
@@ -91,8 +93,5 @@ class LocalDeviceNetworkProvider @Inject constructor(
         }
     }
 
-    private data class Candidate(
-        val network: Network,
-        val score: Int,
-    )
+    private data class Candidate(val network: Network, val score: Int)
 }

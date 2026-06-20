@@ -153,7 +153,6 @@ class MangaChapterDownloader @Inject constructor(
         )
 
         val pageCount = fallbackPageCount
-        val progressDetail = null
         val completedPages = if (directArchive == null) {
             fallbackPageCount
         } else {
@@ -167,7 +166,7 @@ class MangaChapterDownloader @Inject constructor(
                 completedChapters = completed.coerceAtMost(totalChapters),
                 totalPages = pageCount,
                 completedPages = completedPages,
-                detail = progressDetail
+                detail = null
             )
         )
 
