@@ -1,5 +1,6 @@
 package com.cybercat.ebooksender.feature.settings
 
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -42,29 +43,31 @@ internal fun InterfaceSettingsSection(
     val strings = LocalStrings.current
 
     SettingsSection(title = strings.settingsInterfaceSection) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(strings.settingsDynamicColor, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    strings.settingsDynamicColorDesc,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(strings.settingsDynamicColor, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        strings.settingsDynamicColorDesc,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = state.settings.useDynamicColor,
+                    onCheckedChange = {
+                        view.performHapticIfAllowed(
+                            context,
+                            state.settings.enableHaptics,
+                            AppHapticFeedback.Press
+                        )
+                        onDynamicColorChanged(it)
+                    }
                 )
             }
-            Switch(
-                checked = state.settings.useDynamicColor,
-                onCheckedChange = {
-                    view.performHapticIfAllowed(
-                        context,
-                        state.settings.enableHaptics,
-                        AppHapticFeedback.Press
-                    )
-                    onDynamicColorChanged(it)
-                }
-            )
         }
 
         Row(
