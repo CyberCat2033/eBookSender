@@ -3,7 +3,8 @@ name: Release
 # При пуше тега v* (например v0.2.0) проверяет SemVer-формат тега,
 # запускает unit-тесты, собирает подписанные release-APK для ARM ABI
 # и universal APK, затем публикует их в GitHub Releases и обновляет
-# GitHub Pages манифест updates/latest.json для автообновлений.
+# GitHub Pages манифест updates/latest.json и localized changelog-файлы
+# для автообновлений.
 # Сборка debug APK на main/PR — в workflow ci.yml.
 #
 # Требуются секреты репозитория (Settings → Secrets and variables → Actions):
@@ -108,10 +109,20 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           ARTIFACT_DIR="release-artifacts"
           SITE_DIR="site/updates"
+          CHANGELOG_DIR="$SITE_DIR/changelog"
           RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          CHANGELOG_URL="https://cybercat2033.github.io/eBookSender/updates/changelog"
           RELEASED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
           mkdir -p "$SITE_DIR"
+          mkdir -p "$CHANGELOG_DIR"
+
+          if [ ! -s CHANGELOG.md ] || [ ! -s CHANGELOG.ru.md ]; then
+            echo "::error::CHANGELOG.md and CHANGELOG.ru.md must exist and be non-empty."
+            exit 1
+          fi
+          cp CHANGELOG.md "$CHANGELOG_DIR/CHANGELOG.md"
+          cp CHANGELOG.ru.md "$CHANGELOG_DIR/CHANGELOG.ru.md"
 
           universal="eBookSender-v${VERSION}-universal.apk"
           arm64="eBookSender-v${VERSION}-arm64-v8a.apk"
@@ -125,7 +136,11 @@ jobs:
             "versionCode": $VERSION_CODE,
             "minSdk": 26,
             "releasedAt": "$RELEASED_AT",
-            "changelogUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}",
+            "changelogUrl": "$CHANGELOG_URL/CHANGELOG.md",
+            "changelogUrls": {
+              "en": "$CHANGELOG_URL/CHANGELOG.md",
+              "ru": "$CHANGELOG_URL/CHANGELOG.ru.md"
+            },
             "artifacts": [
               {
                 "abi": "universal",

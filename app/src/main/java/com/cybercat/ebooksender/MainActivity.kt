@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     sharedUris = sharedUris,
                     onSharedUrisConsumed = { sharedUris = emptyList() },
                     appUpdateState = appUpdateState,
+                    onLoadUpdateChangelog = appUpdateManager::loadChangelog,
                     onInstallUpdate = appUpdateManager::installAvailableUpdate,
                     onCancelUpdateDownload = appUpdateManager::cancelUpdateDownload,
                     pocketBookServerUpdateState = pocketBookServerUpdateState,

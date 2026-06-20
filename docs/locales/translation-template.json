@@ -82,6 +82,8 @@
   "update_dialog_downloading": "",
   "update_dialog_install": "",
   "update_dialog_later": "",
+  "update_dialog_changelog_title": "",
+  "update_dialog_changelog_unavailable": "",
   "update_download_progress_title": "",
   "update_download_preparing": "",
   "update_download_cancel": "",

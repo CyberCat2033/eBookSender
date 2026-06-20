@@ -64,6 +64,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.cybercat.ebooksender.data.update.AppUpdateState
+import com.cybercat.ebooksender.data.update.AvailableAppUpdate
 import com.cybercat.ebooksender.data.update.PocketBookServerUpdateState
 import com.cybercat.ebooksender.feature.catalog.CatalogScreen
 import com.cybercat.ebooksender.feature.catalog.CatalogViewModel
@@ -113,6 +114,7 @@ fun EBookSenderApp(
     sharedUris: List<Uri>,
     onSharedUrisConsumed: () -> Unit,
     appUpdateState: AppUpdateState,
+    onLoadUpdateChangelog: suspend (AvailableAppUpdate, String) -> String?,
     onInstallUpdate: () -> Unit,
     onCancelUpdateDownload: () -> Unit,
     pocketBookServerUpdateState: PocketBookServerUpdateState,
@@ -286,6 +288,7 @@ fun EBookSenderApp(
                     AppUpdateDialog(
                         status = updateStatus,
                         enableHaptics = settings.enableHaptics,
+                        loadChangelog = onLoadUpdateChangelog,
                         onInstall = onInstallUpdate,
                         onDismiss = { dismissedUpdateEventId = appUpdateState.statusEventId }
                     )

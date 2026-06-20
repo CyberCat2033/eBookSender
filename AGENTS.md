@@ -34,6 +34,7 @@ These instructions define the required working rules for Codex in this repositor
 - Keep user-facing strings in the localization system and update bundled locales when adding or changing visible text.
 - Bundled runtime locales live in `app/src/main/assets/locales/en.json` and `app/src/main/assets/locales/ru.json`; update both for every new or changed user-facing string and keep external locale loading compatible.
 - Whenever adding or changing localization keys, update `docs/locales/translation-template.json` in the same change so external translators see the new keys.
+- Keep `CHANGELOG.md` and `CHANGELOG.ru.md` updated for user-facing changes. At the end of every task, check whether the change should be documented in both changelog files and add or adjust the entry yourself when it affects users.
 
 ## Quality, security, and performance
 
@@ -66,6 +67,7 @@ These instructions define the required working rules for Codex in this repositor
 - For small, obvious fixes, proceed directly on the `refactoring` branch while keeping the scope tight.
 - Treat `README.md` as user-facing documentation only. Do not put internal Codex instructions, contributor-only workflow notes, implementation planning, or maintainer reminders there; use `AGENTS.md`, `CODEX_PROJECT_MAP.md`, or dedicated developer docs for that information.
 - At the end of each task, decide whether `AGENTS.md` or `CODEX_PROJECT_MAP.md` need updates. Update them yourself when the change affects repository workflow, architecture, module layout, important paths, shared patterns, or verification commands; if no update is needed, state that in the final response.
+- At the same task-completion checkpoint, review `CHANGELOG.md` and `CHANGELOG.ru.md`; update both files for user-visible changes, release notes, or behavior changes, and state when no changelog update was needed.
 - Use the existing module boundaries:
   - `app` wires the application, DI, navigation, metadata, transfer service, and Android entry points.
   - `core:*` modules contain shared model, domain, data, database, network, datastore, common utilities, and UI primitives.

@@ -97,6 +97,8 @@
   "update_dialog_downloading": "Downloading update",
   "update_dialog_install": "Install",
   "update_dialog_later": "Later",
+  "update_dialog_changelog_title": "What changed",
+  "update_dialog_changelog_unavailable": "The changelog could not be loaded.",
   "update_download_progress_title": "Downloading update (%1$d%%)",
   "update_download_preparing": "The APK will be verified before installation",
   "update_download_cancel": "Cancel update download",

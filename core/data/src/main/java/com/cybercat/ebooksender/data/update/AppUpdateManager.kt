@@ -17,6 +17,8 @@ interface AppUpdateManager {
 
     fun clearStatus()
 
+    suspend fun loadChangelog(update: AvailableAppUpdate, languageCode: String): String?
+
     suspend fun clearUpdateCache(): Long
 }
 
@@ -46,6 +48,16 @@ data class AvailableAppUpdate(val manifest: AppUpdateManifest, val artifact: App
     val versionName: String get() = manifest.versionName
     val versionCode: Long get() = manifest.versionCode
     val changelogUrl: String? get() = manifest.changelogUrl
+    val changelogUrls: Map<String, String> get() = manifest.changelogUrls
+
+    fun changelogUrlFor(languageCode: String): String? {
+        val normalizedCode = languageCode.lowercase()
+        val baseCode = normalizedCode.substringBefore('-')
+        return changelogUrls[normalizedCode]
+            ?: changelogUrls[baseCode]
+            ?: changelogUrls["en"]
+            ?: changelogUrl
+    }
 }
 
 sealed class AppUpdateStatus {

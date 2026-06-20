@@ -111,6 +111,10 @@ class AppStrings(
     val updateDialogDownloading: String get() = get("update_dialog_downloading")
     val updateDialogInstall: String get() = get("update_dialog_install")
     val updateDialogLater: String get() = get("update_dialog_later")
+    val updateDialogChangelogTitle: String get() = get("update_dialog_changelog_title")
+    val updateDialogChangelogUnavailable: String get() = get(
+        "update_dialog_changelog_unavailable"
+    )
     val updateDownloadPreparing: String get() = get("update_download_preparing")
     val updateDownloadCancel: String get() = get("update_download_cancel")
     val updateDownloadCanceled: String get() = get("update_download_canceled")
