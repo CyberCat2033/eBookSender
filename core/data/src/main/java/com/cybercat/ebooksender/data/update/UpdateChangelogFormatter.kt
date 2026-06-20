@@ -12,9 +12,13 @@ object UpdateChangelogFormatter {
             pattern = "^##\\s+\\[?Unreleased(?:]|\\b).*$",
             option = RegexOption.IGNORE_CASE
         )
-        val startIndex = lines.indexOfFirst { line ->
-            val trimmed = line.trim()
-            versionHeading.matches(trimmed) || unreleasedHeading.matches(trimmed)
+        var startIndex = lines.indexOfFirst { line ->
+            versionHeading.matches(line.trim())
+        }
+        if (startIndex < 0) {
+            startIndex = lines.indexOfFirst { line ->
+                unreleasedHeading.matches(line.trim())
+            }
         }
 
         val sectionLines = if (startIndex >= 0) {

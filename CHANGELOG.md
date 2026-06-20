@@ -4,6 +4,8 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ## [Unreleased]
 
+## [0.11.5] - 2026-06-20
+
 ### Added
 
 - Added localized app update changelogs shown directly in the new-version dialog.
