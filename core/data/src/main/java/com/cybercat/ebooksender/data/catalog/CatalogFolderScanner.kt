@@ -37,6 +37,11 @@ class CatalogFolderScanner @Inject constructor(private val ftpGateway: FtpGatewa
         root: String,
         settings: AppSettings
     ): List<CatalogGroup> {
+        val fallbackName = if (root == settings.documentsFolderName) {
+            CatalogFallbackNames.UNTAGGED_DOCUMENTS
+        } else {
+            CatalogFallbackNames.UNKNOWN_AUTHOR
+        }
         val rootEntries = ftpGateway.listEntries(device, root).getOrThrow()
         val rootFiles = rootEntries
             .filterNot(FtpEntry::isDirectory)
@@ -51,35 +56,15 @@ class CatalogFolderScanner @Inject constructor(private val ftpGateway: FtpGatewa
                     .filterNot(FtpEntry::isDirectory)
                     .filter { it.isKnownBookFile() }
                     .map { it.toCatalogFile() }
-                    .sortedWith(NaturalSort.by { it.path })
-
-                if (files.isEmpty()) {
-                    null
-                } else {
-                    CatalogGroup(
-                        name = group.name,
-                        path = group.path,
-                        files = files
-                    )
-                }
+                files.toCatalogGroupOrNull(name = group.name, path = group.path)
             }
 
-        val fallbackGroup = if (rootFiles.isEmpty()) {
-            null
-        } else {
-            CatalogGroup(
-                name = if (root == settings.documentsFolderName) {
-                    CatalogFallbackNames.UNTAGGED_DOCUMENTS
-                } else {
-                    CatalogFallbackNames.UNKNOWN_AUTHOR
-                },
-                path = root,
-                files = rootFiles.sortedWith(NaturalSort.by { it.path })
-            )
-        }
-
-        return (listOfNotNull(fallbackGroup) + folderGroups)
-            .sortedWith(NaturalSort.by { it.name })
+        return buildCatalogGroupsWithFallback(
+            root = root,
+            rootFiles = rootFiles,
+            fallbackName = fallbackName,
+            folderGroups = folderGroups
+        )
     }
 
     private suspend fun loadMangaSeries(
@@ -94,19 +79,7 @@ class CatalogFolderScanner @Inject constructor(private val ftpGateway: FtpGatewa
                 .filterNot(FtpEntry::isDirectory)
                 .filter { it.name.contentExtension() in MangaArchiveExtensions }
                 .map { it.toCatalogFile() }
-                .sortedWith(NaturalSort.by { it.path })
-
-            if (files.isEmpty()) {
-                null
-            } else {
-                MangaSeriesGroup(
-                    name = series.name,
-                    path = series.path,
-                    latestFile = files.lastOrNull(),
-                    lastReadFile = null,
-                    files = files
-                )
-            }
+            files.toMangaSeriesGroupOrNull(name = series.name, path = series.path)
         }
         .sortedWith(NaturalSort.by { it.name })
 

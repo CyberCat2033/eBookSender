@@ -1,6 +1,6 @@
 package com.cybercat.ebooksender.data.opds
 
-import java.net.URL
+import com.cybercat.ebooksender.util.UrlHostMatcher
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 
@@ -12,10 +12,9 @@ import kotlinx.coroutines.flow.first
 class MatchOpdsAuthSourceUseCase @Inject constructor(private val opdsRepository: OpdsRepository) {
 
     suspend operator fun invoke(error: OpdsAuthenticationRequiredException): OpdsSource? {
-        val requestHost = runCatching { URL(error.url).host.lowercase() }.getOrNull()
         val currentSources = opdsRepository.sources.first()
         return currentSources.firstOrNull { source ->
-            runCatching { URL(source.url).host.lowercase() }.getOrNull() == requestHost
+            UrlHostMatcher.hostsMatch(error.url, source.url)
         }
     }
 }

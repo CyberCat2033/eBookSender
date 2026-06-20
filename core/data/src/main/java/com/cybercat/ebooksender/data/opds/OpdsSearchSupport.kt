@@ -1,5 +1,7 @@
 package com.cybercat.ebooksender.data.opds
 
+import com.cybercat.ebooksender.util.SearchQueryNormalizer
+import com.cybercat.ebooksender.util.UrlHostMatcher
 import java.net.URI
 import java.net.URLEncoder
 
@@ -30,11 +32,11 @@ internal fun mergeOpdsSearchCatalogs(title: String, catalogs: List<OpdsCatalog>)
 }
 
 internal fun OpdsCatalog.filterAuthorSearchEntries(query: String): OpdsCatalog {
-    val tokens = query.searchTokens()
+    val tokens = SearchQueryNormalizer.tokens(query)
     if (tokens.size < 2) return this
 
     val filteredEntries = entries.filter { entry ->
-        val title = entry.title.searchComparableText()
+        val title = SearchQueryNormalizer.comparableText(entry.title)
         tokens.all { token -> token in title }
     }
 
@@ -57,10 +59,9 @@ internal fun expandOpdsSearchTemplate(template: String, query: String): String {
 
 private fun String.flibustaAuthorSearchUrls(query: String): List<String> {
     val uri = runCatching { URI(this) }.getOrNull() ?: return emptyList()
-    val host = uri.host.orEmpty().lowercase()
-    if ("flibusta" !in host && "flub" !in host) return emptyList()
+    if (!UrlHostMatcher.hostContainsAny(this, FLIBUSTA_HOST_MARKERS)) return emptyList()
 
-    val normalizedQuery = query.cleanAuthorSearchQuery()
+    val normalizedQuery = SearchQueryNormalizer.normalize(query)
     if (normalizedQuery.isBlank()) return emptyList()
 
     val authorPrefix = normalizedQuery
@@ -72,21 +73,7 @@ private fun String.flibustaAuthorSearchUrls(query: String): List<String> {
     return listOf("$baseUrl/opds/authorsindex/${authorPrefix.urlPathEncode()}")
 }
 
-private fun String.cleanAuthorSearchQuery(): String = trim()
-    .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
-    .replace(Regex("\\s+"), " ")
-    .trim()
-    .lowercase()
-
-private fun String.searchTokens(): List<String> = trim()
-    .replace(Regex("[^\\p{L}\\p{N}\\s-]+"), " ")
-    .replace(Regex("\\s+"), " ")
-    .lowercase()
-    .split(' ')
-    .map { token -> token.trim('-', ' ') }
-    .filter { token -> token.length >= 2 }
-
-private fun String.searchComparableText(): String = searchTokens().joinToString(" ")
-
 private fun String.urlPathEncode(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
     .replace("+", "%20")
+
+private val FLIBUSTA_HOST_MARKERS = listOf("flibusta", "flub")

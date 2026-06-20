@@ -32,59 +32,61 @@ class CatalogTreeBuilder @Inject constructor() {
     }
 
     private fun List<DbCatalogFile>.toBookGroups(settings: AppSettings): List<CatalogGroup> =
-        filter { it.path.isUnder(settings.booksFolderName) }
-            .deduplicateIn(settings.booksFolderName)
-            .groupBy { file ->
-                file.path.directoryAfter(settings.booksFolderName)
-                    ?: file.authors.firstOrNull()
-                    ?: CatalogFallbackNames.UNKNOWN_AUTHOR
+        toCatalogGroups(
+            root = settings.booksFolderName,
+            fallbackName = CatalogFallbackNames.UNKNOWN_AUTHOR,
+            groupName = { file ->
+                file.path.directoryAfter(settings.booksFolderName) ?: file.authors.firstOrNull()
             }
-            .map { (name, files) ->
-                CatalogGroup(
-                    name = name,
-                    path = "${settings.booksFolderName}/$name",
-                    files = files.toCatalogFiles()
-                )
-            }
-            .filter { it.files.isNotEmpty() }
-            .sortedWith(NaturalSort.by { it.name })
+        )
 
     private fun List<DbCatalogFile>.toDocumentsGroups(settings: AppSettings): List<CatalogGroup> =
-        filter { it.path.isUnder(settings.documentsFolderName) }
-            .deduplicateIn(settings.documentsFolderName)
-            .groupBy { file ->
-                file.path.directoryAfter(settings.documentsFolderName)
-                    ?: CatalogFallbackNames.UNTAGGED_DOCUMENTS
-            }
-            .map { (name, files) ->
-                CatalogGroup(
-                    name = name,
-                    path = "${settings.documentsFolderName}/$name",
-                    files = files.toCatalogFiles()
-                )
-            }
-            .filter { it.files.isNotEmpty() }
-            .sortedWith(NaturalSort.by { it.name })
+        toCatalogGroups(
+            root = settings.documentsFolderName,
+            fallbackName = CatalogFallbackNames.UNTAGGED_DOCUMENTS
+        )
 
     private fun List<DbCatalogFile>.toMangaGroups(settings: AppSettings): List<MangaSeriesGroup> =
-        filter { it.path.isUnder(settings.mangaFolderName) }
-            .deduplicateIn(settings.mangaFolderName)
-            .groupBy { file ->
-                file.path.directoryAfter(settings.mangaFolderName)
-                    ?: CatalogFallbackNames.UNSORTED_MANGA
-            }
-            .map { (name, files) ->
-                val catalogFiles = files.toCatalogFiles()
+        groupCatalogFiles(
+            root = settings.mangaFolderName,
+            fallbackName = CatalogFallbackNames.UNSORTED_MANGA,
+            filePath = DbCatalogFile::path,
+            deduplicate = { files -> files.deduplicateIn(settings.mangaFolderName) },
+            toCatalogFiles = { files -> files.toCatalogFiles() },
+            createGroup = { name, path, files ->
                 MangaSeriesGroup(
                     name = name,
-                    path = "${settings.mangaFolderName}/$name",
-                    latestFile = catalogFiles.lastOrNull(),
-                    lastReadFile = catalogFiles.lastReadFile(),
-                    files = catalogFiles
+                    path = path,
+                    latestFile = files.lastOrNull(),
+                    lastReadFile = files.lastReadFile(),
+                    files = files
                 )
-            }
-            .filter { it.files.isNotEmpty() }
-            .sortedWith(NaturalSort.by { it.name })
+            },
+            groupFiles = MangaSeriesGroup::files,
+            groupSortName = MangaSeriesGroup::name
+        )
+
+    private fun List<DbCatalogFile>.toCatalogGroups(
+        root: String,
+        fallbackName: String,
+        groupName: (DbCatalogFile) -> String? = { file -> file.path.directoryAfter(root) }
+    ): List<CatalogGroup> = groupCatalogFiles(
+        root = root,
+        fallbackName = fallbackName,
+        filePath = DbCatalogFile::path,
+        deduplicate = { files -> files.deduplicateIn(root) },
+        groupName = groupName,
+        toCatalogFiles = { files -> files.toCatalogFiles() },
+        createGroup = { name, path, files ->
+            CatalogGroup(
+                name = name,
+                path = path,
+                files = files
+            )
+        },
+        groupFiles = CatalogGroup::files,
+        groupSortName = CatalogGroup::name
+    )
 
     private fun List<DbCatalogFile>.toCatalogFiles(): List<CatalogFile> = map { it.toCatalogFile() }
         .distinctBy(CatalogFile::path)
@@ -128,7 +130,7 @@ internal fun String.isUnderFolder(folder: String): Boolean {
     return this != normalizedFolder && startsWith("$normalizedFolder/")
 }
 
-private fun String.directoryAfter(root: String): String? {
+internal fun String.directoryAfter(root: String): String? {
     if (!startsWith("$root/")) return null
     val relativePath = removePrefix("$root/")
     if ('/' !in relativePath) return null

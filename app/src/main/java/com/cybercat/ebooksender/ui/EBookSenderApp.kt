@@ -11,31 +11,21 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
@@ -45,11 +35,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
@@ -72,16 +59,6 @@ import com.cybercat.ebooksender.data.update.AppUpdateState
 import com.cybercat.ebooksender.data.update.AvailableAppUpdate
 import com.cybercat.ebooksender.data.update.AvailablePocketBookServerUpdate
 import com.cybercat.ebooksender.data.update.PocketBookServerUpdateState
-import com.cybercat.ebooksender.data.update.PocketBookServerUpdateStatus
-import com.cybercat.ebooksender.feature.catalog.CatalogScreen
-import com.cybercat.ebooksender.feature.catalog.CatalogViewModel
-import com.cybercat.ebooksender.feature.manga.MangaViewModel
-import com.cybercat.ebooksender.feature.opds.OpdsScreen
-import com.cybercat.ebooksender.feature.opds.OpdsViewModel
-import com.cybercat.ebooksender.feature.settings.SettingsScreen
-import com.cybercat.ebooksender.feature.settings.SettingsViewModel
-import com.cybercat.ebooksender.feature.transfer.SendScreen
-import com.cybercat.ebooksender.feature.transfer.TransferViewModel
 import com.cybercat.ebooksender.localization.AppStrings
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.model.AppSettings
@@ -89,15 +66,13 @@ import com.cybercat.ebooksender.model.AppTheme
 import com.cybercat.ebooksender.ui.navigation.MainDestination
 import com.cybercat.ebooksender.ui.navigation.MainDestinations
 import com.cybercat.ebooksender.ui.theme.EBookSenderTheme
-import com.cybercat.ebooksender.util.AppHapticFeedback
-import com.cybercat.ebooksender.util.performHapticIfAllowed
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private const val NAV_ENTER_DURATION_MILLIS = 200
 private const val NAV_EXIT_DURATION_MILLIS = 80
 private val LANDSCAPE_NAVIGATION_RAIL_WIDTH = 80.dp
-private val UPDATE_PROGRESS_OVERLAY_MARGIN = 16.dp
 
 private class NavigationClickGate(
     private val debounceMillis: Long = NAV_ENTER_DURATION_MILLIS.toLong()
@@ -115,6 +90,63 @@ private class NavigationClickGate(
         lastRoute = route
         lastClickUptimeMillis = now
         return true
+    }
+}
+
+private class AppDestinationScrollState(
+    val sendListState: LazyListState,
+    val catalogListState: LazyListState,
+    val opdsListState: LazyListState,
+    val mangaListState: LazyListState,
+    val settingsScrollState: ScrollState,
+    private val coroutineScope: CoroutineScope
+) {
+    private var topScrollJob: Job? = null
+
+    fun scrollToTop(route: String) {
+        topScrollJob?.cancel()
+        topScrollJob = coroutineScope.launch {
+            when (route) {
+                MainDestination.Send.route -> sendListState.animateScrollToTop()
+
+                MainDestination.Catalog.route -> catalogListState.animateScrollToTop()
+
+                MainDestination.Opds.route -> {
+                    opdsListState.animateScrollToTop()
+                    mangaListState.animateScrollToTop()
+                }
+
+                MainDestination.Settings.route -> settingsScrollState.animateScrollTo(0)
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberAppDestinationScrollState(): AppDestinationScrollState {
+    val coroutineScope = rememberCoroutineScope()
+    val sendListState = rememberLazyListState()
+    val catalogListState = rememberLazyListState()
+    val opdsListState = rememberLazyListState()
+    val mangaListState = rememberLazyListState()
+    val settingsScrollState = rememberScrollState()
+
+    return remember(
+        sendListState,
+        catalogListState,
+        opdsListState,
+        mangaListState,
+        settingsScrollState,
+        coroutineScope
+    ) {
+        AppDestinationScrollState(
+            sendListState = sendListState,
+            catalogListState = catalogListState,
+            opdsListState = opdsListState,
+            mangaListState = mangaListState,
+            settingsScrollState = settingsScrollState,
+            coroutineScope = coroutineScope
+        )
     }
 }
 
@@ -139,39 +171,13 @@ fun EBookSenderApp(
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val coroutineScope = rememberCoroutineScope()
-    val sendListState = rememberLazyListState()
-    val catalogListState = rememberLazyListState()
-    val opdsListState = rememberLazyListState()
-    val mangaListState = rememberLazyListState()
-    val settingsScrollState = rememberScrollState()
+    val destinationScrollState = rememberAppDestinationScrollState()
     val navigationClickGate = remember { NavigationClickGate() }
-    var topScrollJob by remember { mutableStateOf<Job?>(null) }
-    var dismissedUpdateEventId by remember { mutableStateOf<Long?>(null) }
-    var dismissedPocketBookServerUpdateEventId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(sharedUris) {
         if (sharedUris.isNotEmpty()) {
             rootViewModel.addUris(sharedUris)
             onSharedUrisConsumed()
-        }
-    }
-
-    fun scrollDestinationToTop(route: String) {
-        topScrollJob?.cancel()
-        topScrollJob = coroutineScope.launch {
-            when (route) {
-                MainDestination.Send.route -> sendListState.animateScrollToTop()
-
-                MainDestination.Catalog.route -> catalogListState.animateScrollToTop()
-
-                MainDestination.Opds.route -> {
-                    opdsListState.animateScrollToTop()
-                    mangaListState.animateScrollToTop()
-                }
-
-                MainDestination.Settings.route -> settingsScrollState.animateScrollTo(0)
-            }
         }
     }
 
@@ -215,7 +221,7 @@ fun EBookSenderApp(
                 ) -> Unit = { destination, selected ->
                     if (navigationClickGate.shouldHandle(destination.route)) {
                         if (selected) {
-                            scrollDestinationToTop(destination.route)
+                            destinationScrollState.scrollToTop(destination.route)
                         } else {
                             navController.navigateSingleTop(destination.route)
                         }
@@ -226,44 +232,26 @@ fun EBookSenderApp(
                         AppNavHost(
                             navController = navController,
                             appSettings = settings,
-                            sendListState = sendListState,
-                            catalogListState = catalogListState,
-                            opdsListState = opdsListState,
-                            mangaListState = mangaListState,
-                            settingsScrollState = settingsScrollState,
+                            sendListState = destinationScrollState.sendListState,
+                            catalogListState = destinationScrollState.catalogListState,
+                            opdsListState = destinationScrollState.opdsListState,
+                            mangaListState = destinationScrollState.mangaListState,
+                            settingsScrollState = destinationScrollState.settingsScrollState,
                             modifier = Modifier.fillMaxSize()
                         )
 
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(UPDATE_PROGRESS_OVERLAY_MARGIN),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = appUpdateState.isDownloading,
-                                enter = fadeIn() + slideInVertically { height -> height },
-                                exit = fadeOut() + slideOutVertically { height -> height }
-                            ) {
-                                AppUpdateProgressOverlay(
-                                    progress = appUpdateState.downloadProgress,
-                                    enableHaptics = settings.enableHaptics,
-                                    onCancel = onCancelUpdateDownload
-                                )
-                            }
-                            androidx.compose.animation.AnimatedVisibility(
-                                visible = pocketBookServerUpdateState.isInstalling,
-                                enter = fadeIn() + slideInVertically { height -> height },
-                                exit = fadeOut() + slideOutVertically { height -> height }
-                            ) {
-                                PocketBookServerUpdateProgressOverlay(
-                                    progress = pocketBookServerUpdateState.installProgress,
-                                    enableHaptics = settings.enableHaptics,
-                                    onCancel = onCancelPocketBookServerUpdate
-                                )
-                            }
-                        }
+                        UpdateOverlaysHost(
+                            appUpdateState = appUpdateState,
+                            onLoadUpdateChangelog = onLoadUpdateChangelog,
+                            onInstallUpdate = onInstallUpdate,
+                            onCancelUpdateDownload = onCancelUpdateDownload,
+                            pocketBookServerUpdateState = pocketBookServerUpdateState,
+                            onLoadPocketBookServerUpdateChangelog =
+                            onLoadPocketBookServerUpdateChangelog,
+                            onInstallPocketBookServerUpdate = onInstallPocketBookServerUpdate,
+                            onCancelPocketBookServerUpdate = onCancelPocketBookServerUpdate,
+                            enableHaptics = settings.enableHaptics
+                        )
                     }
                 }
                 if (useFullHeightNavigationRail) {
@@ -303,36 +291,6 @@ fun EBookSenderApp(
                         content = { content() }
                     )
                 }
-
-                val updateStatus = appUpdateState.status
-                if (updateStatus != null &&
-                    dismissedUpdateEventId != appUpdateState.statusEventId
-                ) {
-                    AppUpdateDialog(
-                        status = updateStatus,
-                        enableHaptics = settings.enableHaptics,
-                        loadChangelog = onLoadUpdateChangelog,
-                        onInstall = onInstallUpdate,
-                        onDismiss = { dismissedUpdateEventId = appUpdateState.statusEventId }
-                    )
-                }
-
-                val pocketBookServerStatus = pocketBookServerUpdateState.status
-                if (pocketBookServerStatus != null &&
-                    dismissedPocketBookServerUpdateEventId !=
-                    pocketBookServerUpdateState.statusEventId
-                ) {
-                    PocketBookServerUpdateDialog(
-                        status = pocketBookServerStatus,
-                        enableHaptics = settings.enableHaptics,
-                        loadChangelog = onLoadPocketBookServerUpdateChangelog,
-                        onInstall = onInstallPocketBookServerUpdate,
-                        onDismiss = {
-                            dismissedPocketBookServerUpdateEventId =
-                                pocketBookServerUpdateState.statusEventId
-                        }
-                    )
-                }
             }
         }
     }
@@ -365,49 +323,6 @@ private fun SkippedUploadFile.skipReasonLabel(strings: AppStrings, maxFileSizeMb
         UploadFileSkipReason.TooLarge ->
             strings.get("send_skip_reason_too_large", maxFileSizeMb)
     }
-
-@Composable
-private fun PocketBookServerUpdateDialog(
-    status: PocketBookServerUpdateStatus,
-    enableHaptics: Boolean,
-    loadChangelog: suspend (AvailablePocketBookServerUpdate, String) -> String?,
-    onInstall: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val strings = com.cybercat.ebooksender.localization.LocalStrings.current
-    val update = when (status) {
-        is PocketBookServerUpdateStatus.UpdateAvailable -> status.update
-        is PocketBookServerUpdateStatus.InstalledVersionUnknown -> status.update
-        else -> null
-    } ?: return
-    val isVersionUnknown = status is PocketBookServerUpdateStatus.InstalledVersionUnknown
-    val languageCode = strings.languageCode
-
-    UpdateAvailableDialog(
-        versionCode = update.versionCode,
-        title = strings.get("pb_server_update_dialog_title", update.versionName),
-        body = if (isVersionUnknown) {
-            strings.get(
-                "pb_server_update_dialog_body_unknown",
-                update.versionName,
-                update.versionCode
-            )
-        } else {
-            strings.get(
-                "pb_server_update_dialog_body",
-                update.versionName,
-                update.versionCode
-            )
-        },
-        confirmLabel = strings.get("pb_server_update_dialog_install"),
-        dismissLabel = strings.updateDialogLater,
-        enableHaptics = enableHaptics,
-        hasChangelog = update.changelogUrlFor(languageCode) != null,
-        loadChangelog = { code -> loadChangelog(update, code) },
-        onConfirm = onInstall,
-        onDismiss = onDismiss
-    )
-}
 
 @Composable
 private fun LandscapeNavigationRailScaffold(
@@ -530,238 +445,20 @@ private fun AppNavHost(
         }
     ) {
         composable(MainDestination.Send.route) {
-            val transferViewModel: TransferViewModel = hiltViewModel()
-            val transferState by transferViewModel.uiState.collectAsStateWithLifecycle()
-            val transferRuntimeState by
-                transferViewModel.transferRuntimeState.collectAsStateWithLifecycle()
-            SendScreen(
-                state = transferState,
-                runtimeState = transferRuntimeState,
-                listState = sendListState,
-                onFtpInputChanged = transferViewModel::onFtpInputChanged,
-                onConnect = transferViewModel::connect,
-                onQrScanned = transferViewModel::connectTo,
-                onDisconnect = transferViewModel::disconnect,
-                onAddUris = transferViewModel::addUris,
-                onVisibleQueueChanged = transferViewModel::prioritizeVisibleQueueItems,
-                onRemoveItem = transferViewModel::removeItem,
-                onClearQueue = transferViewModel::clearQueueAfterDelay,
-                onCategoryChanged = transferViewModel::updateCategory,
-                onDocumentsTagChanged = transferViewModel::updateDocumentsTag,
-                onMangaSeriesChanged = transferViewModel::updateMangaSeries,
-                onQueuedMangaSeriesChanged = transferViewModel::updateQueuedMangaSeries,
-                onDismissVpnBypassDialog = transferViewModel::dismissVpnBypassDialog,
-                onDisableVpnBypass = transferViewModel::disableVpnBypassForLocalConnections,
-                onUploadAll = transferViewModel::uploadAll,
-                onCancelUpload = transferViewModel::cancelUpload
-            )
+            SendRoute(listState = sendListState)
         }
         composable(MainDestination.Catalog.route) {
-            val catalogViewModel: CatalogViewModel = hiltViewModel()
-            val catalogState by catalogViewModel.uiState.collectAsStateWithLifecycle()
-            CatalogScreen(
-                state = catalogState,
-                isConnected = catalogState.connectedDevice != null,
-                enableHaptics = appSettings.enableHaptics,
-                listState = catalogListState,
-                onRefresh = catalogViewModel::reloadDeviceCatalog,
-                onSetEditMode = catalogViewModel::setEditMode,
-                onToggleFileSelection = catalogViewModel::toggleFileSelection,
-                onSetFileSelection = catalogViewModel::setFileSelection,
-                onToggleGroupSelection = catalogViewModel::toggleGroupSelection,
-                onDeleteSelectedFiles = catalogViewModel::deleteSelectedFiles,
-                onClearDeleteError = catalogViewModel::clearDeleteError
-            )
+            CatalogRoute(appSettings = appSettings, listState = catalogListState)
         }
         composable(MainDestination.Opds.route) {
-            val opdsViewModel: OpdsViewModel = hiltViewModel()
-            val opdsState by opdsViewModel.uiState.collectAsStateWithLifecycle()
-            val mangaViewModel: MangaViewModel = hiltViewModel()
-            val mangaState by mangaViewModel.uiState.collectAsStateWithLifecycle()
-
-            val strings = com.cybercat.ebooksender.localization.LocalStrings.current
-            val view = androidx.compose.ui.platform.LocalView.current
-            val context = androidx.compose.ui.platform.LocalContext.current
-            val enableHaptics = appSettings.enableHaptics
-
-            OpdsScreen(
-                state = opdsState,
+            OpdsRoute(
+                appSettings = appSettings,
                 opdsListState = opdsListState,
-                onSearchChanged = opdsViewModel::onSearchInputChanged,
-                onWebModeSelected = opdsViewModel::setWebContentMode,
-                onSaveSource = { title, url, username, password ->
-                    opdsViewModel.saveOpdsSource(title, url, username, password)
-                },
-                onRemoveSource = opdsViewModel::removeOpdsSource,
-                onOpenSource = opdsViewModel::openOpdsSource,
-                onOpenLink = opdsViewModel::openOpdsLink,
-                onBack = opdsViewModel::goBackOpds,
-                onPreviousPage = opdsViewModel::goPreviousOpdsPage,
-                onNextPage = opdsViewModel::goNextOpdsPage,
-                onSearch = opdsViewModel::searchOpds,
-                onDownload = opdsViewModel::downloadOpdsAcquisition,
-                onCancelDownload = opdsViewModel::cancelOpdsDownload,
-                onAuthUsernameChanged = opdsViewModel::onAuthUsernameChanged,
-                onAuthPasswordChanged = opdsViewModel::onAuthPasswordChanged,
-                onDismissAuthDialog = opdsViewModel::dismissCredentialsDialog,
-                onSaveCredentials = opdsViewModel::saveCredentials,
-                onOpenCredentialsEdit = opdsViewModel::openCredentialsDialog,
-                enableHaptics = enableHaptics,
-                mangaPane = {
-                    com.cybercat.ebooksender.feature.manga.MangaPane(
-                        state = mangaState,
-                        enableHaptics = enableHaptics,
-                        listState = mangaListState,
-                        onSearchChanged = mangaViewModel::onMangaSearchChanged,
-                        onSearch = mangaViewModel::searchManga,
-                        onSelectSource = mangaViewModel::selectMangaSource,
-                        onOpenBrowser = mangaViewModel::openMangaBrowser,
-                        onCloseBrowser = mangaViewModel::closeMangaBrowser,
-                        onWebPageLoaded = mangaViewModel::syncMangaWebPage,
-                        onOpenSeries = mangaViewModel::openMangaSeries,
-                        onToggleChapter = mangaViewModel::toggleMangaChapter,
-                        onSetMangaSeriesFavorite =
-                            mangaViewModel::setSelectedMangaFavorite,
-                        onSetMangaSeriesSubscribed =
-                            mangaViewModel::setSelectedMangaSubscribed,
-                        onCheckSubscriptions =
-                            mangaViewModel::checkMangaSubscriptions,
-                        onDownloadSelected = mangaViewModel::downloadSelectedMangaChapters,
-                        onToggleSubscriptionUpdateChapter =
-                            mangaViewModel::toggleSubscriptionUpdateChapter,
-                        onSelectAllSubscriptionUpdateChapters =
-                            mangaViewModel::selectAllSubscriptionUpdateChapters,
-                        onClearSubscriptionUpdateChapters =
-                            mangaViewModel::clearSubscriptionUpdateChapters,
-                        onDownloadSubscriptionUpdates = mangaViewModel::downloadSubscriptionUpdates,
-                        onCloseSubscriptionUpdates = mangaViewModel::closeSubscriptionUpdates,
-                        onRefreshAuthState = mangaViewModel::refreshMangaAuthState,
-                        onBrowserSessionRefreshFinished =
-                            mangaViewModel::finishBrowserSessionRefresh,
-                        onCancelDownload = mangaViewModel::cancelMangaDownload,
-                        onMangaLoginModeChanged = mangaViewModel::setMangaLoginMode,
-                        onNativeLoginSubmit = mangaViewModel::performNativeLogin,
-                        onLoginPostExecuted = mangaViewModel::clearPendingLoginPost
-                    )
-                },
-                mangaTopBarNavigationIcon = {
-                    if (mangaState.selectedSeries != null) {
-                        IconButton(
-                            onClick = {
-                                view.performHapticIfAllowed(
-                                    context,
-                                    enableHaptics,
-                                    AppHapticFeedback.Press
-                                )
-                                mangaViewModel.goBackManga()
-                            },
-                            enabled = !mangaState.isLoading && !mangaState.isDownloading
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = strings.get("action_back")
-                            )
-                        }
-                    }
-                },
-                mangaTopBarActions = {
-                    com.cybercat.ebooksender.feature.manga.MangaSelectionActions(
-                        enabled = !mangaState.isDownloading,
-                        hasNewChapters = mangaState.hasNewChapters,
-                        hasChapters = mangaState.chapters.isNotEmpty(),
-                        enableHaptics = enableHaptics,
-                        onSelectNew = mangaViewModel::selectNewMangaChapters,
-                        onSelectAll = mangaViewModel::selectAllMangaChapters,
-                        onClear = mangaViewModel::clearMangaChapterSelection
-                    )
-                },
-                mangaFloatingActionButton = {
-                    val selectedCount = mangaState.selectedChapterIds.size
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = selectedCount > 0 && !mangaState.isDownloading,
-                        enter =
-                            androidx.compose.animation.fadeIn() +
-                                androidx.compose.animation.slideInVertically { height -> height },
-                        exit =
-                            androidx.compose.animation.fadeOut() +
-                                androidx.compose.animation.slideOutVertically { height -> height }
-                    ) {
-                        androidx.compose.material3.ExtendedFloatingActionButton(
-                            onClick = {
-                                view.performHapticIfAllowed(
-                                    context,
-                                    enableHaptics,
-                                    AppHapticFeedback.Confirm
-                                )
-                                mangaViewModel.downloadSelectedMangaChapters()
-                            },
-                            icon = {
-                                Icon(
-                                    Icons.Outlined.Download,
-                                    contentDescription = null
-                                )
-                            },
-                            text = { Text(strings.get("opds_btn_download", selectedCount)) }
-                        )
-                    }
-                },
-                isMangaSelectionActive = mangaState.selectedChapterIds.isNotEmpty(),
-                mangaSelectedChapterCount = mangaState.selectedChapterIds.size,
-                onClearMangaSelection = {
-                    view.performHapticIfAllowed(
-                        context,
-                        enableHaptics,
-                        AppHapticFeedback.Press
-                    )
-                    mangaViewModel.clearMangaChapterSelection()
-                }
+                mangaListState = mangaListState
             )
         }
         composable(MainDestination.Settings.route) {
-            val settingsViewModel: SettingsViewModel = hiltViewModel()
-            val settingsState by settingsViewModel.uiState.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) {
-                settingsViewModel.scanLocales()
-            }
-            SettingsScreen(
-                state = settingsState,
-                scrollState = settingsScrollState,
-                onRootPathChanged = settingsViewModel::setRootPath,
-                onBooksFolderNameChanged = settingsViewModel::setBooksFolderName,
-                onDocumentsFolderNameChanged = settingsViewModel::setDocumentsFolderName,
-                onMangaFolderNameChanged = settingsViewModel::setMangaFolderName,
-                onDefaultDocumentsTagChanged = settingsViewModel::setDefaultDocumentsTag,
-                onDefaultMangaSeriesChanged = settingsViewModel::setDefaultMangaSeries,
-                onBookFileNameTemplateChanged = settingsViewModel::setBookFileNameTemplate,
-                onDocumentsFileNameTemplateChanged =
-                    settingsViewModel::setDocumentsFileNameTemplate,
-                onMangaFileNameTemplateChanged = settingsViewModel::setMangaFileNameTemplate,
-                onDynamicColorChanged = settingsViewModel::setUseDynamicColor,
-                onHapticFeedbackEnabledChanged = settingsViewModel::setEnableHaptics,
-                onBypassVpnForLocalConnectionsChanged =
-                    settingsViewModel::setBypassVpnForLocalConnections,
-                onMangaLoginModeChanged = settingsViewModel::setMangaLoginMode,
-                onCheckForUpdates = settingsViewModel::checkForUpdates,
-                onInstallUpdate = settingsViewModel::installUpdate,
-                onCheckPocketBookServerUpdates =
-                    settingsViewModel::checkPocketBookServerUpdates,
-                onInstallPocketBookServerUpdate =
-                    settingsViewModel::installPocketBookServerUpdate,
-                onClearUpdateStatus = settingsViewModel::clearUpdateStatus,
-                onClearDownloadCache = settingsViewModel::clearDownloadCache,
-                onClearStatusMessage = settingsViewModel::clearStatusMessage,
-                onThemeChanged = settingsViewModel::setTheme,
-                onLanguageChanged = settingsViewModel::setLanguageCode,
-                onWarnOnDisconnectedRenameChanged = settingsViewModel::setWarnOnDisconnectedRename,
-                onConfirmPendingRename = settingsViewModel::confirmPendingRename,
-                onCancelPendingRename = settingsViewModel::cancelPendingRename,
-                onLogoutAll = settingsViewModel::logoutAll,
-                onConfirmLogoutAll = settingsViewModel::confirmLogoutAll,
-                onDismissLogoutWarning = settingsViewModel::dismissLogoutWarning,
-                onResetSettings = settingsViewModel::resetSettings,
-                onConfirmResetSettings = settingsViewModel::confirmResetSettings,
-                onDismissResetWarning = settingsViewModel::dismissResetWarning
-            )
+            SettingsRoute(scrollState = settingsScrollState)
         }
     }
 }

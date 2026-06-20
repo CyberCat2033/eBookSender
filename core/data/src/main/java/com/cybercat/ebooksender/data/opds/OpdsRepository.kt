@@ -5,6 +5,7 @@ import com.cybercat.ebooksender.data.database.dao.OpdsSourceDao
 import com.cybercat.ebooksender.data.database.entity.OpdsSourceEntity
 import com.cybercat.ebooksender.domain.bookExtension
 import com.cybercat.ebooksender.util.ExpiringLruCache
+import com.cybercat.ebooksender.util.UrlHostMatcher
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.net.HttpURLConnection
@@ -90,8 +91,7 @@ class OpdsRepository @Inject constructor(
     ) {
         val normalizedUrl = normalizeOpdsUrl(url)
         val sourceTitle = title.ifBlank {
-            runCatching { java.net.URL(normalizedUrl).host.removePrefix("www.") }
-                .getOrDefault("OPDS")
+            UrlHostMatcher.displayHostWithoutWww(normalizedUrl) ?: "OPDS"
         }
         val sourceId = UUID.nameUUIDFromBytes(normalizedUrl.toByteArray()).toString()
 
