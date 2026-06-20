@@ -56,6 +56,10 @@ class TransferCoordinator @Inject constructor() {
         }
     }
 
+    fun hasActiveTransfer(): Boolean = synchronized(lock) {
+        pendingRequest != null || activeRequestId != null
+    }
+
     fun emit(event: TransferEvent) {
         check(_events.trySend(event).isSuccess) { "Transfer event channel is unavailable" }
     }

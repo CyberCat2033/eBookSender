@@ -4,16 +4,21 @@ import android.app.Application
 import android.net.http.HttpResponseCache
 import com.cybercat.ebooksender.lifecycle.AppVisibilityTracker
 import com.cybercat.ebooksender.notification.AppNotificationVisibilityCleaner
+import com.cybercat.ebooksender.transfer.FtpConnectionHealthMonitor
 import dagger.hilt.android.HiltAndroidApp
 import java.io.File
 import java.io.IOException
+import javax.inject.Inject
 
 @HiltAndroidApp
 class EBookSenderApplication : Application() {
+    @Inject lateinit var ftpConnectionHealthMonitor: FtpConnectionHealthMonitor
+
     override fun onCreate() {
         super.onCreate()
         AppVisibilityTracker.register(this)
         AppNotificationVisibilityCleaner.register(this)
+        ftpConnectionHealthMonitor.start()
         installHttpCache()
     }
 
