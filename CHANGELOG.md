@@ -2,6 +2,16 @@
 
 All notable user-facing changes to eBookSender are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Added a project disclaimer covering warranties, user responsibility, third-party sources, FTP security, content rights, and data backups.
+
+### Fixed
+
+- Made collapsed catalog group cards expandable from the whole card surface instead of only the chevron button.
+
 ## [0.11.6] - 2026-06-20
 
 ### Fixed

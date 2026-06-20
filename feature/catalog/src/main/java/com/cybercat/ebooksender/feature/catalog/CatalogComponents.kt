@@ -15,9 +15,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,14 +50,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerInputChange
-import androidx.compose.ui.input.pointer.PointerInputScope
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -77,7 +70,6 @@ import com.cybercat.ebooksender.ui.theme.EmphasizedEasing
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 internal fun CatalogMessage(
@@ -246,8 +238,27 @@ internal fun CatalogGroupCard(
         onToggleGroupSelection(filePaths, true)
     }
 
+    fun toggleExpanded() {
+        view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
+        onExpandedChange(!expanded)
+    }
+
+    val cardShape = MaterialTheme.shapes.medium
+    val cardModifier = if (isEditMode) {
+        modifier.fillMaxWidth()
+    } else {
+        modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .combinedClickable(
+                onClick = ::toggleExpanded,
+                onLongClick = ::selectGroupFromLongPress
+            )
+    }
+
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = cardModifier,
+        shape = cardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (isGroupFullySelected) {
                 MaterialTheme.colorScheme.surfaceContainerHighest
@@ -271,8 +282,7 @@ internal fun CatalogGroupCard(
                     title = group.name,
                     subtitle = group.files.summary(strings),
                     expanded = expanded,
-                    enableHaptics = enableHaptics,
-                    onToggle = { onExpandedChange(!expanded) },
+                    onToggle = ::toggleExpanded,
                     titleClickEnabled = isEditMode,
                     onTitleClick = {
                         if (!selectionClickSuppressed()) {
@@ -352,8 +362,27 @@ internal fun MangaSeriesCard(
         onToggleGroupSelection(filePaths, true)
     }
 
+    fun toggleExpanded() {
+        view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
+        onExpandedChange(!expanded)
+    }
+
+    val cardShape = MaterialTheme.shapes.medium
+    val cardModifier = if (isEditMode) {
+        modifier.fillMaxWidth()
+    } else {
+        modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .combinedClickable(
+                onClick = ::toggleExpanded,
+                onLongClick = ::selectGroupFromLongPress
+            )
+    }
+
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = cardModifier,
+        shape = cardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (isGroupFullySelected) {
                 MaterialTheme.colorScheme.surfaceContainerHighest
@@ -383,8 +412,7 @@ internal fun MangaSeriesCard(
                     } ?: strings.catalogNoFiles,
                     subtitleMaxLines = 3,
                     expanded = expanded,
-                    enableHaptics = enableHaptics,
-                    onToggle = { onExpandedChange(!expanded) },
+                    onToggle = ::toggleExpanded,
                     titleClickEnabled = isEditMode,
                     onTitleClick = {
                         if (!selectionClickSuppressed()) {
@@ -429,15 +457,12 @@ internal fun ExpandableHeader(
     subtitle: String,
     subtitleMaxLines: Int = 1,
     expanded: Boolean,
-    enableHaptics: Boolean,
     onToggle: () -> Unit,
     titleClickEnabled: Boolean = false,
     onTitleClick: () -> Unit = {},
     onTitleLongClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val view = LocalView.current
     val strings = LocalStrings.current
     val titleInteractionSource = remember { MutableInteractionSource() }
     val titleInteractionModifier = if (titleClickEnabled) {
@@ -448,13 +473,7 @@ internal fun ExpandableHeader(
             onLongClick = onTitleLongClick
         )
     } else {
-        Modifier.pointerInput(onTitleLongClick) {
-            detectTapGestures(
-                onLongPress = {
-                    onTitleLongClick()
-                }
-            )
-        }
+        Modifier
     }
 
     Row(
@@ -486,7 +505,6 @@ internal fun ExpandableHeader(
             label = "ChevronRotation"
         )
         IconButton(onClick = {
-            view.performHapticIfAllowed(context, enableHaptics, AppHapticFeedback.Press)
             onToggle()
         }) {
             Icon(
