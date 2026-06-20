@@ -350,9 +350,9 @@ fun CatalogScreen(
         fun ContentWrapper(content: @Composable () -> Unit) {
             if (isConnected) {
                 PullToRefreshBox(
-                    isRefreshing = catalog.isLoading,
+                    isRefreshing = catalog.isLoading && !state.isDeleting,
                     onRefresh = {
-                        if (!state.isEditMode) {
+                        if (!state.isEditMode && !state.isDeleting) {
                             onRefresh()
                         }
                     },
