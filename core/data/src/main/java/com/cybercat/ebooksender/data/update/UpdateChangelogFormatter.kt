@@ -6,32 +6,35 @@ object UpdateChangelogFormatter {
     fun extractVersionChangelog(markdown: String, versionName: String): String {
         val lines = markdown.lineSequence().toList()
         val versionHeading = Regex(
-            "^##\\s+\\[?${Regex.escape(versionName)}(?:]|\\b).*$"
+            "^##\\s+\\[?v?${Regex.escape(versionName)}(?:]|\\b).*$",
+            option = RegexOption.IGNORE_CASE
         )
         val unreleasedHeading = Regex(
             pattern = "^##\\s+\\[?Unreleased(?:]|\\b).*$",
             option = RegexOption.IGNORE_CASE
         )
-        var startIndex = lines.indexOfFirst { line ->
-            versionHeading.matches(line.trim())
-        }
-        if (startIndex < 0) {
-            startIndex = lines.indexOfFirst { line ->
-                unreleasedHeading.matches(line.trim())
-            }
-        }
+        val changelog = findFormattedSection(lines, versionHeading)
+            ?: findFormattedSection(lines, unreleasedHeading)
+            ?: formatChangelogSection(
+                lines.dropWhile { line ->
+                    val trimmed = line.trim()
+                    trimmed.isEmpty() || trimmed.startsWith("#")
+                }
+            )
 
-        val sectionLines = if (startIndex >= 0) {
+        return changelog
+    }
+
+    private fun findFormattedSection(lines: List<String>, headingPattern: Regex): String? {
+        val startIndex = lines.indexOfFirst { line ->
+            headingPattern.matches(line.trim())
+        }
+        if (startIndex < 0) return null
+
+        return formatChangelogSection(
             lines.drop(startIndex + 1)
                 .takeWhile { line -> !line.trim().matches(secondLevelHeadingPattern) }
-        } else {
-            lines.dropWhile { line ->
-                val trimmed = line.trim()
-                trimmed.isEmpty() || trimmed.startsWith("#")
-            }
-        }
-
-        return formatChangelogSection(sectionLines)
+        ).takeIf { it.isNotBlank() }
     }
 
     private fun formatChangelogSection(lines: List<String>): String =

@@ -59,4 +59,48 @@ class UpdateChangelogFormatterTest {
 
         assertEquals(expected, changelog)
     }
+
+    @Test
+    fun extractVersionChangelog_ignoresEmptyUnreleasedWhenVersionExists() {
+        val markdown = """
+            # Changelog
+            
+            ## [Unreleased]
+            
+            ## [0.11.5] - 2026-06-20
+            
+            ### Fixed
+            - Fixed app update changelog publication
+        """.trimIndent()
+
+        val changelog = UpdateChangelogFormatter.extractVersionChangelog(markdown, "0.11.5")
+
+        val expected = """
+            Fixed
+            - Fixed app update changelog publication
+        """.trimIndent()
+
+        assertEquals(expected, changelog)
+    }
+
+    @Test
+    fun extractVersionChangelog_acceptsLeadingVInVersionHeading() {
+        val markdown = """
+            # Changelog
+            
+            ## [v0.11.5] - 2026-06-20
+            
+            ### Fixed
+            - Fixed app update changelog publication
+        """.trimIndent()
+
+        val changelog = UpdateChangelogFormatter.extractVersionChangelog(markdown, "0.11.5")
+
+        val expected = """
+            Fixed
+            - Fixed app update changelog publication
+        """.trimIndent()
+
+        assertEquals(expected, changelog)
+    }
 }

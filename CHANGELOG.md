@@ -2,8 +2,6 @@
 
 All notable user-facing changes to eBookSender are documented in this file.
 
-## [Unreleased]
-
 ## [0.11.5] - 2026-06-20
 
 ### Added
@@ -14,6 +12,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ### Fixed
 
+- Fixed app update changelog publication so clients that checked the release before upgrading can display the 0.11.5 notes instead of an empty "Unreleased" section.
 - Removed chapter title from manga download notifications for cleaner text.
 - Optimized manga chapter downloads by streaming pages to disk instead of keeping all page bytes in RAM, significantly reducing memory pressure and preventing Out of Memory crashes.
 - Clean up partially downloaded and empty `.cbz` manga files if archiving fails or is canceled.
@@ -27,4 +26,3 @@ All notable user-facing changes to eBookSender are documented in this file.
 - Hid the misleading "Not started" reading status for generic FTP catalog entries where reading progress is unavailable.
 - Fixed transfer and manga download progress notifications so they stay visible for the whole background batch instead of disappearing between chapters or items, and still disappear when the app is opened.
 - Fixed stale FTP connection state by periodically checking the connected device and clearing the catalog/status when the server is no longer reachable.
-
