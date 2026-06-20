@@ -2,6 +2,7 @@ package com.cybercat.ebooksender.data.database.dao
 
 import androidx.room.Dao
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import com.cybercat.ebooksender.data.database.entity.MangaSeriesBookmarkEntity
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +34,32 @@ interface MangaSeriesBookmarkDao {
 
     @Upsert
     suspend fun upsert(series: MangaSeriesBookmarkEntity)
+
+    @Transaction
+    suspend fun replaceRecoveredSeries(
+        savedSourceId: String,
+        savedSeriesId: String,
+        replacement: MangaSeriesBookmarkEntity,
+        deleteSavedSeries: Boolean
+    ): Boolean {
+        val saved = findSeries(savedSourceId, savedSeriesId) ?: return false
+        val existing = findSeries(replacement.sourceId, replacement.seriesId)
+        upsert(
+            replacement.copy(
+                favorite = saved.favorite || existing?.favorite == true,
+                subscribed = saved.subscribed || existing?.subscribed == true,
+                addedAtMillis = minOf(
+                    saved.addedAtMillis,
+                    existing?.addedAtMillis ?: saved.addedAtMillis
+                ),
+                lastCheckedAtMillis = existing?.lastCheckedAtMillis ?: saved.lastCheckedAtMillis
+            )
+        )
+        if (deleteSavedSeries) {
+            deleteSeries(saved.sourceId, saved.seriesId)
+        }
+        return true
+    }
 
     @Query(
         """

@@ -6,22 +6,15 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Singleton
 class MangaArchiveHelper @Inject constructor() {
-    private val fileLock = Any()
+    private val fileMutex = Mutex()
 
-    fun uniqueFile(directory: File, fileName: String): File = synchronized(fileLock) {
-        val base = fileName.substringBeforeLast('.', fileName)
-        val extension = fileName.substringAfterLast('.', "")
-        var candidate = File(directory, fileName)
-        var index = 2
-        while (candidate.exists() || !candidate.createNewFile()) {
-            val suffix = if (extension.isBlank()) "" else ".$extension"
-            candidate = File(directory, "$base-$index$suffix")
-            index += 1
-        }
-        return candidate
+    suspend fun uniqueFile(directory: File, fileName: String): File = fileMutex.withLock {
+        createUniqueFile(directory, fileName)
     }
 
     fun writeCbz(pages: List<DownloadedMangaPage>, outputFile: File) {
@@ -38,9 +31,9 @@ class MangaArchiveHelper @Inject constructor() {
         }
     }
 
-    fun moveTempToUnique(tempFile: File, directory: File, fileName: String): File =
-        synchronized(fileLock) {
-            val outputFile = uniqueFile(directory, fileName)
+    suspend fun moveTempToUnique(tempFile: File, directory: File, fileName: String): File =
+        fileMutex.withLock {
+            val outputFile = createUniqueFile(directory, fileName)
             if (!outputFile.delete()) {
                 throw IOException("Cannot prepare output file: ${outputFile.name}")
             }
@@ -55,6 +48,19 @@ class MangaArchiveHelper @Inject constructor() {
                 throw e
             }
         }
+
+    private fun createUniqueFile(directory: File, fileName: String): File {
+        val base = fileName.substringBeforeLast('.', fileName)
+        val extension = fileName.substringAfterLast('.', "")
+        var candidate = File(directory, fileName)
+        var index = 2
+        while (candidate.exists() || !candidate.createNewFile()) {
+            val suffix = if (extension.isBlank()) "" else ".$extension"
+            candidate = File(directory, "$base-$index$suffix")
+            index += 1
+        }
+        return candidate
+    }
 }
 
 data class DownloadedMangaPage(val index: Int, val file: File, val fileExtension: String)

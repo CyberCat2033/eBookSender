@@ -273,26 +273,25 @@ class MangaRepository @Inject constructor(
         details: MangaSeriesDetails
     ) {
         val now = System.currentTimeMillis()
-        val existing = bookmarkDao.findSeries(details.sourceId, details.seriesId)
         val replacement = MangaSeriesBookmarkEntity(
             sourceId = details.sourceId,
             seriesId = details.seriesId,
             title = details.title,
             coverUrl = details.coverUrl,
             description = details.description,
-            favorite = saved.favorite || existing?.favorite == true,
-            subscribed = saved.subscribed || existing?.subscribed == true,
-            addedAtMillis = minOf(
-                saved.addedAtMillis,
-                existing?.addedAtMillis ?: saved.addedAtMillis
-            ),
+            favorite = saved.favorite,
+            subscribed = saved.subscribed,
+            addedAtMillis = saved.addedAtMillis,
             lastOpenedAtMillis = now,
-            lastCheckedAtMillis = existing?.lastCheckedAtMillis ?: saved.lastCheckedAtMillis
+            lastCheckedAtMillis = saved.lastCheckedAtMillis
         )
-        bookmarkDao.upsert(replacement)
-        if (saved.seriesId.mangaSeriesCacheKey() != details.seriesId.mangaSeriesCacheKey()) {
-            bookmarkDao.deleteSeries(saved.sourceId, saved.seriesId)
-        }
+        bookmarkDao.replaceRecoveredSeries(
+            savedSourceId = saved.sourceId,
+            savedSeriesId = saved.seriesId,
+            replacement = replacement,
+            deleteSavedSeries = saved.seriesId.mangaSeriesCacheKey() !=
+                details.seriesId.mangaSeriesCacheKey()
+        )
     }
 
     private fun adapter(sourceId: String): HtmlMangaSourceAdapter = sourceRegistry.adapter(sourceId)
