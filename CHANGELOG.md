@@ -12,6 +12,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ### Fixed
 
+- Fixed naming-rule token hints so books, documents, and manga show only the tokens that apply to that file type.
 - Fixed duplicate loading indicators while deleting selected catalog books.
 - Fixed transfer and manga download progress notifications so they appear while the app is in the background and disappear again when the app is opened.
 - Fixed stale FTP connection state by periodically checking the connected device and clearing the catalog/status when the server is no longer reachable.

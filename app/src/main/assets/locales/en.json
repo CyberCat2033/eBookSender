@@ -23,6 +23,9 @@
   
   "settings_naming_section": "NAMING RULES",
   "settings_naming_tokens": "Tokens: {title}, {author}, {tag}, {series}, {volume}, {year}, {index}, {publisher}, {ext}, {original}.",
+  "settings_naming_books_tokens": "Book tokens: {title}, {author}, {series}, {index}, {year}, {publisher}, {ext}, {original}.",
+  "settings_naming_docs_tokens": "Document tokens: {title}, {tag}, {year}, {ext}, {original}.",
+  "settings_naming_manga_tokens": "Manga tokens: {title}, {series}, {volume}, {index}, {ext}, {original}.",
   "settings_naming_books_template": "Books file name template",
   "settings_naming_docs_template": "Documents file name template",
   "settings_naming_manga_template": "Manga file name template",

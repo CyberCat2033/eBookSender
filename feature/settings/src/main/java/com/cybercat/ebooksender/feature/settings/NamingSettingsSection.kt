@@ -49,6 +49,23 @@ internal fun NamingSettingsSection(
             "volume" to strings.settingsNamingExampleVolume,
             "publisher" to strings.settingsNamingExamplePublisher
         )
+        val bookTokens = commonTokens + mapOf(
+            "tag" to "",
+            "volume" to ""
+        )
+        val documentTokens = commonTokens + mapOf(
+            "author" to "",
+            "series" to "",
+            "index" to "",
+            "volume" to "",
+            "publisher" to ""
+        )
+        val mangaTokens = commonTokens + mapOf(
+            "author" to "",
+            "tag" to "",
+            "year" to "",
+            "publisher" to ""
+        )
 
         var bookTemplatePreview by remember(state.settings.bookFileNameTemplate) {
             mutableStateOf(state.settings.bookFileNameTemplate)
@@ -87,8 +104,9 @@ internal fun NamingSettingsSection(
                     onPreviewChange = { bookTemplatePreview = it },
                     previewLabel = strings.get("settings_naming_preview", strings.categoryBooks),
                     previewTemplate = bookTemplatePreview,
-                    exampleTokens = commonTokens,
+                    exampleTokens = bookTokens,
                     folderName = state.settings.booksFolderName,
+                    groupFolder = strings.settingsNamingExampleAuthor,
                     onFocusChanged = { isFocused ->
                         onFocusChanged(NamingTemplateSlot.Books, isFocused)
                     },
@@ -128,8 +146,9 @@ internal fun NamingSettingsSection(
                             strings.categoryDocuments
                         ),
                         previewTemplate = docsTemplatePreview,
-                        exampleTokens = commonTokens,
+                        exampleTokens = documentTokens,
                         folderName = state.settings.documentsFolderName,
+                        groupFolder = strings.settingsNamingExampleTag,
                         onFocusChanged = { isFocused ->
                             onFocusChanged(NamingTemplateSlot.Documents, isFocused)
                         },
@@ -170,8 +189,9 @@ internal fun NamingSettingsSection(
                             strings.categoryManga
                         ),
                         previewTemplate = mangaTemplatePreview,
-                        exampleTokens = commonTokens,
+                        exampleTokens = mangaTokens,
                         folderName = state.settings.mangaFolderName,
+                        groupFolder = strings.settingsNamingExampleSeries,
                         extension = "cbz",
                         onFocusChanged = { isFocused ->
                             onFocusChanged(NamingTemplateSlot.Manga, isFocused)
@@ -183,7 +203,7 @@ internal fun NamingSettingsSection(
 
             if (focusedNamingTemplateSlot != null) {
                 MovingNamingTokensHint(
-                    text = strings.settingsNamingTokens,
+                    text = focusedNamingTemplateSlot.tokensHint,
                     targetOffsetY = namingTokensTargetY,
                     onHeightChanged = { namingTokensHeightPx = it }
                 )
@@ -191,3 +211,14 @@ internal fun NamingSettingsSection(
         }
     }
 }
+
+private val NamingTemplateSlot.tokensHint: String
+    @Composable
+    get() {
+        val strings = LocalStrings.current
+        return when (this) {
+            NamingTemplateSlot.Books -> strings.settingsNamingBooksTokens
+            NamingTemplateSlot.Documents -> strings.settingsNamingDocsTokens
+            NamingTemplateSlot.Manga -> strings.settingsNamingMangaTokens
+        }
+    }
