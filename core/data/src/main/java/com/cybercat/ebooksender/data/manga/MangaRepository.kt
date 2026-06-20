@@ -136,42 +136,50 @@ class MangaRepository @Inject constructor(
     }
 
     suspend fun setFavorite(series: MangaSeriesDetails, favorite: Boolean) =
-        withContext(Dispatchers.IO) {
-            val now = System.currentTimeMillis()
-            val updated = bookmarkDao.setFavorite(
-                sourceId = series.sourceId,
-                seriesId = series.seriesId,
-                title = series.title,
-                coverUrl = series.coverUrl,
-                description = series.description,
-                favorite = favorite,
-                updatedAtMillis = now
-            )
-            if (updated == 0) {
-                bookmarkDao.upsert(
-                    series.toBookmarkEntity(favorite = favorite, subscribed = false, now = now)
-                )
-            }
-        }
+        setBookmarkFlag(series, isFavorite = favorite, isSubscribed = null)
 
     suspend fun setSubscribed(series: MangaSeriesDetails, subscribed: Boolean) =
-        withContext(Dispatchers.IO) {
-            val now = System.currentTimeMillis()
-            val updated = bookmarkDao.setSubscribed(
+        setBookmarkFlag(series, isFavorite = null, isSubscribed = subscribed)
+
+    private suspend fun setBookmarkFlag(
+        series: MangaSeriesDetails,
+        isFavorite: Boolean?,
+        isSubscribed: Boolean?
+    ) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val updated = when {
+            isFavorite != null -> bookmarkDao.setFavorite(
                 sourceId = series.sourceId,
                 seriesId = series.seriesId,
                 title = series.title,
                 coverUrl = series.coverUrl,
                 description = series.description,
-                subscribed = subscribed,
+                favorite = isFavorite,
                 updatedAtMillis = now
             )
-            if (updated == 0) {
-                bookmarkDao.upsert(
-                    series.toBookmarkEntity(favorite = false, subscribed = subscribed, now = now)
-                )
-            }
+
+            isSubscribed != null -> bookmarkDao.setSubscribed(
+                sourceId = series.sourceId,
+                seriesId = series.seriesId,
+                title = series.title,
+                coverUrl = series.coverUrl,
+                description = series.description,
+                subscribed = isSubscribed,
+                updatedAtMillis = now
+            )
+
+            else -> 0
         }
+        if (updated == 0) {
+            bookmarkDao.upsert(
+                series.toBookmarkEntity(
+                    favorite = isFavorite ?: false,
+                    subscribed = isSubscribed ?: false,
+                    now = now
+                )
+            )
+        }
+    }
 
     suspend fun downloadMultipleSeriesChapters(
         targets: List<MangaChapterDownloadTarget>,

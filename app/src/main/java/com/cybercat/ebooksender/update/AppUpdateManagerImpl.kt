@@ -10,37 +10,39 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.cybercat.ebooksender.BuildConfig
 import com.cybercat.ebooksender.data.update.AppUpdateCheckTrigger
+import com.cybercat.ebooksender.data.update.AppUpdateDownloadProgress
 import com.cybercat.ebooksender.data.update.AppUpdateErrorReason
 import com.cybercat.ebooksender.data.update.AppUpdateManager
 import com.cybercat.ebooksender.data.update.AppUpdateState
 import com.cybercat.ebooksender.data.update.AppUpdateStatus
 import com.cybercat.ebooksender.data.update.AvailableAppUpdate
+import com.cybercat.ebooksender.data.update.UpdateArtifactDownloadRequest
+import com.cybercat.ebooksender.data.update.UpdateArtifactDownloader
 import com.cybercat.ebooksender.data.update.UpdateChangelogLoader
+import com.cybercat.ebooksender.data.update.UpdateManifestLoader
+import com.cybercat.ebooksender.data.update.UpdateManifestRequest
+import com.cybercat.ebooksender.data.update.clearUpdateCacheDirectories
+import com.cybercat.ebooksender.data.update.toSafeUpdateFileName
+import com.cybercat.ebooksender.data.update.updateFileSha256
 import com.cybercat.ebooksender.di.ApplicationScope
 import com.cybercat.ebooksender.model.update.AppUpdateArtifact
 import com.cybercat.ebooksender.model.update.AppUpdateManifest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
-import java.io.IOException
-import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 @Singleton
@@ -49,6 +51,8 @@ class AppUpdateManagerImpl @Inject constructor(
     @ApplicationScope private val applicationScope: CoroutineScope
 ) : AppUpdateManager {
     private val json = Json { ignoreUnknownKeys = true }
+    private val manifestLoader = UpdateManifestLoader(json)
+    private val artifactDownloader = UpdateArtifactDownloader()
     private val packageManager = context.packageManager
     private var checkJob: Job? = null
     private var installJob: Job? = null
@@ -221,16 +225,8 @@ class AppUpdateManagerImpl @Inject constructor(
             )
         }
 
-    override suspend fun clearUpdateCache(): Long = withContext(Dispatchers.IO) {
-        val dirs = listOf(updateCacheDir(), changelogCacheDir())
-        val size = dirs.sumOf { dir -> dir.folderSize() }
-        dirs.forEach { dir ->
-            if (dir.exists()) {
-                runCatching { dir.deleteRecursively() }
-            }
-        }
-        size
-    }
+    override suspend fun clearUpdateCache(): Long =
+        clearUpdateCacheDirectories(listOf(updateCacheDir(), changelogCacheDir()))
 
     private fun loadAvailableUpdate(): AvailableAppUpdate? {
         val manifest = fetchManifest()
@@ -243,35 +239,22 @@ class AppUpdateManagerImpl @Inject constructor(
         return AvailableAppUpdate(manifest, artifact)
     }
 
-    private fun fetchManifest(): AppUpdateManifest {
-        val url = URL(BuildConfig.UPDATE_MANIFEST_URL)
-        if (url.protocol != "https") {
-            throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-        }
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            instanceFollowRedirects = true
-            requestMethod = "GET"
-            useCaches = false
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("Cache-Control", "no-cache")
-            setRequestProperty("Pragma", "no-cache")
-            setRequestProperty("User-Agent", USER_AGENT)
-        }
-        try {
-            val code = connection.responseCode
-            if (code !in 200..299) throw AppUpdateException(AppUpdateErrorReason.Network)
-            val body = connection.inputStream.use { it.readLimitedText(MAX_MANIFEST_BYTES) }
-            return json.decodeFromString(AppUpdateManifest.serializer(), body)
-        } catch (exception: SerializationException) {
-            throw AppUpdateException(AppUpdateErrorReason.InvalidManifest, exception)
-        } catch (exception: IOException) {
-            throw AppUpdateException(AppUpdateErrorReason.Network, exception)
-        } finally {
-            connection.disconnect()
-        }
-    }
+    private fun fetchManifest(): AppUpdateManifest = manifestLoader.load(
+        UpdateManifestRequest(
+            url = BuildConfig.UPDATE_MANIFEST_URL,
+            serializer = AppUpdateManifest.serializer(),
+            userAgent = USER_AGENT,
+            connectTimeoutMs = CONNECT_TIMEOUT_MS,
+            readTimeoutMs = READ_TIMEOUT_MS,
+            maxBytes = MAX_MANIFEST_BYTES,
+            invalidManifestException = { cause ->
+                AppUpdateException(AppUpdateErrorReason.InvalidManifest, cause)
+            },
+            networkException = { cause ->
+                AppUpdateException(AppUpdateErrorReason.Network, cause)
+            }
+        )
+    )
 
     private fun validateManifest(manifest: AppUpdateManifest) {
         if (manifest.schemaVersion != 1 ||
@@ -305,14 +288,14 @@ class AppUpdateManagerImpl @Inject constructor(
     private suspend fun getVerifiedApk(update: AvailableAppUpdate): File {
         val apk = cachedApkFile(update)
         val expectedHash = update.artifact.sha256.lowercase()
-        if (apk.isFile && apk.sha256() == expectedHash) {
+        if (apk.isFile && apk.updateFileSha256() == expectedHash) {
             cleanupStaleApks(keep = apk)
             return apk
         }
 
         cleanupStaleApks(keep = null)
         downloadApk(update, apk)
-        val actualHash = apk.sha256()
+        val actualHash = apk.updateFileSha256()
         if (actualHash != expectedHash) {
             runCatching { apk.delete() }
             throw AppUpdateException(AppUpdateErrorReason.ChecksumMismatch)
@@ -322,50 +305,27 @@ class AppUpdateManagerImpl @Inject constructor(
     }
 
     private suspend fun downloadApk(update: AvailableAppUpdate, target: File) {
-        target.parentFile?.mkdirs()
-        val temporary = File(target.parentFile, "${target.name}.download")
-        runCatching { temporary.delete() }
-        val connection = (URL(update.artifact.url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = DOWNLOAD_READ_TIMEOUT_MS
-            instanceFollowRedirects = true
-            requestMethod = "GET"
-            setRequestProperty("Accept", "application/vnd.android.package-archive")
-            setRequestProperty("User-Agent", USER_AGENT)
-        }
-        try {
-            val code = connection.responseCode
-            if (code !in 200..299) throw AppUpdateException(AppUpdateErrorReason.DownloadFailed)
-            val totalBytes = connection.contentLengthLong.takeIf { it > 0L }
-            var bytesRead = 0L
-            connection.inputStream.use { input ->
-                temporary.outputStream().use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val read = input.read(buffer)
-                        if (read <= 0) break
-                        output.write(buffer, 0, read)
-                        bytesRead += read
-                        updateDownloadProgress(bytesRead, totalBytes)
-                    }
-                }
-            }
-            if (!temporary.renameTo(target)) {
-                throw AppUpdateException(AppUpdateErrorReason.DownloadFailed)
-            }
-        } catch (exception: IOException) {
-            throw AppUpdateException(AppUpdateErrorReason.DownloadFailed, exception)
-        } finally {
-            connection.disconnect()
-            runCatching { temporary.delete() }
-        }
+        artifactDownloader.download(
+            UpdateArtifactDownloadRequest(
+                url = update.artifact.url,
+                target = target,
+                userAgent = USER_AGENT,
+                connectTimeoutMs = CONNECT_TIMEOUT_MS,
+                readTimeoutMs = DOWNLOAD_READ_TIMEOUT_MS,
+                accept = "application/vnd.android.package-archive",
+                useCaches = true,
+                downloadFailedException = { cause ->
+                    AppUpdateException(AppUpdateErrorReason.DownloadFailed, cause)
+                },
+                onProgress = ::updateDownloadProgress
+            )
+        )
     }
 
     private fun updateDownloadProgress(bytesRead: Long, totalBytes: Long?) {
         _state.update { state ->
             state.copy(
-                downloadProgress = com.cybercat.ebooksender.data.update.AppUpdateDownloadProgress(
+                downloadProgress = AppUpdateDownloadProgress(
                     bytesRead = bytesRead,
                     totalBytes = totalBytes
                 )
@@ -435,9 +395,7 @@ class AppUpdateManagerImpl @Inject constructor(
     }
 
     private fun cachedApkFile(update: AvailableAppUpdate): File {
-        val safeName = update.artifact.fileName
-            .substringAfterLast('/')
-            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val safeName = update.artifact.fileName.toSafeUpdateFileName()
         return File(updateCacheDir(), "${update.versionCode}-$safeName")
     }
 
@@ -600,36 +558,3 @@ private fun PackageInfo.signingCertificateBytes(): Set<List<Byte>> =
             signature.toByteArray().asList()
         }.toSet()
     }
-
-private fun File.sha256(): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    inputStream().use { input ->
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        while (true) {
-            val read = input.read(buffer)
-            if (read <= 0) break
-            digest.update(buffer, 0, read)
-        }
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
-}
-
-private fun File.folderSize(): Long {
-    if (!exists()) return 0L
-    if (isFile) return length()
-    return listFiles().orEmpty().sumOf { it.folderSize() }
-}
-
-private fun java.io.InputStream.readLimitedText(maxBytes: Int): String {
-    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-    val output = java.io.ByteArrayOutputStream()
-    while (true) {
-        val read = read(buffer)
-        if (read <= 0) break
-        if (output.size() + read > maxBytes) {
-            throw AppUpdateException(AppUpdateErrorReason.InvalidManifest)
-        }
-        output.write(buffer, 0, read)
-    }
-    return output.toString(Charsets.UTF_8.name())
-}

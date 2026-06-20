@@ -14,12 +14,8 @@ import com.cybercat.ebooksender.model.update.PocketBookServerUpdateManifest
 import com.cybercat.ebooksender.model.update.PocketBookServerVersionInfo
 import com.cybercat.ebooksender.transfer.ConnectionManager
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.IOException
-import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
@@ -37,7 +33,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
 @Singleton
@@ -49,6 +44,8 @@ class PocketBookServerUpdateManager @Inject constructor(
     @ApplicationScope private val applicationScope: CoroutineScope
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val manifestLoader = UpdateManifestLoader(json)
+    private val artifactDownloader = UpdateArtifactDownloader()
     private var checkJob: Job? = null
     private var installJob: Job? = null
     private var statusClearJob: Job? = null
@@ -212,16 +209,8 @@ class PocketBookServerUpdateManager @Inject constructor(
         _state.update { it.copy(status = null) }
     }
 
-    suspend fun clearUpdateCache(): Long = withContext(Dispatchers.IO) {
-        val dirs = listOf(updateCacheDir(), changelogCacheDir())
-        val size = dirs.sumOf { dir -> dir.folderSize() }
-        dirs.forEach { dir ->
-            if (dir.exists()) {
-                runCatching { dir.deleteRecursively() }
-            }
-        }
-        size
-    }
+    suspend fun clearUpdateCache(): Long =
+        clearUpdateCacheDirectories(listOf(updateCacheDir(), changelogCacheDir()))
 
     suspend fun loadChangelog(
         update: AvailablePocketBookServerUpdate,
@@ -281,43 +270,25 @@ class PocketBookServerUpdateManager @Inject constructor(
                 version.versionCode > 0L
         }
 
-    private fun fetchManifest(): PocketBookServerUpdateManifest {
-        val url = URL(UPDATE_MANIFEST_URL)
-        if (url.protocol != "https") {
-            throw PocketBookServerUpdateException(PocketBookServerUpdateErrorReason.InvalidManifest)
-        }
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = READ_TIMEOUT_MS
-            instanceFollowRedirects = true
-            requestMethod = "GET"
-            useCaches = false
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("Cache-Control", "no-cache")
-            setRequestProperty("Pragma", "no-cache")
-            setRequestProperty("User-Agent", USER_AGENT)
-        }
-        try {
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                throw PocketBookServerUpdateException(PocketBookServerUpdateErrorReason.Network)
+    private fun fetchManifest(): PocketBookServerUpdateManifest = manifestLoader.load(
+        UpdateManifestRequest(
+            url = UPDATE_MANIFEST_URL,
+            serializer = PocketBookServerUpdateManifest.serializer(),
+            userAgent = USER_AGENT,
+            connectTimeoutMs = CONNECT_TIMEOUT_MS,
+            readTimeoutMs = READ_TIMEOUT_MS,
+            maxBytes = MAX_MANIFEST_BYTES,
+            invalidManifestException = { cause ->
+                PocketBookServerUpdateException(
+                    PocketBookServerUpdateErrorReason.InvalidManifest,
+                    cause
+                )
+            },
+            networkException = { cause ->
+                PocketBookServerUpdateException(PocketBookServerUpdateErrorReason.Network, cause)
             }
-            val body = connection.inputStream.use { it.readLimitedText(MAX_MANIFEST_BYTES) }
-            return json.decodeFromString(PocketBookServerUpdateManifest.serializer(), body)
-        } catch (exception: SerializationException) {
-            throw PocketBookServerUpdateException(
-                PocketBookServerUpdateErrorReason.InvalidManifest,
-                exception
-            )
-        } catch (exception: IOException) {
-            throw PocketBookServerUpdateException(
-                PocketBookServerUpdateErrorReason.Network,
-                exception
-            )
-        } finally {
-            connection.disconnect()
-        }
-    }
+        )
+    )
 
     private fun validateManifest(manifest: PocketBookServerUpdateManifest) {
         if (manifest.schemaVersion != 1 ||
@@ -524,13 +495,13 @@ class PocketBookServerUpdateManager @Inject constructor(
     ): File {
         val target = cachedArtifactFile(artifact)
         val expectedHash = artifact.sha256.lowercase()
-        if (target.isFile && target.sha256() == expectedHash) {
+        if (target.isFile && target.updateFileSha256() == expectedHash) {
             return target
         }
 
         runCatching { target.delete() }
         downloadArtifact(artifact, target, onDownloadProgress)
-        if (target.sha256() != expectedHash) {
+        if (target.updateFileSha256() != expectedHash) {
             runCatching { target.delete() }
             throw PocketBookServerUpdateException(
                 PocketBookServerUpdateErrorReason.ChecksumMismatch
@@ -544,77 +515,32 @@ class PocketBookServerUpdateManager @Inject constructor(
         target: File,
         onProgress: (Long) -> Unit
     ) {
-        target.parentFile?.mkdirs()
-        val temporary = File(target.parentFile, "${target.name}.download")
-        runCatching { temporary.delete() }
-        val connection = (URL(artifact.url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = CONNECT_TIMEOUT_MS
-            readTimeout = DOWNLOAD_READ_TIMEOUT_MS
-            instanceFollowRedirects = true
-            requestMethod = "GET"
-            useCaches = false
-            setRequestProperty("User-Agent", USER_AGENT)
-        }
-        val cancellationHandle = coroutineContext[Job]?.invokeOnCompletion { cause ->
-            if (cause is CancellationException) {
-                runCatching { connection.disconnect() }
-            }
-        }
-
-        try {
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                throw PocketBookServerUpdateException(
-                    PocketBookServerUpdateErrorReason.DownloadFailed
-                )
-            }
-            var bytesRead = 0L
-            connection.inputStream.use { input ->
-                temporary.outputStream().use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val read = input.read(buffer)
-                        coroutineContext.ensureActive()
-                        if (read <= 0) break
-                        output.write(buffer, 0, read)
-                        bytesRead += read
-                        onProgress(bytesRead)
-                    }
-                }
-            }
-            coroutineContext.ensureActive()
-            if (!temporary.renameTo(target)) {
-                throw PocketBookServerUpdateException(
-                    PocketBookServerUpdateErrorReason.DownloadFailed
-                )
-            }
-        } catch (exception: IOException) {
-            if (coroutineContext[Job]?.isCancelled == true) {
-                throw CancellationException("PocketBook server update download canceled")
-            }
-            throw PocketBookServerUpdateException(
-                PocketBookServerUpdateErrorReason.DownloadFailed,
-                exception
+        artifactDownloader.download(
+            UpdateArtifactDownloadRequest(
+                url = artifact.url,
+                target = target,
+                userAgent = USER_AGENT,
+                connectTimeoutMs = CONNECT_TIMEOUT_MS,
+                readTimeoutMs = DOWNLOAD_READ_TIMEOUT_MS,
+                cancellationMessage = "PocketBook server update download canceled",
+                downloadFailedException = { cause ->
+                    PocketBookServerUpdateException(
+                        PocketBookServerUpdateErrorReason.DownloadFailed,
+                        cause
+                    )
+                },
+                onProgress = { bytesRead, _ -> onProgress(bytesRead) }
             )
-        } finally {
-            cancellationHandle?.dispose()
-            connection.disconnect()
-            runCatching { temporary.delete() }
-        }
+        )
     }
 
     private fun cachedArtifactFile(artifact: PocketBookServerUpdateArtifact): File {
-        val safeName = artifact.fileName
-            .substringAfterLast('/')
-            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val safeName = artifact.fileName.toSafeUpdateFileName()
         return File(updateCacheDir(), safeName)
     }
 
     private fun AvailablePocketBookServerUpdate.stagedLauncherRemotePath(): String {
-        val safeName = launcherArtifact.fileName
-            .substringAfterLast('/')
-            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val safeName = launcherArtifact.fileName.toSafeUpdateFileName()
         return "$STAGING_REMOTE_DIR/$versionCode-$safeName"
     }
 
@@ -831,36 +757,3 @@ private class PocketBookServerUpdateException(
     val reason: PocketBookServerUpdateErrorReason,
     cause: Throwable? = null
 ) : Exception(cause)
-
-private fun File.sha256(): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    inputStream().use { input ->
-        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-        while (true) {
-            val read = input.read(buffer)
-            if (read <= 0) break
-            digest.update(buffer, 0, read)
-        }
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
-}
-
-private fun File.folderSize(): Long {
-    if (!exists()) return 0L
-    if (isFile) return length()
-    return listFiles().orEmpty().sumOf { it.folderSize() }
-}
-
-private fun java.io.InputStream.readLimitedText(maxBytes: Int): String {
-    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-    val output = ByteArrayOutputStream()
-    while (true) {
-        val read = read(buffer)
-        if (read <= 0) break
-        if (output.size() + read > maxBytes) {
-            throw PocketBookServerUpdateException(PocketBookServerUpdateErrorReason.InvalidManifest)
-        }
-        output.write(buffer, 0, read)
-    }
-    return output.toString(Charsets.UTF_8.name())
-}
