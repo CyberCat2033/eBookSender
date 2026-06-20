@@ -56,16 +56,13 @@ class SearchOpdsCatalogUseCase @Inject constructor(
         query: String
     ): String = withContext(Dispatchers.IO) {
         val resolvedLink = resolveOpdsTemplateUrl(baseUrl, searchLink.href)
-        val template = when {
-            searchLink.href.contains(SEARCH_TERMS_PLACEHOLDER) -> resolvedLink
-
-            searchLink.type.orEmpty().contains("opensearchdescription", ignoreCase = true) -> {
-                loadOpenSearchTemplate(resolvedLink)
-            }
-
-            else -> {
-                resolvedLink
-            }
+        val template = if (
+            !searchLink.href.contains(SEARCH_TERMS_PLACEHOLDER) &&
+            searchLink.type.orEmpty().contains("opensearchdescription", ignoreCase = true)
+        ) {
+            loadOpenSearchTemplate(resolvedLink)
+        } else {
+            resolvedLink
         }
 
         expandOpdsSearchTemplate(template, query)

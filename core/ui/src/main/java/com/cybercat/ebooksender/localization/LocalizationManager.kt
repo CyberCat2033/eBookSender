@@ -4,20 +4,20 @@ import android.content.Context
 import android.util.Log
 import com.cybercat.ebooksender.data.settings.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
-import java.io.File
-import javax.inject.Inject
-import javax.inject.Singleton
 
 private const val TAG = "LocalizationManager"
 
@@ -75,8 +75,10 @@ class LocalizationManager @Inject constructor(
             for (filename in assetFiles) {
                 if (filename.endsWith(".json")) {
                     try {
-                        val content = context.assets.open("locales/$filename").use { it.reader().readText() }
-                        val metadata = parseMetadata(content)
+                        val content = context.assets.open("locales/$filename").use {
+                            it.reader().readText()
+                        }
+                        val metadata = parseMetadata("asset locale $filename", content)
                         if (metadata != null) {
                             locales.add(
                                 LocaleInfo(
@@ -107,7 +109,8 @@ class LocalizationManager @Inject constructor(
                     for (file in files) {
                         try {
                             val content = file.readText()
-                            val metadata = parseMetadata(content)
+                            val metadata =
+                                parseMetadata("external locale ${file.name}", content)
                             if (metadata != null) {
                                 locales.add(
                                     LocaleInfo(
@@ -144,15 +147,14 @@ class LocalizationManager @Inject constructor(
         _availableLocales.value = filteredLocales
     }
 
-    private fun parseMetadata(content: String): Pair<String, String>? {
-        return try {
-            val map = json.decodeFromString<Map<String, String>>(content)
-            val code = map["meta_language_code"]
-            val name = map["meta_language_name"]
-            if (code != null && name != null) Pair(code, name) else null
-        } catch (e: Exception) {
-            null
-        }
+    private fun parseMetadata(source: String, content: String): Pair<String, String>? = try {
+        val map = json.decodeFromString<Map<String, String>>(content)
+        val code = map["meta_language_code"]
+        val name = map["meta_language_name"]
+        if (code != null && name != null) Pair(code, name) else null
+    } catch (e: Exception) {
+        Log.w(TAG, "Failed to parse locale metadata from $source", e)
+        null
     }
 
     private suspend fun loadStrings(
@@ -161,13 +163,14 @@ class LocalizationManager @Inject constructor(
         locales: List<LocaleInfo>
     ) = withContext(Dispatchers.IO) {
         val englishFallbackMap = loadAssetMap("en.json") ?: emptyMap()
-        
+
         // Scan external path again just in case the folder was newly created or updated
         // but scanLocales hasn't finished yet
         var actualTargetCode = targetCode
         if (actualTargetCode == "system") {
             val systemLanguage = java.util.Locale.getDefault().language
-            actualTargetCode = if (locales.any { it.code == systemLanguage }) systemLanguage else "en"
+            actualTargetCode =
+                if (locales.any { it.code == systemLanguage }) systemLanguage else "en"
         }
 
         val chosenLocale = locales.find { it.code == actualTargetCode }
@@ -193,30 +196,27 @@ class LocalizationManager @Inject constructor(
         )
     }
 
-    private fun loadAssetMap(filename: String): Map<String, String>? {
-        return try {
-            val content = context.assets.open("locales/$filename").use { it.reader().readText() }
+    private fun loadAssetMap(filename: String): Map<String, String>? = try {
+        val content = context.assets.open("locales/$filename").use { it.reader().readText() }
+        json.decodeFromString<Map<String, String>>(content)
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to load asset map: $filename", e)
+        null
+    }
+
+    private fun loadExternalMap(filePath: String): Map<String, String>? = try {
+        val file = File(filePath)
+        if (file.exists()) {
+            val content = file.readText()
             json.decodeFromString<Map<String, String>>(content)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load asset map: $filename", e)
+        } else {
             null
         }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to load external map: $filePath", e)
+        null
     }
 
-    private fun loadExternalMap(filePath: String): Map<String, String>? {
-        return try {
-            val file = File(filePath)
-            if (file.exists()) {
-                val content = file.readText()
-                json.decodeFromString<Map<String, String>>(content)
-            } else null
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load external map: $filePath", e)
-            null
-        }
-    }
-
-    private fun createFallbackStrings(): AppStrings {
-        return AppStrings("en", "English", emptyMap(), emptyMap())
-    }
+    private fun createFallbackStrings(): AppStrings =
+        AppStrings("en", "English", emptyMap(), emptyMap())
 }

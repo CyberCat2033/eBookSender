@@ -225,11 +225,10 @@ private fun normalizePath(absolutePath: String, storageRootPrefix: String): Stri
 
 private fun String?.splitAuthors(): List<String> = orEmpty()
     .split(',')
-    .mapNotNull { it.cleanText() }
+    .mapNotNull { author -> author.cleanText().takeIf { it.isNotBlank() } }
 
-private fun String.cleanText(): String? = trim()
+private fun String.cleanText(): String = trim()
     .replace(Regex("\\s+"), " ")
-    .takeIf { it.isNotBlank() }
 
 private fun readProgressPercent(completed: Boolean, cpage: Int?, npage: Int?): Int? {
     if (completed) return 100
