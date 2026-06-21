@@ -13,15 +13,29 @@ class SearchOpdsCatalogUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(
         baseUrl: String,
-        searchLink: OpdsLink,
+        searchLinks: List<OpdsLink>,
         query: String,
         mergedCatalogTitle: String
     ): Result<SearchOpdsCatalogResult> {
         return try {
-            val catalogs = buildSearchUrls(baseUrl, searchLink, query)
-                .mapNotNull { searchUrl -> loadSearchCatalog(searchUrl, query) }
+            val catalogs = searchLinks
+                .rankOpdsSearchLinks()
+                .firstNotNullOfOrNull { searchLink ->
+                    runCatching {
+                        buildSearchUrls(baseUrl, searchLink, query)
+                            .mapNotNull { searchUrl -> loadSearchCatalog(searchUrl, query) }
+                            .takeIf { it.isNotEmpty() }
+                    }.getOrElse { error ->
+                        if (error is CancellationException ||
+                            error is OpdsAuthenticationRequiredException
+                        ) {
+                            throw error
+                        }
+                        null
+                    }
+                }
 
-            if (catalogs.isEmpty()) {
+            if (catalogs == null) {
                 return Result.failure(OpdsSearchCatalogUnavailableException())
             }
 
@@ -57,10 +71,13 @@ class SearchOpdsCatalogUseCase @Inject constructor(
     ): String = withContext(Dispatchers.IO) {
         val resolvedLink = resolveOpdsTemplateUrl(baseUrl, searchLink.href)
         val template = if (
-            !searchLink.href.contains(SEARCH_TERMS_PLACEHOLDER) &&
+            !searchLink.href.contains(OPDS_SEARCH_TERMS_PLACEHOLDER) &&
             searchLink.type.orEmpty().contains("opensearchdescription", ignoreCase = true)
         ) {
-            loadOpenSearchTemplate(resolvedLink)
+            loadOpenSearchTemplate(
+                descriptionUrl = resolvedLink,
+                sourceBaseUrl = baseUrl
+            )
         } else {
             resolvedLink
         }
@@ -98,9 +115,12 @@ class SearchOpdsCatalogUseCase @Inject constructor(
         }
     }
 
-    private suspend fun loadOpenSearchTemplate(url: String): String {
+    private suspend fun loadOpenSearchTemplate(
+        descriptionUrl: String,
+        sourceBaseUrl: String
+    ): String {
         val connection = httpClient.openConnection(
-            url = url,
+            url = descriptionUrl,
             accept = OPENSEARCH_DESCRIPTION_ACCEPT
         )
         try {
@@ -112,14 +132,16 @@ class SearchOpdsCatalogUseCase @Inject constructor(
                 throw OpenSearchTemplateNotFoundException()
             }
 
-            return resolveOpdsTemplateUrl(url, template)
+            return normalizeOpdsSearchTemplateOrigin(
+                sourceBaseUrl = sourceBaseUrl,
+                templateUrl = resolveOpdsTemplateUrl(descriptionUrl, template)
+            )
         } finally {
             connection.disconnect()
         }
     }
 
     private companion object {
-        const val SEARCH_TERMS_PLACEHOLDER = "{searchTerms"
         const val OPENSEARCH_DESCRIPTION_ACCEPT =
             "application/opensearchdescription+xml, application/xml, text/xml, */*"
     }

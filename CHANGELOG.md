@@ -6,6 +6,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ### Fixed
 
+- Fixed OPDS search for Flibusta mirrors whose OpenSearch template points back to an insecure HTTP host.
 - Changed PocketBook server update completion to show a restart-required dialog after the launcher is delivered, since the running pb-ftp session can keep reporting the old version until it is closed and reopened.
 - Improved Russian wording for PocketBook server updates, device transfer statuses, and queue messages.
 

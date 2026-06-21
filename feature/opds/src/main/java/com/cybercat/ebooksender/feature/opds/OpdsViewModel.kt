@@ -334,11 +334,11 @@ class OpdsViewModel @Inject constructor(
             return
         }
 
-        val searchLink = catalog.links.firstOrNull { link ->
+        val searchLinks = catalog.links.filter { link ->
             link.rel.orEmpty().equals("search", ignoreCase = true)
         }
 
-        if (searchLink == null) {
+        if (searchLinks.isEmpty()) {
             mutableOpdsState.update {
                 it.copy(
                     errorMessage = localizationManager.currentStrings.value
@@ -362,7 +362,7 @@ class OpdsViewModel @Inject constructor(
             val strings = localizationManager.currentStrings.value
             searchOpdsCatalogUseCase(
                 baseUrl = currentUrl,
-                searchLink = searchLink,
+                searchLinks = searchLinks,
                 query = query,
                 mergedCatalogTitle = strings.get("opds_search_results_title", query)
             ).onSuccess { result ->
