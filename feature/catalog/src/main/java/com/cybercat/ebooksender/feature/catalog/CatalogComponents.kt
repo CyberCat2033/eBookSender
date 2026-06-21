@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -245,20 +246,8 @@ internal fun CatalogGroupCard(
     }
 
     val cardShape = MaterialTheme.shapes.medium
-    val cardModifier = if (isEditMode) {
-        modifier.fillMaxWidth()
-    } else {
-        modifier
-            .fillMaxWidth()
-            .clip(cardShape)
-            .combinedClickable(
-                onClick = ::toggleExpanded,
-                onLongClick = ::selectGroupFromLongPress
-            )
-    }
-
     Card(
-        modifier = cardModifier,
+        modifier = modifier.fillMaxWidth(),
         shape = cardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (isGroupFullySelected) {
@@ -271,7 +260,13 @@ internal fun CatalogGroupCard(
         Column(Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .expandableCardHeaderClick(
+                        enabled = !isEditMode,
+                        shape = cardShape,
+                        onClick = ::toggleExpanded,
+                        onLongClick = ::selectGroupFromLongPress
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SelectionSlot(
@@ -369,20 +364,8 @@ internal fun MangaSeriesCard(
     }
 
     val cardShape = MaterialTheme.shapes.medium
-    val cardModifier = if (isEditMode) {
-        modifier.fillMaxWidth()
-    } else {
-        modifier
-            .fillMaxWidth()
-            .clip(cardShape)
-            .combinedClickable(
-                onClick = ::toggleExpanded,
-                onLongClick = ::selectGroupFromLongPress
-            )
-    }
-
     Card(
-        modifier = cardModifier,
+        modifier = modifier.fillMaxWidth(),
         shape = cardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (isGroupFullySelected) {
@@ -395,7 +378,13 @@ internal fun MangaSeriesCard(
         Column(Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .expandableCardHeaderClick(
+                        enabled = !isEditMode,
+                        shape = cardShape,
+                        onClick = ::toggleExpanded,
+                        onLongClick = ::selectGroupFromLongPress
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SelectionSlot(
@@ -449,6 +438,21 @@ internal fun MangaSeriesCard(
             }
         }
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private fun Modifier.expandableCardHeaderClick(
+    enabled: Boolean,
+    shape: Shape,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+): Modifier = if (enabled) {
+    clip(shape).combinedClickable(
+        onClick = onClick,
+        onLongClick = onLongClick
+    )
+} else {
+    this
 }
 
 @OptIn(ExperimentalFoundationApi::class)
