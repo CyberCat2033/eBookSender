@@ -141,6 +141,7 @@ class AppStrings(
     val pbServerUpdateUploading: String get() = get("pb_server_update_uploading")
     val pbServerUpdateCancel: String get() = get("pb_server_update_cancel")
     val pbServerUpdateCanceled: String get() = get("pb_server_update_canceled")
+    val pbServerUpdatePendingRestart: String get() = get("pb_server_update_pending_restart")
     val pbServerUpdateErrorNetwork: String get() = get("pb_server_update_error_network")
     val pbServerUpdateErrorInvalidManifest: String get() = get(
         "pb_server_update_error_invalid_manifest"
@@ -159,9 +160,6 @@ class AppStrings(
     )
     val pbServerUpdateErrorApplyFailed: String get() = get(
         "pb_server_update_error_apply_failed"
-    )
-    val pbServerUpdateErrorRestartNotConfirmed: String get() = get(
-        "pb_server_update_error_restart_not_confirmed"
     )
     val pbServerUpdateErrorUnknown: String get() = get("pb_server_update_error_unknown")
     val categoryBooks: String get() = get("category_books")

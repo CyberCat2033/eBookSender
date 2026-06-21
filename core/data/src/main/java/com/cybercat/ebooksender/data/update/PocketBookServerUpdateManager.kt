@@ -164,15 +164,29 @@ class PocketBookServerUpdateManager @Inject constructor(
                 }
             }
             result
-                .onSuccess { installedVersion ->
+                .onSuccess { installResult ->
                     clearUpdateCache()
                     _state.update {
-                        it.withStatus(
-                            status = PocketBookServerUpdateStatus.Installed(installedVersion),
-                            isInstalling = false,
-                            installedVersion = installedVersion,
-                            availableUpdate = null
-                        ).copy(installProgress = null)
+                        when (installResult) {
+                            is PocketBookServerInstallResult.Confirmed ->
+                                it.withStatus(
+                                    status = PocketBookServerUpdateStatus.Installed(
+                                        installResult.version
+                                    ),
+                                    isInstalling = false,
+                                    installedVersion = installResult.version,
+                                    availableUpdate = null
+                                )
+
+                            is PocketBookServerInstallResult.PendingRestart ->
+                                it.withStatus(
+                                    status = PocketBookServerUpdateStatus.InstalledPendingRestart(
+                                        installResult.update
+                                    ),
+                                    isInstalling = false,
+                                    availableUpdate = null
+                                )
+                        }.copy(installProgress = null)
                     }
                     scheduleStatusClearIfTransient(_state.value.status)
                 }
@@ -346,6 +360,9 @@ sealed class PocketBookServerUpdateStatus {
         PocketBookServerUpdateStatus()
 
     data class Installed(val version: PocketBookServerVersionInfo) : PocketBookServerUpdateStatus()
+    data class InstalledPendingRestart(val update: AvailablePocketBookServerUpdate) :
+        PocketBookServerUpdateStatus()
+
     data object InstallCanceled : PocketBookServerUpdateStatus()
     data class Error(val reason: PocketBookServerUpdateErrorReason) : PocketBookServerUpdateStatus()
 }
@@ -358,7 +375,6 @@ enum class PocketBookServerUpdateErrorReason {
     ChecksumMismatch,
     UploadFailed,
     ApplyFailed,
-    RestartNotConfirmed,
     Unknown
 }
 

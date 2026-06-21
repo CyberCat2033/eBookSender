@@ -376,6 +376,9 @@ private fun PocketBookServerUpdateStatus.toSettingsText(
     is PocketBookServerUpdateStatus.Installed ->
         strings.get("pb_server_update_installed", version.versionName)
 
+    is PocketBookServerUpdateStatus.InstalledPendingRestart ->
+        strings.get("pb_server_update_pending_restart", update.versionName)
+
     PocketBookServerUpdateStatus.InstallCanceled -> strings.pbServerUpdateCanceled
 
     is PocketBookServerUpdateStatus.Error -> reason.toSettingsText(strings)
@@ -403,9 +406,6 @@ private fun PocketBookServerUpdateErrorReason.toSettingsText(
 
     PocketBookServerUpdateErrorReason.ApplyFailed ->
         strings.pbServerUpdateErrorApplyFailed
-
-    PocketBookServerUpdateErrorReason.RestartNotConfirmed ->
-        strings.pbServerUpdateErrorRestartNotConfirmed
 
     PocketBookServerUpdateErrorReason.Unknown -> strings.pbServerUpdateErrorUnknown
 }
