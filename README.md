@@ -100,6 +100,7 @@
 Требования: Android 8.0+ и электронная книга с FTP-сервером в той же локальной сети.
 
 Для устройств PocketBook FTP-сервер можно взять из проекта [pb-ftp](https://github.com/CyberCat2033/pb-ftp).
+Для Android-читалок можно использовать [SimpleFTP](https://github.com/CyberCat2033/SimpleFTP).
 
 Готовые APK публикуются на странице [Releases](../../releases/latest):
 
