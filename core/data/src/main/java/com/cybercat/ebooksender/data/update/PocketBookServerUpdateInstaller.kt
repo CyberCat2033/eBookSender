@@ -22,7 +22,7 @@ internal class PocketBookServerUpdateInstaller(
         device: RemoteDevice,
         update: AvailablePocketBookServerUpdate,
         onProgress: (PocketBookServerUpdateProgress) -> Unit
-    ): PocketBookServerVersionInfo {
+    ): PocketBookServerInstallResult {
         val artifact = update.launcherArtifact
         val totalArtifactBytes = artifact.sizeBytes
         val totalWorkBytes = totalArtifactBytes?.times(2L)
@@ -76,14 +76,11 @@ internal class PocketBookServerUpdateInstaller(
                     completedWorkBytes + uploadedBytes
                 )
             }
-        )?.let { installedVersion ->
-            return installedVersion
+        )?.let { result ->
+            return result
         }
 
-        return versionReader.waitForInstalledVersion(device, update)
-            ?: throw PocketBookServerUpdateException(
-                PocketBookServerUpdateErrorReason.RestartNotConfirmed
-            )
+        return PocketBookServerInstallResult.PendingRestart(update)
     }
 
     private suspend fun uploadLauncherFile(
@@ -116,7 +113,7 @@ internal class PocketBookServerUpdateInstaller(
         file: File,
         stagedRemotePath: String,
         onFallbackUploadProgress: (Long) -> Unit
-    ): PocketBookServerVersionInfo? {
+    ): PocketBookServerInstallResult? {
         val applyResult = controlClient.applyUpdate(
             device = device,
             request = PocketBookServerApplyUpdateRequest(
@@ -136,7 +133,7 @@ internal class PocketBookServerUpdateInstaller(
                 if (error is CancellationException) throw error
                 val installedVersion = versionReader.waitForInstalledVersion(device, update)
                 if (installedVersion != null) {
-                    return installedVersion
+                    return PocketBookServerInstallResult.Confirmed(installedVersion)
                 }
                 if (error !is PocketBookUpdateEndpointUnavailableException) {
                     ensureFallbackWouldNotDowngrade(device, update, error)
@@ -188,4 +185,11 @@ internal class PocketBookServerUpdateInstaller(
 internal fun AvailablePocketBookServerUpdate.stagedLauncherRemotePath(): String {
     val safeName = launcherArtifact.fileName.toSafeUpdateFileName()
     return "${PocketBookServerUpdateConfig.STAGING_REMOTE_DIR}/$safeName"
+}
+
+internal sealed class PocketBookServerInstallResult {
+    data class Confirmed(val version: PocketBookServerVersionInfo) : PocketBookServerInstallResult()
+
+    data class PendingRestart(val update: AvailablePocketBookServerUpdate) :
+        PocketBookServerInstallResult()
 }

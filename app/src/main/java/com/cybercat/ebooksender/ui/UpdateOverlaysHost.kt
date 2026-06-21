@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,6 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import com.cybercat.ebooksender.data.update.AppUpdateState
 import com.cybercat.ebooksender.data.update.AvailableAppUpdate
@@ -23,6 +27,8 @@ import com.cybercat.ebooksender.data.update.AvailablePocketBookServerUpdate
 import com.cybercat.ebooksender.data.update.PocketBookServerUpdateState
 import com.cybercat.ebooksender.data.update.PocketBookServerUpdateStatus
 import com.cybercat.ebooksender.localization.LocalStrings
+import com.cybercat.ebooksender.util.AppHapticFeedback
+import com.cybercat.ebooksender.util.performHapticIfAllowed
 
 private val UPDATE_PROGRESS_OVERLAY_MARGIN = 16.dp
 
@@ -113,7 +119,18 @@ private fun PocketBookServerUpdateDialog(
     val strings = LocalStrings.current
     val update = when (status) {
         is PocketBookServerUpdateStatus.UpdateAvailable -> status.update
+
         is PocketBookServerUpdateStatus.InstalledVersionUnknown -> status.update
+
+        is PocketBookServerUpdateStatus.InstalledPendingRestart -> {
+            PocketBookServerUpdateRestartDialog(
+                update = status.update,
+                enableHaptics = enableHaptics,
+                onDismiss = onDismiss
+            )
+            return
+        }
+
         else -> null
     } ?: return
     val isVersionUnknown = status is PocketBookServerUpdateStatus.InstalledVersionUnknown
@@ -142,5 +159,41 @@ private fun PocketBookServerUpdateDialog(
         loadChangelog = { code -> loadChangelog(update, code) },
         onConfirm = onInstall,
         onDismiss = onDismiss
+    )
+}
+
+@Composable
+private fun PocketBookServerUpdateRestartDialog(
+    update: AvailablePocketBookServerUpdate,
+    enableHaptics: Boolean,
+    onDismiss: () -> Unit
+) {
+    val strings = LocalStrings.current
+    val context = LocalContext.current
+    val view = LocalView.current
+
+    AnimatedAlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(strings.get("pb_server_update_restart_dialog_title", update.versionName))
+        },
+        text = {
+            Text(strings.get("pb_server_update_restart_dialog_body", update.versionName))
+        },
+        confirmButton = {
+            val dismiss = LocalDismissDialog.current
+            TextButton(
+                onClick = {
+                    view.performHapticIfAllowed(
+                        context,
+                        enableHaptics,
+                        AppHapticFeedback.Confirm
+                    )
+                    dismiss()
+                }
+            ) {
+                Text(strings.get("pb_server_update_restart_dialog_confirm"))
+            }
+        }
     )
 }

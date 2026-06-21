@@ -4,6 +4,11 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Changed PocketBook server update completion to show a restart-required dialog after the launcher is delivered, since the running pb-ftp session can keep reporting the old version until it is closed and reopened.
+- Improved Russian wording for PocketBook server updates, device transfer statuses, and queue messages.
+
 ## [0.11.7] - 2026-06-21
 
 ### Added
