@@ -72,6 +72,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `app/src/main/java/com/cybercat/ebooksender/EBookSenderApplication.kt` - Hilt application entry point, HTTP cache setup, and process lifecycle hooks for app-wide resource control.
 - `app/src/main/java/com/cybercat/ebooksender/di/AppCoroutineModule.kt` - Hilt module that provides the shared application-lifetime coroutine scope and exception handler for singleton background managers and repositories.
 - `app/src/main/java/com/cybercat/ebooksender/di/AppUpdateModule.kt` - Hilt binding from the shared `AppUpdateManager` contract to the app-level updater implementation.
+- `app/src/main/java/com/cybercat/ebooksender/di/DataStoreModule.kt` - Hilt module that provides the settings Preferences DataStore dependency to SettingsRepository.
 - `app/src/main/java/com/cybercat/ebooksender/update/AppUpdateManagerImpl.kt` - app update implementation; owns app update state/status transitions, loads localized changelog markdown into `cache/update-changelogs`, delegates manifest/ABI selection to `AppUpdateManifestResolver`, delegates APK cache/download cleanup to `AppUpdateApkRepository`, delegates package/signature checks to `AppUpdatePackageVerifier`, and delegates unknown-sources plus Android installer intents to `AppUpdateInstallerLauncher`.
 - `app/src/main/java/com/cybercat/ebooksender/update/AppUpdateManifestResolver.kt` / `AppUpdateApkRepository.kt` / `AppUpdatePackageVerifier.kt` / `AppUpdateInstallerLauncher.kt` - app-specific update helpers for GitHub Pages app manifest validation, ABI-compatible APK selection, verified APK caching under `cache/update-apks`, installed/stale APK and changelog cleanup, package name/version/signature verification, and `FileProvider` installer launch.
 - `app/src/main/java/com/cybercat/ebooksender/di/MangaDataModule.kt` - Hilt binding module that exposes `MangaRepository` as the shared `MangaSeriesPageLoader` port for manga use cases.
@@ -154,6 +155,9 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `core/domain/src/main/java/com/cybercat/ebooksender/domain/MangaTitleParser.kt` - pure domain parser that derives manga series/volume hints from local file names before metadata extraction.
 - `core/domain/src/test/java/com/cybercat/ebooksender/domain/` - JVM unit tests for pure domain logic including `NaturalSort`, `FilenameSanitizer`, `FileClassifier`, `MangaTitleParser`, and `PathPlanner`.
 - `core/common/src/test/java/com/cybercat/ebooksender/util/` - JVM unit tests for common utilities including `SearchQueryNormalizer`, `UrlHostMatcher`, `ExpiringLruCache`, and `FormatUtils`.
+- `core/datastore/src/test/java/com/cybercat/ebooksender/data/settings/SettingsRepositoryTest.kt` - JVM unit tests for Preferences-backed settings repository.
+- `core/data/src/test/java/com/cybercat/ebooksender/data/manga/MangaChapterNamingTest.kt` - JVM unit tests for manga chapter index/volume naming helper.
+- `core/data/src/test/java/com/cybercat/ebooksender/data/request/RequestCoordinatorTest.kt` - JVM unit tests for background request submit policies and event flows.
 
 ## Search and edit workflow
 
