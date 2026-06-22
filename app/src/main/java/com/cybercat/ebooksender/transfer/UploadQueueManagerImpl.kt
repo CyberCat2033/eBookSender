@@ -113,9 +113,16 @@ class UploadQueueManagerImpl @Inject constructor(
         val newItems = uris
             .distinctBy { it.toString() }
             .mapNotNull { uri ->
+                val uriString = uri.toString()
+                val displayName = localFileResolver.resolveDisplayName(uri)
+                    ?: uri.lastPathSegment
+                    ?: "Book-${UUID.randomUUID()}"
+                val fileSize = localFileResolver.resolveFileSize(uri)
                 when (
                     val result = uploadItemValidator.validate(
-                        uri = uri,
+                        uriString = uriString,
+                        displayName = displayName,
+                        fileSize = fileSize,
                         existingIdentityKeys = existing,
                         maxFileSizeBytes = MAX_FILE_SIZE_BYTES
                     )

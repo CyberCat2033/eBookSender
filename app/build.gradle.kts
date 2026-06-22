@@ -124,7 +124,14 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
+
     packaging {
+
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -180,4 +187,6 @@ dependencies {
     implementation(project(":feature:manga"))
     implementation(project(":feature:opds"))
     implementation(project(":feature:transfer"))
+
+    testImplementation(libs.junit4)
 }

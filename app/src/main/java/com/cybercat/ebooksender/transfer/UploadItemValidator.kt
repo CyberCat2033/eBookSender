@@ -1,28 +1,27 @@
 package com.cybercat.ebooksender.transfer
 
-import android.net.Uri
 import com.cybercat.ebooksender.data.transfer.SkippedUploadFile
 import com.cybercat.ebooksender.data.transfer.UploadFileSkipReason
 import com.cybercat.ebooksender.domain.AllSupportedExtensions
 import com.cybercat.ebooksender.domain.bookExtension
-import java.util.UUID
 import javax.inject.Inject
 
-class UploadItemValidator @Inject constructor(private val localFileResolver: LocalFileResolver) {
-    fun validate(uri: Uri, existingIdentityKeys: Set<String>, maxFileSizeBytes: Long): Result {
-        val uriString = uri.toString()
+class UploadItemValidator @Inject constructor() {
+    fun validate(
+        uriString: String,
+        displayName: String,
+        fileSize: Long,
+        existingIdentityKeys: Set<String>,
+        maxFileSizeBytes: Long
+    ): Result {
         if (uriString in existingIdentityKeys) return Result.Duplicate
 
-        val displayName = localFileResolver.resolveDisplayName(uri)
-            ?: uri.lastPathSegment
-            ?: "Book-${UUID.randomUUID()}"
         val extension = displayName.bookExtension().lowercase().trim()
         val isSupported = extension in AllSupportedExtensions ||
             (
                 extension.endsWith(".zip") &&
                     extension.removeSuffix(".zip") in AllSupportedExtensions
                 )
-        val fileSize = localFileResolver.resolveFileSize(uri)
 
         return when {
             !isSupported -> Result.Skipped(
