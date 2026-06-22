@@ -152,6 +152,8 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/BitmapCache.kt` - shared preview bitmap cache with disk persistence for remote covers and expiring in-memory entries reused by remote and queued-upload cover rendering.
 - `core/ui/src/main/java/com/cybercat/ebooksender/ui/UploadPreviewCover.kt` - shared lazy Compose cover loader for queued upload items; reads disk-cached local previews by upload item id and only materializes visible cover bitmaps into bounded memory cache.
 - `core/domain/src/main/java/com/cybercat/ebooksender/domain/MangaTitleParser.kt` - pure domain parser that derives manga series/volume hints from local file names before metadata extraction.
+- `core/domain/src/test/java/com/cybercat/ebooksender/domain/` - JVM unit tests for pure domain logic including `NaturalSort`, `FilenameSanitizer`, `FileClassifier`, `MangaTitleParser`, and `PathPlanner`.
+- `core/common/src/test/java/com/cybercat/ebooksender/util/` - JVM unit tests for common utilities including `SearchQueryNormalizer`, `UrlHostMatcher`, `ExpiringLruCache`, and `FormatUtils`.
 
 ## Search and edit workflow
 
