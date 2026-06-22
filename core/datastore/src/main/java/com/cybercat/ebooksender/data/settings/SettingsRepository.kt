@@ -1,6 +1,8 @@
 package com.cybercat.ebooksender.data.settings
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -11,17 +13,16 @@ import com.cybercat.ebooksender.model.CatalogFallbackNames
 import com.cybercat.ebooksender.model.DEFAULT_FTP_RELATIVE_ROOT_PATH
 import com.cybercat.ebooksender.model.MangaLoginMode
 import com.cybercat.ebooksender.model.normalizeFtpRelativeRootPath
-import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-private val Context.settingsDataStore by preferencesDataStore(name = "settings")
+val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 @Singleton
-class SettingsRepository @Inject constructor(@ApplicationContext private val context: Context) {
-    val settings: Flow<AppSettings> = context.settingsDataStore.data.map { preferences ->
+class SettingsRepository @Inject constructor(private val dataStore: DataStore<Preferences>) {
+    val settings: Flow<AppSettings> = dataStore.data.map { preferences ->
         AppSettings(
             rootPath = normalizeFtpRelativeRootPath(
                 preferences[ROOT_PATH] ?: DEFAULT_FTP_RELATIVE_ROOT_PATH
@@ -52,25 +53,25 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
     }
 
     suspend fun setRootPath(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[ROOT_PATH] = normalizeFtpRelativeRootPath(value)
         }
     }
 
     suspend fun setBooksFolderName(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[BOOKS_FOLDER_NAME] = value.ifBlank { "Books" }
         }
     }
 
     suspend fun setDocumentsFolderName(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[DOCUMENTS_FOLDER_NAME] = value.ifBlank { "Documents" }
         }
     }
 
     suspend fun setMangaFolderName(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[MANGA_FOLDER_NAME] = value.ifBlank { "Manga" }
         }
     }
@@ -81,79 +82,79 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val con
      * through the existing `?: default` fallbacks.
      */
     suspend fun resetToDefaults() {
-        context.settingsDataStore.edit { preferences -> preferences.clear() }
+        dataStore.edit { preferences -> preferences.clear() }
     }
 
     suspend fun setUseDynamicColor(value: Boolean) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[USE_DYNAMIC_COLOR] = value
         }
     }
 
     suspend fun setEnableHaptics(value: Boolean) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[ENABLE_HAPTICS] = value
         }
     }
 
     suspend fun setBypassVpnForLocalConnections(value: Boolean) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[BYPASS_VPN_FOR_LOCAL_CONNECTIONS] = value
         }
     }
 
     suspend fun setMangaLoginMode(value: MangaLoginMode) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[MANGA_LOGIN_MODE] = value.name
         }
     }
 
     suspend fun setTheme(value: AppTheme) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[THEME] = value.name
         }
     }
 
     suspend fun setWarnOnDisconnectedRename(value: Boolean) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[WARN_ON_DISCONNECTED_RENAME] = value
         }
     }
 
     suspend fun setLanguageCode(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[LANGUAGE_CODE] = value
         }
     }
 
     suspend fun setDefaultDocumentsTag(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[DEFAULT_DOCUMENTS_TAG] =
                 value.ifBlank { CatalogFallbackNames.UNTAGGED_DOCUMENTS }
         }
     }
 
     suspend fun setDefaultMangaSeries(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[DEFAULT_MANGA_SERIES] =
                 value.ifBlank { CatalogFallbackNames.UNKNOWN_MANGA_SERIES }
         }
     }
 
     suspend fun setBookFileNameTemplate(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[BOOK_FILE_NAME_TEMPLATE] = value.ifBlank { "{title}" }
         }
     }
 
     suspend fun setDocumentsFileNameTemplate(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[DOCUMENTS_FILE_NAME_TEMPLATE] = value.ifBlank { "{title}" }
         }
     }
 
     suspend fun setMangaFileNameTemplate(value: String) {
-        context.settingsDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[MANGA_FILE_NAME_TEMPLATE] = value.ifBlank { "{series}_{volume}" }
         }
     }
