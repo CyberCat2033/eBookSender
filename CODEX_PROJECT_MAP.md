@@ -158,6 +158,10 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `core/datastore/src/test/java/com/cybercat/ebooksender/data/settings/SettingsRepositoryTest.kt` - JVM unit tests for Preferences-backed settings repository.
 - `core/data/src/test/java/com/cybercat/ebooksender/data/manga/MangaChapterNamingTest.kt` - JVM unit tests for manga chapter index/volume naming helper.
 - `core/data/src/test/java/com/cybercat/ebooksender/data/request/RequestCoordinatorTest.kt` - JVM unit tests for background request submit policies and event flows.
+- `app/src/test/java/com/cybercat/ebooksender/transfer/CbzMetadataRewriterTest.kt` - JVM unit tests for CBZ archive metadata rewriter, path renaming, and ComicInfo.xml generation.
+- `core/data/src/test/java/com/cybercat/ebooksender/data/device/DeviceProfileDetectorTest.kt` - JVM unit tests for device profile detection based on database presence.
+- `core/data/src/test/java/com/cybercat/ebooksender/data/settings/DeviceFolderRenameUseCaseTest.kt` - JVM unit tests for remote folder rename result mapping.
+- `core/data/src/test/java/com/cybercat/ebooksender/data/opds/MatchOpdsAuthSourceUseCaseTest.kt` - JVM unit tests for OPDS source auth matching logic.
 
 ## Search and edit workflow
 
