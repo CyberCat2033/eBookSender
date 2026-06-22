@@ -21,13 +21,29 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 @Singleton
-class OpdsRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val parser: OpdsParser,
-    private val httpClient: OpdsHttpClient,
-    private val sourceDao: OpdsSourceDao,
-    private val credentialsStore: OpdsSecureCredentialsStore
+open class OpdsRepository(
+    @ApplicationContext private val _context: Context?,
+    private val _parser: OpdsParser?,
+    private val _httpClient: OpdsHttpClient?,
+    private val _sourceDao: OpdsSourceDao?,
+    private val _credentialsStore: OpdsSecureCredentialsStore?,
+    @Suppress("UNUSED_PARAMETER") dummy: Boolean
 ) {
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        parser: OpdsParser,
+        httpClient: OpdsHttpClient,
+        sourceDao: OpdsSourceDao,
+        credentialsStore: OpdsSecureCredentialsStore
+    ) : this(context, parser, httpClient, sourceDao, credentialsStore, true)
+
+    private val context: Context get() = _context!!
+    private val parser: OpdsParser get() = _parser!!
+    private val httpClient: OpdsHttpClient get() = _httpClient!!
+    private val sourceDao: OpdsSourceDao get() = _sourceDao!!
+    private val credentialsStore: OpdsSecureCredentialsStore get() = _credentialsStore!!
+
     private val catalogCache = ExpiringLruCache<String, OpdsCatalog>(
         ttlMillis = CATALOG_CACHE_TTL_MILLIS,
         maxSize = CATALOG_CACHE_MAX_ENTRIES
@@ -49,21 +65,25 @@ class OpdsRepository @Inject constructor(
         clearedAny
     }
 
-    val sources: Flow<List<OpdsSource>> =
-        sourceDao.observeSources().map { entities ->
-            entities
-                .filter(OpdsSourceEntity::enabled)
-                .map { entity ->
-                    val credentials = credentialsStore.read(entity.id)
-                    OpdsSource(
-                        id = entity.id,
-                        title = entity.title,
-                        url = entity.url,
-                        username = credentials?.username,
-                        password = credentials?.password
-                    )
-                }
-                .distinctBy { source -> source.url.trimEnd('/').lowercase() }
+    open val sources: Flow<List<OpdsSource>> =
+        if (_sourceDao != null && _credentialsStore != null) {
+            sourceDao.observeSources().map { entities ->
+                entities
+                    .filter(OpdsSourceEntity::enabled)
+                    .map { entity ->
+                        val credentials = credentialsStore.read(entity.id)
+                        OpdsSource(
+                            id = entity.id,
+                            title = entity.title,
+                            url = entity.url,
+                            username = credentials?.username,
+                            password = credentials?.password
+                        )
+                    }
+                    .distinctBy { source -> source.url.trimEnd('/').lowercase() }
+            }
+        } else {
+            kotlinx.coroutines.flow.flowOf(emptyList())
         }
 
     suspend fun seedDefaultsIfNeeded() {

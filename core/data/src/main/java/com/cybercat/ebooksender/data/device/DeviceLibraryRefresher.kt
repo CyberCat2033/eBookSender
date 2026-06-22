@@ -7,12 +7,18 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class DeviceLibraryRefresher @Inject constructor(
-    private val pocketBookRescanCoordinator: PocketBookRescanCoordinator
+open class DeviceLibraryRefresher(
+    private val pocketBookRescanCoordinator: PocketBookRescanCoordinator?,
+    @Suppress("UNUSED_PARAMETER") dummy: Boolean
 ) {
-    suspend fun refreshAndWait(device: RemoteDevice): Result<Unit> =
+    @Inject
+    constructor(
+        pocketBookRescanCoordinator: PocketBookRescanCoordinator
+    ) : this(pocketBookRescanCoordinator, true)
+
+    open suspend fun refreshAndWait(device: RemoteDevice): Result<Unit> =
         if (device.profile == DeviceProfile.PocketBook && device.supportsRescan) {
-            pocketBookRescanCoordinator.requestRescanAndWait(device)
+            pocketBookRescanCoordinator?.requestRescanAndWait(device) ?: Result.success(Unit)
         } else {
             Result.success(Unit)
         }
