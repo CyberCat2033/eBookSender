@@ -7,6 +7,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 private const val TAG = "DownloadOpdsEntriesUseCase"
 
@@ -28,9 +30,14 @@ class DownloadOpdsEntriesUseCase @Inject constructor(private val opdsRepository:
             }
         }
 
+        val semaphore = Semaphore(MAX_PARALLEL_DOWNLOADS)
         val outcomes = coroutineScope {
             downloadRequests.map { request ->
-                async { download(baseUrl, request, onFileDownloaded) }
+                async {
+                    semaphore.withPermit {
+                        download(baseUrl, request, onFileDownloaded)
+                    }
+                }
             }.awaitAll()
         }
 
@@ -74,6 +81,10 @@ class DownloadOpdsEntriesUseCase @Inject constructor(private val opdsRepository:
         }.minByOrNull { (_, priority) ->
             priority
         }?.first
+
+    private companion object {
+        const val MAX_PARALLEL_DOWNLOADS = 3
+    }
 }
 
 data class DownloadOpdsEntriesResult(val downloadedFiles: List<File>, val failedCount: Int)

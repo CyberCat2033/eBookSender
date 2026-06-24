@@ -216,16 +216,15 @@ class MangaChapterDownloader @Inject constructor(
             .map { page ->
                 async {
                     pageSemaphore.withPermit {
+                        val tempFile = File.createTempFile("page_${page.index}_", ".tmp", tempDir)
                         val downloaded = downloadPageWithRetry(
                             adapter = adapter,
                             page = page,
+                            outputFile = tempFile,
                             completedPages = completedPages,
                             totalPages = pages.size,
                             onPageProgress = onPageProgress
                         )
-                        // Write to a temporary file immediately to keep memory usage minimal
-                        val tempFile = File.createTempFile("page_${page.index}_", ".tmp", tempDir)
-                        tempFile.writeBytes(downloaded.bytes)
                         onPageProgress(completedPages.incrementAndGet(), null)
                         DownloadedMangaPage(
                             index = page.index,
@@ -242,6 +241,7 @@ class MangaChapterDownloader @Inject constructor(
     private suspend fun downloadPageWithRetry(
         adapter: MangaSourceAdapter,
         page: MangaPage,
+        outputFile: File,
         completedPages: AtomicInteger,
         totalPages: Int,
         onPageProgress: suspend (Int, String?) -> Unit
@@ -250,12 +250,15 @@ class MangaChapterDownloader @Inject constructor(
         repeat(PAGE_DOWNLOAD_ATTEMPTS) { attempt ->
             ensureNetworkAvailable()
             try {
+                outputFile.delete()
                 return withTimeout(PAGE_ATTEMPT_TIMEOUT_MILLIS) {
-                    adapter.downloadPage(page)
+                    adapter.downloadPage(page, outputFile)
                 }
             } catch (error: IOException) {
+                outputFile.delete()
                 lastError = error
             } catch (error: TimeoutCancellationException) {
+                outputFile.delete()
                 lastError = IOException("Page ${page.index + 1} timed out", error)
             }
 

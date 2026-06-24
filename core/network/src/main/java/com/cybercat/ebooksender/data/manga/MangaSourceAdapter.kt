@@ -28,7 +28,7 @@ interface MangaSourceAdapter {
         chapters = listChapters(seriesId)
     )
     suspend fun getChapterPages(chapterId: String): List<MangaPage>
-    suspend fun downloadPage(page: MangaPage): MangaDownloadedPage
+    suspend fun downloadPage(page: MangaPage, outputFile: File): MangaDownloadedPage
     suspend fun downloadChapterArchive(
         chapter: MangaChapter,
         outputFile: File,
@@ -123,7 +123,7 @@ data class MangaPage(
     val fileExtension: String?
 )
 
-data class MangaDownloadedPage(val bytes: ByteArray, val fileExtension: String)
+data class MangaDownloadedPage(val fileExtension: String)
 
 data class MangaDownloadedArchive(val fileExtension: String)
 

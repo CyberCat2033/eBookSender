@@ -1,6 +1,5 @@
 package com.cybercat.ebooksender.data.manga
 
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -10,6 +9,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 @Singleton
@@ -28,51 +28,55 @@ class ComxMangaHttpClient @Inject constructor(
         fetchText(url, referer, retryGuard = true)
     }
 
-    suspend fun downloadPage(page: MangaPage): MangaDownloadedPage = withContext(Dispatchers.IO) {
-        val connection = connectionFactory.openConnection(
-            url = page.imageUrl,
-            accept = "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-            referer = page.refererUrl ?: ComxMangaAdapter.HOME_URL,
-            connectTimeout = IMAGE_CONNECT_TIMEOUT_MILLIS,
-            readTimeout = IMAGE_READ_TIMEOUT_MILLIS
-        )
-        val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
-            if (cause is CancellationException) {
+    suspend fun downloadPage(page: MangaPage, outputFile: File): MangaDownloadedPage =
+        withContext(Dispatchers.IO) {
+            val connection = connectionFactory.openConnection(
+                url = page.imageUrl,
+                accept = "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                referer = page.refererUrl ?: ComxMangaAdapter.HOME_URL,
+                connectTimeout = IMAGE_CONNECT_TIMEOUT_MILLIS,
+                readTimeout = IMAGE_READ_TIMEOUT_MILLIS
+            )
+            val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
+                if (cause is CancellationException) {
+                    connection.disconnect()
+                }
+            }
+            try {
+                val code = connection.responseCode
+                sessionManager.captureCookies(connection, page.imageUrl)
+                if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+                    throw MangaBrowserSessionRefreshRequiredException(
+                        page.refererUrl ?: ComxMangaAdapter.HOME_URL
+                    )
+                }
+                if (code !in 200..299) {
+                    throw IOException("Image HTTP $code")
+                }
+                val extension = page.fileExtension
+                    ?: extensionFromContentType(connection.contentType)
+                    ?: parser.imageExtensionFromUrl(page.imageUrl)
+                    ?: "jpg"
+                connection.streamImageToFile(outputFile)
+                MangaDownloadedPage(fileExtension = extension)
+            } catch (error: Throwable) {
+                outputFile.delete()
+                if (
+                    error !is CancellationException &&
+                    currentCoroutineContext()[Job]?.isCancelled == true
+                ) {
+                    throw CancellationException(
+                        "Manga page download canceled"
+                    ).also { cancellation ->
+                        cancellation.initCause(error)
+                    }
+                }
+                throw error
+            } finally {
+                cancellationHandle?.dispose()
                 connection.disconnect()
             }
         }
-        try {
-            val code = connection.responseCode
-            sessionManager.captureCookies(connection, page.imageUrl)
-            if (code == HttpURLConnection.HTTP_FORBIDDEN) {
-                throw MangaBrowserSessionRefreshRequiredException(
-                    page.refererUrl ?: ComxMangaAdapter.HOME_URL
-                )
-            }
-            if (code !in 200..299) {
-                throw IOException("Image HTTP $code")
-            }
-            val bytes = connection.readImageBytes()
-            val extension = page.fileExtension
-                ?: extensionFromContentType(connection.contentType)
-                ?: parser.imageExtensionFromUrl(page.imageUrl)
-                ?: "jpg"
-            MangaDownloadedPage(bytes = bytes, fileExtension = extension)
-        } catch (error: Throwable) {
-            if (
-                error !is CancellationException &&
-                currentCoroutineContext()[Job]?.isCancelled == true
-            ) {
-                throw CancellationException("Manga page download canceled").also { cancellation ->
-                    cancellation.initCause(error)
-                }
-            }
-            throw error
-        } finally {
-            cancellationHandle?.dispose()
-            connection.disconnect()
-        }
-    }
 
     suspend fun downloadChapterArchive(
         chapter: MangaChapter,
@@ -143,41 +147,41 @@ class ComxMangaHttpClient @Inject constructor(
         throw IOException("Too many HTTP redirects")
     }
 
-    private fun HttpURLConnection.readImageBytes(): ByteArray {
+    private suspend fun HttpURLConnection.streamImageToFile(outputFile: File): Long {
         val expectedLength = contentLengthLong
         if (expectedLength > MAX_IMAGE_BYTES) {
             throw IOException("Image is too large: $expectedLength bytes")
         }
 
-        val initialSize = when {
-            expectedLength in 1..MAX_IMAGE_BYTES -> expectedLength.toInt()
-            else -> DEFAULT_IMAGE_BUFFER_SIZE
-        }
         val deadline = System.nanoTime() + IMAGE_TOTAL_READ_TIMEOUT_NANOS
-        val output = ByteArrayOutputStream(initialSize)
         val buffer = ByteArray(DEFAULT_IMAGE_BUFFER_SIZE)
+        var bytesRead = 0L
 
+        outputFile.parentFile?.mkdirs()
         inputStream.use { input ->
-            while (true) {
-                if (System.nanoTime() > deadline) {
-                    throw IOException("Image read timeout")
-                }
+            outputFile.outputStream().buffered().use { output ->
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    if (System.nanoTime() > deadline) {
+                        throw IOException("Image read timeout")
+                    }
 
-                val read = input.read(buffer)
-                if (read < 0) break
+                    val read = input.read(buffer)
+                    if (read < 0) break
 
-                output.write(buffer, 0, read)
-                if (output.size() > MAX_IMAGE_BYTES) {
-                    throw IOException("Image is too large")
+                    output.write(buffer, 0, read)
+                    bytesRead += read
+                    if (bytesRead > MAX_IMAGE_BYTES) {
+                        throw IOException("Image is too large")
+                    }
                 }
             }
         }
 
-        val bytes = output.toByteArray()
-        if (bytes.isEmpty()) {
+        if (bytesRead == 0L) {
             throw IOException("Image is empty")
         }
-        return bytes
+        return bytesRead
     }
 
     private fun extensionFromContentType(contentType: String?): String? {

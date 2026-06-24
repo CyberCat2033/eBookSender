@@ -10,6 +10,8 @@ All notable user-facing changes to eBookSender are documented in this file.
 - Catalog fallback file names now display underscores as spaces while preserving extensions such as `.fb2.zip`.
 - Changed the Russian sent-items counter on the send screen from "books" wording to "files".
 - Fixed saved manga and subscription checks so stale Com-X browser sessions are refreshed instead of surfacing the original HTTP 404.
+- Reduced memory pressure during manga chapter downloads by streaming fallback page images directly to temporary files instead of holding page bytes in RAM.
+- Improved responsiveness during bulk OPDS downloads and large file selections by limiting parallel OPDS downloads and moving upload-queue file admission work off the UI thread.
 
 ## [0.11.8] - 2026-06-22
 

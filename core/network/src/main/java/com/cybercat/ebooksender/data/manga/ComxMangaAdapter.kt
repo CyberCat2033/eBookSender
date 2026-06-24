@@ -77,8 +77,8 @@ class ComxMangaAdapter @Inject constructor(
             parser.parseChapterPages(chapterId, httpClient.fetchText(chapterId, HOME_URL))
         }
 
-    override suspend fun downloadPage(page: MangaPage): MangaDownloadedPage =
-        httpClient.downloadPage(page)
+    override suspend fun downloadPage(page: MangaPage, outputFile: File): MangaDownloadedPage =
+        httpClient.downloadPage(page, outputFile)
 
     override suspend fun downloadChapterArchive(
         chapter: MangaChapter,

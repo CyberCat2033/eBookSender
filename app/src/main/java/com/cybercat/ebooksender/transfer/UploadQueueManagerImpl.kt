@@ -39,6 +39,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -67,6 +69,7 @@ class UploadQueueManagerImpl @Inject constructor(
     private var activeSettings = AppSettings()
     private var queueRestored = false
     private var lastCleanedQueueItemIds = emptySet<String>()
+    private val addUrisMutex = Mutex()
 
     private val metadataDispatcher = MetadataExtractionDispatcher(
         scope = scope,
@@ -106,6 +109,14 @@ class UploadQueueManagerImpl @Inject constructor(
     override fun addUris(uris: List<Uri>) {
         if (uris.isEmpty()) return
 
+        scope.launch {
+            addUrisMutex.withLock {
+                addUrisOnIo(uris)
+            }
+        }
+    }
+
+    private suspend fun addUrisOnIo(uris: List<Uri>) = withContext(Dispatchers.IO) {
         val settings = activeSettings
         val existing = _queue.value.queueIdentityKeys()
         val skippedFiles = mutableListOf<SkippedUploadFile>()
@@ -150,7 +161,7 @@ class UploadQueueManagerImpl @Inject constructor(
             )
         }
 
-        if (newItems.isEmpty()) return
+        if (newItems.isEmpty()) return@withContext
 
         _queue.update { current ->
             (current + newItems).deduplicateQueue()
