@@ -13,8 +13,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.apache.commons.net.ftp.FTP
 import org.apache.commons.net.ftp.FTPClient
@@ -146,14 +151,28 @@ class CommonsNetFtpGateway @Inject constructor(
     override suspend fun listEntries(
         device: RemoteDevice,
         remoteRelativePaths: Collection<String>
-    ): Result<Map<String, List<FtpEntry>>> = withFtpClient(device) { client ->
-        runCatching {
-            remoteRelativePaths
-                .distinct()
-                .associateWith { path ->
-                    val normalizedPath = path.toSafeRelativeFtpPathOrBlank()
-                    client.listSafeEntries(normalizedPath)
-                }
+    ): Result<Map<String, List<FtpEntry>>> {
+        val paths = remoteRelativePaths.distinct()
+        if (paths.isEmpty()) return Result.success(emptyMap())
+        if (paths.size == 1) {
+            val path = paths.single()
+            return listEntries(device, path).map { entries -> mapOf(path to entries) }
+        }
+
+        return runCatching {
+            val semaphore = Semaphore(MAX_PARALLEL_LIST_CONNECTIONS)
+            coroutineScope {
+                paths
+                    .map { path ->
+                        async {
+                            semaphore.withPermit {
+                                path to listEntries(device, path).getOrThrow()
+                            }
+                        }
+                    }
+                    .awaitAll()
+                    .toMap()
+            }
         }
     }
 
@@ -375,6 +394,7 @@ class CommonsNetFtpGateway @Inject constructor(
     private companion object {
         const val CONNECT_TIMEOUT_MS = 5_000
         const val DATA_TIMEOUT_MS = 30_000
+        const val MAX_PARALLEL_LIST_CONNECTIONS = 4
     }
 }
 

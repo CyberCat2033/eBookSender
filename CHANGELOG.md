@@ -12,6 +12,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 - Fixed saved manga and subscription checks so stale Com-X browser sessions are refreshed instead of surfacing the original HTTP 404.
 - Reduced memory pressure during manga chapter downloads by streaming fallback page images directly to temporary files instead of holding page bytes in RAM.
 - Improved responsiveness during bulk OPDS downloads and large file selections by limiting parallel OPDS downloads and moving upload-queue file admission work off the UI thread.
+- Improved large generic FTP catalogs and large CBZ uploads by listing catalog folders in bounded parallel, lazily composing expanded catalog files, and streaming CBZ metadata rewrites without a full temporary archive.
 
 ## [0.11.8] - 2026-06-22
 
