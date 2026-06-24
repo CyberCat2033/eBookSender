@@ -90,6 +90,29 @@ class CheckMangaSubscriptionsUseCaseTest {
     }
 
     @Test
+    fun rethrowsBrowserSessionRefreshRequiredError() = runBlocking {
+        val refreshError = MangaBrowserSessionRefreshRequiredException("https://com-x.life/")
+        val useCase = CheckMangaSubscriptionsUseCase(
+            historyDao = FakeHistoryDao(),
+            bookmarkDao = FakeBookmarkDao(
+                subscribedSeries = listOf(bookmark(seriesId = "series-1"))
+            ),
+            seriesPageLoader = FakeMangaSeriesPageLoader(
+                responses = mapOf(
+                    "source-1|series-1" to LoaderResponse.Failure(refreshError)
+                )
+            )
+        )
+
+        try {
+            useCase()
+            fail("Expected MangaBrowserSessionRefreshRequiredException")
+        } catch (error: MangaBrowserSessionRefreshRequiredException) {
+            assertEquals(refreshError.url, error.url)
+        }
+    }
+
+    @Test
     fun continuesCheckingOtherSeriesAfterNonAuthFailure() = runBlocking {
         val bookmarkDao = FakeBookmarkDao(
             subscribedSeries = listOf(

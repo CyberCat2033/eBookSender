@@ -38,6 +38,20 @@ internal fun Throwable.isMangaSeriesNotFound(): Boolean {
     return false
 }
 
+internal fun Throwable.mangaSessionStateFailureOrNull(): Throwable? {
+    var current: Throwable? = this
+    while (current != null) {
+        if (
+            current is MangaAuthenticationExpiredException ||
+            current is MangaBrowserSessionRefreshRequiredException
+        ) {
+            return current
+        }
+        current = current.cause
+    }
+    return null
+}
+
 private fun String.mangaTitleMatchScore(savedKey: String): Int {
     val resultKey = mangaTitleMatchKey()
     if (resultKey.isBlank()) return 0

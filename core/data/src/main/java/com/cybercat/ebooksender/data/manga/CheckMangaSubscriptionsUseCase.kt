@@ -30,9 +30,7 @@ class CheckMangaSubscriptionsUseCase @Inject constructor(
                         }
                     )
                 }.getOrElse { error ->
-                    if (error is MangaAuthenticationExpiredException) {
-                        throw error
-                    }
+                    error.mangaSessionStateFailureOrNull()?.let { throw it }
                     null
                 }
             }

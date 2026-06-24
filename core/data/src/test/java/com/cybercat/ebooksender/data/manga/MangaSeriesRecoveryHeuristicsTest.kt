@@ -26,6 +26,17 @@ class MangaSeriesRecoveryHeuristicsTest {
     }
 
     @Test
+    fun mangaSessionStateFailureOrNullTraversesCauses() {
+        val authExpired = MangaAuthenticationExpiredException()
+        val refreshRequired = MangaBrowserSessionRefreshRequiredException("https://com-x.life/")
+        val wrappedRefresh = IllegalStateException("wrapped", RuntimeException(refreshRequired))
+
+        assertEquals(authExpired, authExpired.mangaSessionStateFailureOrNull())
+        assertEquals(refreshRequired, wrappedRefresh.mangaSessionStateFailureOrNull())
+        assertEquals(null, IllegalArgumentException("other").mangaSessionStateFailureOrNull())
+    }
+
+    @Test
     fun rankRecoveredSeriesCandidatesRanksCorrectly() {
         val results = listOf(
             MangaSeriesSearchResult(

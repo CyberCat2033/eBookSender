@@ -252,7 +252,10 @@ class MangaRepository @Inject constructor(
             originalSeriesId = seriesId,
             results = runCatching {
                 searchSeries(sourceId, saved.title)
-            }.getOrDefault(emptyList()),
+            }.getOrElse { searchError ->
+                searchError.mangaSessionStateFailureOrNull()?.let { throw it }
+                emptyList()
+            },
             maxCandidates = MAX_MOVED_SERIES_CANDIDATES
         )
 
