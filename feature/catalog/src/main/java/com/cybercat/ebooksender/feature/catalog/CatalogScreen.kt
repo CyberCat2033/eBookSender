@@ -92,7 +92,12 @@ fun CatalogScreen(
     val onSetEditModeState = rememberUpdatedState(onSetEditMode)
     val onSetFileSelectionState = rememberUpdatedState(onSetFileSelection)
     val expandedGroupPaths = remember { mutableStateMapOf<String, Boolean>() }
+    val collapsingGroupPaths = remember { mutableStateMapOf<String, Boolean>() }
     val expandedGroupPathSet = expandedGroupPaths
+        .filterValues { it }
+        .keys
+        .toSet()
+    val collapsingGroupPathSet = collapsingGroupPaths
         .filterValues { it }
         .keys
         .toSet()
@@ -171,11 +176,18 @@ fun CatalogScreen(
     LaunchedEffect(catalog) {
         val knownGroupPaths = catalog.groupPaths()
         (expandedGroupPaths.keys - knownGroupPaths).forEach(expandedGroupPaths::remove)
+        (collapsingGroupPaths.keys - knownGroupPaths).forEach(collapsingGroupPaths::remove)
     }
 
     LaunchedEffect(fileTargets) {
         val visiblePaths = fileTargets.mapTo(mutableSetOf()) { it.path }
         (fileRowBounds.keys - visiblePaths).forEach(fileRowBounds::remove)
+    }
+
+    LaunchedEffect(collapsingGroupPathSet) {
+        if (collapsingGroupPathSet.isEmpty()) return@LaunchedEffect
+        delay(RemovalMotionDurationMillis.toLong())
+        collapsingGroupPathSet.forEach(collapsingGroupPaths::remove)
     }
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -441,6 +453,8 @@ fun CatalogScreen(
                         )
                     }
                     catalog.books.forEach { group ->
+                        val isExpanded = group.path in expandedGroupPathSet
+                        val isCollapsing = group.path in collapsingGroupPathSet
                         item(
                             key = "books:${group.path}",
                             contentType = "catalog_group"
@@ -450,7 +464,8 @@ fun CatalogScreen(
                                 modifier = Modifier
                                     .animateItem()
                                     .padding(top = 12.dp),
-                                expanded = group.path in expandedGroupPathSet,
+                                expanded = isExpanded,
+                                expandedContentVisible = isExpanded || isCollapsing,
                                 isEditMode = state.isEditMode,
                                 selectedFilePaths = state.selectedFilePaths,
                                 enableHaptics = enableHaptics,
@@ -459,15 +474,17 @@ fun CatalogScreen(
                                 selectionClickSuppressed = { clickSuppression.isSuppressed() },
                                 onExpandedChange = { expanded ->
                                     if (expanded) {
+                                        collapsingGroupPaths.remove(group.path)
                                         expandedGroupPaths[group.path] = true
                                         scrollToGroup("books:${group.path}", group.files.size)
                                     } else {
                                         expandedGroupPaths.remove(group.path)
+                                        collapsingGroupPaths[group.path] = true
                                     }
                                 }
                             )
                         }
-                        if (group.path in expandedGroupPathSet) {
+                        if (isExpanded || isCollapsing) {
                             val isGroupSelected = group.files.isNotEmpty() &&
                                 group.files.all { file -> file.path in state.selectedFilePaths }
                             itemsIndexed(
@@ -477,6 +494,7 @@ fun CatalogScreen(
                             ) { index, file ->
                                 CatalogFileRow(
                                     file = file,
+                                    visible = isExpanded,
                                     isEditMode = state.isEditMode,
                                     isSelected = file.path in state.selectedFilePaths,
                                     groupSelected = isGroupSelected,
@@ -514,6 +532,8 @@ fun CatalogScreen(
                         )
                     }
                     catalog.documents.forEach { group ->
+                        val isExpanded = group.path in expandedGroupPathSet
+                        val isCollapsing = group.path in collapsingGroupPathSet
                         item(
                             key = "documents:${group.path}",
                             contentType = "catalog_group"
@@ -523,7 +543,8 @@ fun CatalogScreen(
                                 modifier = Modifier
                                     .animateItem()
                                     .padding(top = 12.dp),
-                                expanded = group.path in expandedGroupPathSet,
+                                expanded = isExpanded,
+                                expandedContentVisible = isExpanded || isCollapsing,
                                 isEditMode = state.isEditMode,
                                 selectedFilePaths = state.selectedFilePaths,
                                 enableHaptics = enableHaptics,
@@ -532,6 +553,7 @@ fun CatalogScreen(
                                 selectionClickSuppressed = { clickSuppression.isSuppressed() },
                                 onExpandedChange = { expanded ->
                                     if (expanded) {
+                                        collapsingGroupPaths.remove(group.path)
                                         expandedGroupPaths[group.path] = true
                                         scrollToGroup(
                                             "documents:${group.path}",
@@ -539,11 +561,12 @@ fun CatalogScreen(
                                         )
                                     } else {
                                         expandedGroupPaths.remove(group.path)
+                                        collapsingGroupPaths[group.path] = true
                                     }
                                 }
                             )
                         }
-                        if (group.path in expandedGroupPathSet) {
+                        if (isExpanded || isCollapsing) {
                             val isGroupSelected = group.files.isNotEmpty() &&
                                 group.files.all { file -> file.path in state.selectedFilePaths }
                             itemsIndexed(
@@ -553,6 +576,7 @@ fun CatalogScreen(
                             ) { index, file ->
                                 CatalogFileRow(
                                     file = file,
+                                    visible = isExpanded,
                                     isEditMode = state.isEditMode,
                                     isSelected = file.path in state.selectedFilePaths,
                                     groupSelected = isGroupSelected,
@@ -590,6 +614,8 @@ fun CatalogScreen(
                         )
                     }
                     catalog.manga.forEach { group ->
+                        val isExpanded = group.path in expandedGroupPathSet
+                        val isCollapsing = group.path in collapsingGroupPathSet
                         item(
                             key = "manga:${group.path}",
                             contentType = "manga_series_group"
@@ -599,7 +625,8 @@ fun CatalogScreen(
                                 modifier = Modifier
                                     .animateItem()
                                     .padding(top = 12.dp),
-                                expanded = group.path in expandedGroupPathSet,
+                                expanded = isExpanded,
+                                expandedContentVisible = isExpanded || isCollapsing,
                                 isEditMode = state.isEditMode,
                                 selectedFilePaths = state.selectedFilePaths,
                                 enableHaptics = enableHaptics,
@@ -608,15 +635,17 @@ fun CatalogScreen(
                                 selectionClickSuppressed = { clickSuppression.isSuppressed() },
                                 onExpandedChange = { expanded ->
                                     if (expanded) {
+                                        collapsingGroupPaths.remove(group.path)
                                         expandedGroupPaths[group.path] = true
                                         scrollToGroup("manga:${group.path}", group.files.size)
                                     } else {
                                         expandedGroupPaths.remove(group.path)
+                                        collapsingGroupPaths[group.path] = true
                                     }
                                 }
                             )
                         }
-                        if (group.path in expandedGroupPathSet) {
+                        if (isExpanded || isCollapsing) {
                             val isGroupSelected = group.files.isNotEmpty() &&
                                 group.files.all { file -> file.path in state.selectedFilePaths }
                             itemsIndexed(
@@ -626,6 +655,7 @@ fun CatalogScreen(
                             ) { index, file ->
                                 CatalogFileRow(
                                     file = file,
+                                    visible = isExpanded,
                                     showProgress = false,
                                     isEditMode = state.isEditMode,
                                     isSelected = file.path in state.selectedFilePaths,
