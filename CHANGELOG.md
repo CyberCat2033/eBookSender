@@ -4,6 +4,11 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed PocketBook catalog text cleanup so hidden service characters no longer break Russian author and title display.
+- Changed the Russian sent-items counter on the send screen from "books" wording to "files".
+
 ## [0.11.8] - 2026-06-22
 
 ### Fixed

@@ -164,7 +164,7 @@
   "send_btn_add_files_compact": "Добавить",
   "send_btn_upload": "Отправить",
   "send_uploaded_header": "Отправлено",
-  "send_uploaded_books_count": "книг: %1$d",
+  "send_uploaded_books_count": "Файлов: %1$d",
   "send_upload_complete": "Отправка завершена",
   "send_sending_status": "Отправка на устройство",
   "send_upload_cancel": "Отменить отправку",

@@ -207,8 +207,9 @@ class PocketBookDatabaseReader @Inject constructor(
 
     private fun Cursor.toDbCatalogFile(storageRootPrefix: String): DbCatalogFile? {
         val folder = string("folder")?.trimEnd('/') ?: return null
-        val fileName = string("filename")?.takeIf { it.isNotBlank() } ?: return null
-        val relativePath = normalizePath("$folder/$fileName", storageRootPrefix) ?: return null
+        val rawFileName = string("filename")?.takeIf { it.isNotBlank() } ?: return null
+        val displayFileName = rawFileName.cleanCatalogText().ifBlank { rawFileName.trim() }
+        val relativePath = normalizePath("$folder/$rawFileName", storageRootPrefix) ?: return null
         val completed = int("completed") == 1
         val cpage = int("cpage")
         val npage = int("npage")
@@ -216,11 +217,11 @@ class PocketBookDatabaseReader @Inject constructor(
         return DbCatalogFile(
             fileId = long("file_id"),
             bookId = long("book_id"),
-            name = fileName,
+            name = displayFileName,
             path = relativePath,
             size = long("file_size") ?: long("book_size") ?: 0L,
             modifiedAtMillis = long("modification_time")?.secondsToMillis(),
-            title = string("title")?.cleanText(),
+            title = string("title").cleanCatalogTextOrNull(),
             authors = string("author").splitAuthors(),
             readProgressPercent = readProgressPercent(
                 completed = completed,
@@ -231,7 +232,7 @@ class PocketBookDatabaseReader @Inject constructor(
             lastOpenedAtMillis = long("opentime")?.takeIf { it > 0 }?.secondsToMillis(),
             cpage = cpage,
             npage = npage,
-            series = string("series")?.cleanText()
+            series = string("series").cleanCatalogTextOrNull()
         )
     }
 
@@ -324,10 +325,28 @@ private fun normalizePath(absolutePath: String, storageRootPrefix: String): Stri
 
 private fun String?.splitAuthors(): List<String> = orEmpty()
     .split(',')
-    .mapNotNull { author -> author.cleanText().takeIf { it.isNotBlank() } }
+    .mapNotNull { author -> author.cleanCatalogText().takeIf { it.isNotBlank() } }
 
-private fun String.cleanText(): String = trim()
+private fun String?.cleanCatalogTextOrNull(): String? =
+    this?.cleanCatalogText()?.takeIf { it.isNotBlank() }
+
+internal fun String.cleanCatalogText(): String = buildString(length) {
+    this@cleanCatalogText.forEach { char ->
+        when {
+            char.isCatalogServiceCharacter() && char.isWhitespace() -> append(' ')
+            char.isCatalogServiceCharacter() -> Unit
+            else -> append(char)
+        }
+    }
+}.trim()
     .replace(Regex("\\s+"), " ")
+
+private fun Char.isCatalogServiceCharacter(): Boolean = when (Character.getType(this)) {
+    Character.CONTROL.toInt(),
+    Character.FORMAT.toInt() -> true
+
+    else -> false
+}
 
 private fun readProgressPercent(completed: Boolean, cpage: Int?, npage: Int?): Int? {
     if (completed) return 100
