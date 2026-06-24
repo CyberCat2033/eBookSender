@@ -49,6 +49,15 @@ class FileClassifierTest {
     }
 
     @Test
+    fun testReadableFileName() {
+        assertEquals(
+            "Собор Парижской Богоматери.fb2.zip",
+            "Собор_Парижской_Богоматери.fb2.zip".readableFileName()
+        )
+        assertEquals("Two Words.epub", "Books/Two___Words.epub".readableFileName())
+    }
+
+    @Test
     fun testContentExtension() {
         assertEquals("epub", "novel.epub".contentExtension())
         assertEquals("fb2", "book.fb2.zip".contentExtension())

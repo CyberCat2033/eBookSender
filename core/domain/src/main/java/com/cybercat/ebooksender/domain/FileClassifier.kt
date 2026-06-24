@@ -46,6 +46,11 @@ fun String.bookTitleWithoutExtension(): String {
     }
 }
 
+fun String.readableFileName(): String = fileNameOnly()
+    .replace(Regex("_+"), " ")
+    .replace(Regex("\\s+"), " ")
+    .trim()
+
 fun String.contentExtension(): String = bookExtension().removeSuffix(".zip")
 
 fun String.isZipWrappedBook(): Boolean = bookExtension().endsWith(".zip")

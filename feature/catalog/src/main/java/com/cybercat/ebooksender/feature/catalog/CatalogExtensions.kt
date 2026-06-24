@@ -1,6 +1,7 @@
 package com.cybercat.ebooksender.feature.catalog
 
 import com.cybercat.ebooksender.domain.bookTitleWithoutExtension
+import com.cybercat.ebooksender.domain.readableFileName
 import com.cybercat.ebooksender.localization.AppStrings
 import com.cybercat.ebooksender.model.CatalogFile
 import com.cybercat.ebooksender.model.DeviceCatalog
@@ -58,10 +59,11 @@ internal fun List<CatalogFile>.summary(strings: AppStrings): String {
     }.joinToString(", ")
 }
 
-internal fun CatalogFile.displayTitle(): String = title?.takeIf { it.isNotBlank() } ?: name
+internal fun CatalogFile.displayTitle(): String =
+    title?.takeIf { it.isNotBlank() } ?: name.readableFileName()
 
 internal fun CatalogFile.mangaDisplayTitle(): String =
-    name.bookTitleWithoutExtension().ifBlank { displayTitle() }
+    name.bookTitleWithoutExtension().readableFileName().ifBlank { displayTitle() }
 
 internal fun MangaSeriesGroup.subtitle(strings: AppStrings): String = lastReadFile?.let { file ->
     strings.get(
