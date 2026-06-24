@@ -36,8 +36,8 @@ internal class MangaSearchController(
         }
     }
 
-    fun selectSource(sourceId: String) {
-        val source = mangaRepository.sources.firstOrNull { it.id == sourceId } ?: return
+    fun selectSource(sourceId: String): Boolean {
+        val source = mangaRepository.sources.firstOrNull { it.id == sourceId } ?: return false
         mangaState.update { state ->
             state.resetSelectedSeries().copy(
                 selectedSourceId = source.id,
@@ -49,6 +49,7 @@ internal class MangaSearchController(
             )
         }
         refreshAuthState()
+        return true
     }
 
     fun goBack() {

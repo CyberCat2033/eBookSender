@@ -1,7 +1,6 @@
 package com.cybercat.ebooksender.feature.manga
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -14,15 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,10 +28,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -45,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import com.cybercat.ebooksender.data.manga.MangaSeriesSearchResult
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
+import com.cybercat.ebooksender.ui.SourceSelectionItem
+import com.cybercat.ebooksender.ui.SourceSelectionMenu
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
 
@@ -56,75 +51,34 @@ internal fun MangaSourceSelector(
     modifier: Modifier = Modifier
 ) {
     if (state.sources.size <= 1) return
-    var expanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val view = LocalView.current
     val strings = LocalStrings.current
     val selectedTitle = state.sources
         .firstOrNull { it.id == state.selectedSourceId }?.title
         ?: state.sources.first().title
-
-    Box(modifier = modifier.fillMaxWidth()) {
-        OutlinedButton(
-            onClick = {
-                view.performHapticIfAllowed(
-                    context,
-                    enableHaptics,
-                    AppHapticFeedback.Press
-                )
-                if (state.sources.size > 1) expanded = true
-            },
-            enabled = !state.isLoading && !state.isDownloading,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = strings.mangaSource,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = selectedTitle,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (state.sources.size > 1) {
-                Icon(
-                    Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.fillMaxWidth(0.92f)
-        ) {
-            state.sources.forEach { source ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = source.title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    onClick = {
-                        view.performHapticIfAllowed(
-                            context,
-                            enableHaptics,
-                            AppHapticFeedback.Press
-                        )
-                        expanded = false
-                        if (source.id != state.selectedSourceId) onSelectSource(source.id)
-                    }
-                )
-            }
-        }
+    val items = state.sources.map { source ->
+        SourceSelectionItem(id = source.id, title = source.title)
     }
+
+    SourceSelectionMenu(
+        selectedTitle = selectedTitle,
+        items = items,
+        enabled = !state.isLoading && !state.isDownloading,
+        contentDescription = strings.mangaSource,
+        onItemSelected = { item ->
+            if (item.id != state.selectedSourceId) onSelectSource(item.id)
+        },
+        modifier = modifier,
+        leadingIcon = Icons.AutoMirrored.Outlined.MenuBook,
+        onPress = {
+            view.performHapticIfAllowed(
+                context,
+                enableHaptics,
+                AppHapticFeedback.Press
+            )
+        }
+    )
 }
 
 @Composable

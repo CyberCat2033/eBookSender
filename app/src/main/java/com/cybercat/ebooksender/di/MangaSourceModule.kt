@@ -2,6 +2,9 @@ package com.cybercat.ebooksender.di
 
 import com.cybercat.ebooksender.data.manga.ComxMangaAdapter
 import com.cybercat.ebooksender.data.manga.HtmlMangaSourceAdapter
+import com.cybercat.ebooksender.data.manga.MangaLibEncryptedSessionSecretStore
+import com.cybercat.ebooksender.data.manga.MangaLibMangaAdapter
+import com.cybercat.ebooksender.data.manga.MangaLibSessionSecretStore
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -21,4 +24,13 @@ abstract class MangaSourceModule {
     @Binds
     @IntoSet
     abstract fun bindComxAdapter(impl: ComxMangaAdapter): HtmlMangaSourceAdapter
+
+    @Binds
+    @IntoSet
+    abstract fun bindMangaLibAdapter(impl: MangaLibMangaAdapter): HtmlMangaSourceAdapter
+
+    @Binds
+    abstract fun bindMangaLibSessionSecretStore(
+        impl: MangaLibEncryptedSessionSecretStore
+    ): MangaLibSessionSecretStore
 }

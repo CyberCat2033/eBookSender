@@ -8,7 +8,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,21 +35,14 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,6 +58,8 @@ import com.cybercat.ebooksender.localization.AppStrings
 import com.cybercat.ebooksender.localization.LocalStrings
 import com.cybercat.ebooksender.ui.AppOutlinedTextField
 import com.cybercat.ebooksender.ui.ProgressOverlayCard
+import com.cybercat.ebooksender.ui.SourceSelectionItem
+import com.cybercat.ebooksender.ui.SourceSelectionMenu
 import com.cybercat.ebooksender.util.AppHapticFeedback
 import com.cybercat.ebooksender.util.performHapticIfAllowed
 
@@ -77,7 +71,6 @@ internal fun SourcePicker(
     onRemoveSource: (String) -> Unit,
     onEditCredentials: (OpdsSource) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val strings = LocalStrings.current
     val currentUrl = state.currentUrl.orEmpty().trimEnd('/')
     val selectedSource = state.sources.firstOrNull { source ->
@@ -86,94 +79,65 @@ internal fun SourcePicker(
     val selectedTitle = selectedSource?.title ?: strings.get("opds_no_sources")
     val context = LocalContext.current
     val view = LocalView.current
+    val items = state.sources.map { source ->
+        SourceSelectionItem(id = source.id, title = source.title)
+    }
 
-    Box(Modifier.fillMaxWidth()) {
-        OutlinedButton(
-            onClick = {
-                view.performHapticIfAllowed(
-                    context,
-                    enableHaptics,
-                    AppHapticFeedback.Press
-                )
-                expanded = true
-            },
-            enabled = state.sources.isNotEmpty() && !state.isLoading && !state.isDownloading,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = selectedTitle,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+    SourceSelectionMenu(
+        selectedTitle = selectedTitle,
+        items = items,
+        enabled = state.sources.isNotEmpty() && !state.isLoading && !state.isDownloading,
+        contentDescription = strings.get("opds_source_picker"),
+        onItemSelected = { item ->
+            state.sources.firstOrNull { source -> source.id == item.id }
+                ?.let { source -> onOpenSource(source.url) }
+        },
+        leadingIcon = Icons.AutoMirrored.Outlined.MenuBook,
+        trailingIcon = Icons.Outlined.Folder,
+        onPress = {
+            view.performHapticIfAllowed(
+                context,
+                enableHaptics,
+                AppHapticFeedback.Press
             )
-            Icon(Icons.Outlined.Folder, contentDescription = null)
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.fillMaxWidth(0.92f)
-        ) {
-            state.sources.forEach { source ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = source.title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    trailingIcon = {
-                        Row {
-                            IconButton(
-                                onClick = {
-                                    view.performHapticIfAllowed(
-                                        context,
-                                        enableHaptics,
-                                        AppHapticFeedback.Press
-                                    )
-                                    expanded = false
-                                    onEditCredentials(source)
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Outlined.VpnKey,
-                                    contentDescription = strings.get("opds_action_edit_credentials")
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    view.performHapticIfAllowed(
-                                        context,
-                                        enableHaptics,
-                                        AppHapticFeedback.Reject
-                                    )
-                                    expanded = false
-                                    onRemoveSource(source.id)
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Delete,
-                                    contentDescription = strings.get("opds_action_delete_source")
-                                )
-                            }
-                        }
-                    },
+        },
+        trailingActions = { item, closeMenu ->
+            state.sources.firstOrNull { source -> source.id == item.id }?.let { source ->
+                IconButton(
                     onClick = {
                         view.performHapticIfAllowed(
                             context,
                             enableHaptics,
                             AppHapticFeedback.Press
                         )
-                        expanded = false
-                        onOpenSource(source.url)
+                        closeMenu()
+                        onEditCredentials(source)
                     }
-                )
+                ) {
+                    Icon(
+                        Icons.Outlined.VpnKey,
+                        contentDescription = strings.get("opds_action_edit_credentials")
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        view.performHapticIfAllowed(
+                            context,
+                            enableHaptics,
+                            AppHapticFeedback.Reject
+                        )
+                        closeMenu()
+                        onRemoveSource(source.id)
+                    }
+                ) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = strings.get("opds_action_delete_source")
+                    )
+                }
             }
         }
-    }
+    )
 }
 
 @Composable

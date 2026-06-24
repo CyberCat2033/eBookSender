@@ -18,6 +18,7 @@ data class AppSettings(
     val enableHaptics: Boolean = true,
     val bypassVpnForLocalConnections: Boolean = false,
     val mangaLoginMode: MangaLoginMode = MangaLoginMode.Ask,
+    val selectedMangaSourceId: String = "",
     val theme: AppTheme = AppTheme.System,
     val warnOnDisconnectedRename: Boolean = true,
     val languageCode: String = "system"

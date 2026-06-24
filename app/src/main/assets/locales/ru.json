@@ -249,6 +249,7 @@
   "opds_page_ratio": "Стр. %1$d из %2$d",
   "opds_page_previous": "Предыдущая страница",
   "opds_page_next": "Следующая страница",
+  "opds_source_picker": "Источник OPDS",
   "opds_action_add_source": "Добавить источник OPDS",
   "opds_action_edit_credentials": "Изменить данные для входа",
   "opds_action_delete_source": "Удалить источник OPDS",

@@ -44,6 +44,7 @@ class SettingsRepository @Inject constructor(private val dataStore: DataStore<Pr
                 preferences[MANGA_LOGIN_MODE]
                     ?.let { runCatching { MangaLoginMode.valueOf(it) }.getOrNull() }
                     ?: MangaLoginMode.Ask,
+            selectedMangaSourceId = preferences[SELECTED_MANGA_SOURCE_ID].orEmpty(),
             theme =
                 preferences[THEME]?.let { runCatching { AppTheme.valueOf(it) }.getOrNull() }
                     ?: AppTheme.System,
@@ -106,6 +107,12 @@ class SettingsRepository @Inject constructor(private val dataStore: DataStore<Pr
     suspend fun setMangaLoginMode(value: MangaLoginMode) {
         dataStore.edit { preferences ->
             preferences[MANGA_LOGIN_MODE] = value.name
+        }
+    }
+
+    suspend fun setSelectedMangaSourceId(sourceId: String) {
+        dataStore.edit { preferences ->
+            preferences[SELECTED_MANGA_SOURCE_ID] = sourceId
         }
     }
 
@@ -174,6 +181,7 @@ class SettingsRepository @Inject constructor(private val dataStore: DataStore<Pr
         val BYPASS_VPN_FOR_LOCAL_CONNECTIONS =
             booleanPreferencesKey("bypass_vpn_for_local_connections")
         val MANGA_LOGIN_MODE = stringPreferencesKey("manga_login_mode")
+        val SELECTED_MANGA_SOURCE_ID = stringPreferencesKey("selected_manga_source_id")
         val THEME = stringPreferencesKey("theme")
         val WARN_ON_DISCONNECTED_RENAME = booleanPreferencesKey("warn_on_disconnected_rename")
         val LANGUAGE_CODE = stringPreferencesKey("language_code")

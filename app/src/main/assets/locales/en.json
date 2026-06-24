@@ -249,6 +249,7 @@
   "opds_page_ratio": "Page %1$d of %2$d",
   "opds_page_previous": "Previous page",
   "opds_page_next": "Next page",
+  "opds_source_picker": "OPDS source",
   "opds_action_add_source": "Add OPDS source",
   "opds_action_edit_credentials": "Edit credentials",
   "opds_action_delete_source": "Delete OPDS source",

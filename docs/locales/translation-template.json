@@ -227,6 +227,7 @@
   "opds_page_ratio": "",
   "opds_page_previous": "",
   "opds_page_next": "",
+  "opds_source_picker": "",
   "opds_action_add_source": "",
   "opds_action_edit_credentials": "",
   "opds_action_delete_source": "",

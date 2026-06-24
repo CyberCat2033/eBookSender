@@ -65,6 +65,7 @@ class MangaViewModel @Inject constructor(
     )
     private var browserSessionRefreshRetry: (() -> Unit)? = null
     private var browserSessionRefreshRequestId = 0L
+    private var selectedSourceInitialized = false
 
     private val mangaContentState = combine(
         mangaRepository.downloadedStableKeys,
@@ -105,12 +106,11 @@ class MangaViewModel @Inject constructor(
         viewModelScope.launch {
             mangaRepository.normalizeFavoriteSubscribedState()
         }
-        if (
-            mutableMangaState.value.selectedSourceId.isBlank() &&
-            mangaRepository.sources.isNotEmpty()
-        ) {
-            selectMangaSource(mangaRepository.sources.first().id)
-        }
+        settingsRepository.settings
+            .onEach { settings ->
+                initializeSelectedMangaSource(settings.selectedMangaSourceId)
+            }
+            .launchIn(viewModelScope)
         downloadCoordinator.events
             .onEach(downloadController::handleMangaDownloadEvent)
             .launchIn(viewModelScope)
@@ -118,7 +118,12 @@ class MangaViewModel @Inject constructor(
 
     fun onMangaSearchChanged(value: String) = searchController.onSearchChanged(value)
 
-    fun selectMangaSource(sourceId: String) = searchController.selectSource(sourceId)
+    fun selectMangaSource(sourceId: String) {
+        if (!searchController.selectSource(sourceId)) return
+        viewModelScope.launch {
+            settingsRepository.setSelectedMangaSourceId(sourceId)
+        }
+    }
 
     fun openMangaBrowser(url: String? = null) = browserController.openBrowser(url)
 
@@ -302,6 +307,25 @@ class MangaViewModel @Inject constructor(
                     .get("manga_status_refreshing_session"),
                 errorMessage = null
             )
+        }
+    }
+
+    private fun initializeSelectedMangaSource(savedSourceId: String) {
+        if (selectedSourceInitialized) return
+        val sources = mangaRepository.sources
+        if (sources.isEmpty()) return
+
+        val selectedSourceId = savedSourceId.takeIf { id ->
+            id.isNotBlank() && sources.any { source -> source.id == id }
+        } ?: sources.first().id
+
+        if (!searchController.selectSource(selectedSourceId)) return
+        selectedSourceInitialized = true
+
+        if (selectedSourceId != savedSourceId) {
+            viewModelScope.launch {
+                settingsRepository.setSelectedMangaSourceId(selectedSourceId)
+            }
         }
     }
 

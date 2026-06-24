@@ -151,6 +151,24 @@ object DatabaseModule {
         }
     }
 
+    private val Migration7To8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `encrypted_secrets` (
+                    `namespace` TEXT NOT NULL,
+                    `ownerId` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `ciphertext` BLOB NOT NULL,
+                    `iv` BLOB NOT NULL,
+                    `updatedAtMillis` INTEGER NOT NULL,
+                    PRIMARY KEY(`namespace`, `ownerId`, `name`)
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): EBookSenderDatabase =
@@ -165,7 +183,8 @@ object DatabaseModule {
                 Migration3To4,
                 Migration4To5,
                 Migration5To6,
-                migration6To7(context)
+                migration6To7(context),
+                Migration7To8
             )
             .build()
 
@@ -179,4 +198,7 @@ object DatabaseModule {
     @Provides
     fun provideMangaSeriesBookmarkDao(database: EBookSenderDatabase) =
         database.mangaSeriesBookmarkDao()
+
+    @Provides
+    fun provideEncryptedSecretDao(database: EBookSenderDatabase) = database.encryptedSecretDao()
 }
