@@ -13,6 +13,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 - Reduced memory pressure during manga chapter downloads by streaming fallback page images directly to temporary files instead of holding page bytes in RAM.
 - Improved responsiveness during bulk OPDS downloads and large file selections by limiting parallel OPDS downloads and moving upload-queue file admission work off the UI thread.
 - Improved large generic FTP catalog refreshes and large CBZ uploads by listing catalog folders in bounded parallel and streaming CBZ metadata rewrites without a full temporary archive.
+- Fixed the send-screen file picker so supported files such as plain `.fb2` books are no longer hidden when Android reports them with generic or XML MIME types.
 
 ## [0.11.8] - 2026-06-22
 
