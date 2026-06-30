@@ -4,6 +4,8 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ## [Unreleased]
 
+## [0.11.9] - 2026-07-01
+
 ### Fixed
 
 - Fixed PocketBook catalog text cleanup so hidden service characters no longer break Russian author and title display.
