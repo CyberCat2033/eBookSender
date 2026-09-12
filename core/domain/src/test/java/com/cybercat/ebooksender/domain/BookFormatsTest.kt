@@ -51,11 +51,20 @@ class BookFormatsTest {
             "application/x-mobipocket-ebook",
             "application/x-mobi8-ebook"
         ),
+        "prc" to setOf("application/x-mobipocket-ebook"),
+        "azw" to setOf("application/vnd.amazon.ebook"),
         "azw3" to setOf(
             "application/vnd.amazon.ebook",
             "application/vnd.amazon.mobi8-ebook"
         ),
         "txt" to setOf("text/plain"),
+        "text" to setOf("text/plain"),
+        "diff" to setOf("text/plain"),
+        "po" to setOf("text/plain"),
+        "log" to setOf("text/plain"),
+        "ini" to setOf("text/plain"),
+        "conf" to setOf("text/plain"),
+        "rtx" to setOf("text/richtext"),
         "rtf" to setOf(
             "application/rtf",
             "application/x-rtf",
@@ -71,6 +80,8 @@ class BookFormatsTest {
             "image/x-djvu"
         ),
         "doc" to setOf("application/msword"),
+        "dot" to setOf("application/msword"),
+        "djv" to setOf("image/vnd.djvu", "image/x-djvu"),
         "docx" to setOf(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ),

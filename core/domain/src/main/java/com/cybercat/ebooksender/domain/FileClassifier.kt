@@ -21,7 +21,7 @@ fun String.bookExtension(): String {
 
     if (parts.size >= 3 && parts.last() == "zip") {
         val wrappedExtension = parts[parts.lastIndex - 1]
-        if (wrappedExtension in ZipWrappedBookExtensions) {
+        if (wrappedExtension in BookFileExtensions) {
             return "$wrappedExtension.zip"
         }
     }
@@ -62,16 +62,3 @@ fun String.hasFb2EpubExtension(): Boolean = fileNameOnly()
 private fun String.fileNameOnly(): String = substringAfterLast('/')
     .substringAfterLast('\\')
     .trim()
-
-private val ZipWrappedBookExtensions = setOf(
-    "fb2",
-    "epub",
-    "mobi",
-    "azw3",
-    "pdf",
-    "djvu",
-    "doc",
-    "docx",
-    "txt",
-    "rtf"
-)

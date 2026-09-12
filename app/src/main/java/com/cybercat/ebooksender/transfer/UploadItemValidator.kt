@@ -3,7 +3,7 @@ package com.cybercat.ebooksender.transfer
 import com.cybercat.ebooksender.data.transfer.SkippedUploadFile
 import com.cybercat.ebooksender.data.transfer.UploadFileSkipReason
 import com.cybercat.ebooksender.domain.AllSupportedExtensions
-import com.cybercat.ebooksender.domain.bookExtension
+import com.cybercat.ebooksender.domain.contentExtension
 import javax.inject.Inject
 
 class UploadItemValidator @Inject constructor() {
@@ -16,12 +16,7 @@ class UploadItemValidator @Inject constructor() {
     ): Result {
         if (uriString in existingIdentityKeys) return Result.Duplicate
 
-        val extension = displayName.bookExtension().lowercase().trim()
-        val isSupported = extension in AllSupportedExtensions ||
-            (
-                extension.endsWith(".zip") &&
-                    extension.removeSuffix(".zip") in AllSupportedExtensions
-                )
+        val isSupported = displayName.contentExtension() in AllSupportedExtensions
 
         return when {
             !isSupported -> Result.Skipped(

@@ -30,6 +30,7 @@ eBookSender is a Kotlin Android app built with Gradle, Jetpack Compose, Material
 - `settings.gradle.kts` - authoritative module list.
 - `.editorconfig` - ktlint formatting settings for Kotlin/KTS files, including Android Studio style and Compose `@Composable` naming compatibility.
 - `gradle/libs.versions.toml` - dependency and plugin versions.
+- `core/domain/src/main/java/com/cybercat/ebooksender/domain/BookFormats.kt` - shared supported extensions and document-picker MIME filters. `BookFileExtensions` also defines the supported named ZIP wrappers; queue validation and device catalogs use `contentExtension()`. `MobiBookExtensions` routes MOBI/PRC/AZW/AZW3 to the existing metadata parser. Preserve the original extension when planning upload paths; accepting a file does not convert its contents.
 - `build.gradle.kts` - root Gradle plugin declarations.
 - `app/build.gradle.kts` - app configuration and dependencies. Auto-versioning reads `versionName`/`versionCode` from git (latest reachable release tag matching `v[0-9]*` and commit count via `providers.exec`); falls back to `0.1.0`/`1` when there are no release tags or outside a git repo. Release signing reads `RELEASE_STORE_FILE`/`RELEASE_STORE_PASSWORD`/`RELEASE_KEY_ALIAS`/`RELEASE_KEY_PASSWORD` from `local.properties`, Gradle properties, or environment variables. ABI split APKs are opt-in via `-PenableAbiSplits=true` and include `arm64-v8a`, `armeabi-v7a`, plus a universal APK.
 - `.github/workflows/ci.yml` - CI: builds debug APK and runs unit tests on every push to `main` and every PR.

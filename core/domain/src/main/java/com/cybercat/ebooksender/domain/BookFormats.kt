@@ -4,19 +4,29 @@ package com.cybercat.ebooksender.domain
 val DocumentFileExtensions: Set<String> = setOf(
     "pdf",
     "djvu",
+    "djv",
     "doc",
+    "dot",
     "docx"
 )
+
+/** PalmDB/MOBI formats handled by the shared metadata parser. */
+val MobiBookExtensions: Set<String> = setOf("mobi", "prc", "azw", "azw3")
 
 /** Поддерживаемые расширения чтения, кроме manga-архивов. */
 val BookFileExtensions: Set<String> = setOf(
     "epub",
     "fb2",
-    "mobi",
-    "azw3",
     "txt",
-    "rtf"
-) + DocumentFileExtensions
+    "text",
+    "diff",
+    "po",
+    "log",
+    "ini",
+    "conf",
+    "rtf",
+    "rtx"
+) + MobiBookExtensions + DocumentFileExtensions
 
 /** Расширения manga-архивов. */
 val MangaArchiveExtensions: Set<String> = setOf("cbz", "cbr")

@@ -10,6 +10,51 @@ class UploadItemValidatorTest {
     private val validator = UploadItemValidator()
 
     @Test
+    fun acceptsAlternativeFormatsWithoutChangingTheirNames() {
+        val extensions =
+            listOf("djv", "prc", "azw", "dot", "rtx", "text", "diff", "po", "log", "ini", "conf")
+        for (extension in extensions) {
+            for (suffix in listOf(extension, extension.uppercase(), "$extension.zip")) {
+                val name = "Selected file.$suffix"
+                assertEquals(
+                    name,
+                    UploadItemValidator.Result.Accepted(name),
+                    validateFile(name)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun rejectsGenericArchivesAndUnrelatedFiles() {
+        for (name in listOf(
+            "archive.zip",
+            "archive.rar",
+            "book.xml",
+            "image.png",
+            "book.cbz.zip",
+            "book.cbr.zip",
+            "file_without_extension"
+        )) {
+            val result = validateFile(name)
+            assertTrue(name, result is UploadItemValidator.Result.Skipped)
+            assertEquals(
+                name,
+                UploadFileSkipReason.UnsupportedFormat,
+                (result as UploadItemValidator.Result.Skipped).file.reason
+            )
+        }
+    }
+
+    private fun validateFile(name: String) = validator.validate(
+        uriString = "content://files/$name",
+        displayName = name,
+        fileSize = 1024L,
+        existingIdentityKeys = emptySet(),
+        maxFileSizeBytes = 10 * 1024 * 1024L
+    )
+
+    @Test
     fun validatesDuplicateUriString() {
         val result = validator.validate(
             uriString = "content://file1",

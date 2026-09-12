@@ -15,6 +15,29 @@ class CatalogTreeBuilderTest {
     private val settings = AppSettings()
 
     @Test
+    fun keepsAlternativeFormatsInDeviceCatalog() {
+        val extensions =
+            listOf("djv", "prc", "azw", "dot", "rtx", "text", "diff", "po", "log", "ini", "conf")
+        val paths = extensions.flatMap { extension ->
+            val folder = if (extension in
+                setOf("djv", "dot")
+            ) {
+                settings.documentsFolderName
+            } else {
+                settings.booksFolderName
+            }
+            listOf("$folder/Sample.$extension", "$folder/Wrapped.$extension.zip")
+        }
+
+        val catalog = builder.buildFromDatabaseFiles(paths.map { file(it) }, settings, 1000L)
+        val catalogPaths = (catalog.books + catalog.documents).flatMap { group ->
+            group.files.map { it.path }
+        }
+
+        assertEquals(paths.toSet(), catalogPaths.toSet())
+    }
+
+    @Test
     fun buildFromDatabaseFilesFiltersUnsupportedExtensions() {
         val files = listOf(
             file("Books/book1.epub"),

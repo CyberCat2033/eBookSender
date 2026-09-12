@@ -3,9 +3,10 @@ package com.cybercat.ebooksender.metadata
 import android.content.Context
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import com.cybercat.ebooksender.domain.MangaArchiveExtensions
+import com.cybercat.ebooksender.domain.MobiBookExtensions
 import com.cybercat.ebooksender.domain.bookTitleWithoutExtension
 import com.cybercat.ebooksender.domain.contentExtension
-import com.cybercat.ebooksender.domain.MangaArchiveExtensions
 import com.cybercat.ebooksender.domain.hasFb2EpubExtension
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.InputStream
@@ -31,11 +32,20 @@ class LocalMetadataExtractor @Inject constructor(
             runCatching {
                 when (extension) {
                     "fb2" -> fb2MetadataParser.extract(uri, displayName, fallbackTitle) { open(it) }
+
                     "epub" -> extractEpub(uri, displayName, fallbackTitle)
+
                     "docx" -> docxMetadataParser.extract(uri, fallbackTitle) { open(it) }
-                    "mobi", "azw3" -> extractMobi(uri, fallbackTitle)
+
+                    in MobiBookExtensions -> extractMobi(uri, fallbackTitle)
+
                     "pdf" -> pdfMetadataParser.extract(uri, fallbackTitle)
-                    in MangaArchiveExtensions -> mangaArchiveMetadataParser.extract(uri, fallbackTitle)
+
+                    in MangaArchiveExtensions -> mangaArchiveMetadataParser.extract(
+                        uri,
+                        fallbackTitle
+                    )
+
                     else -> filenameMetadataExtractor.extract(sourceUri, displayName)
                 }
             }.getOrElse { error ->
