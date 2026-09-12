@@ -324,8 +324,6 @@ class MangaChapterDownloader @Inject constructor(
         baseFileName: String,
         onProgress: suspend (detail: String, bytesRead: Long, totalBytes: Long?) -> Unit
     ): File? {
-        if (chapter.downloadUrl.isNullOrBlank()) return null
-
         val tempFile = archiveHelper.createTempFile(outputDir, "$baseFileName.download")
 
         try {

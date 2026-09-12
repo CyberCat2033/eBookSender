@@ -9,6 +9,20 @@ import org.junit.Test
 
 class MangaDownloadCoordinatorTest {
     @Test
+    fun cancelBeforeServiceStartRemovesOnlyMatchingRequest() {
+        val coordinator = MangaDownloadCoordinator()
+        val requestId = coordinator.submit(
+            targets = listOf(sampleTarget("chapter-1")),
+            kind = MangaDownloadRequestKind.SelectedChapters
+        )
+
+        assertEquals(null, coordinator.cancelPendingRequest("another-request"))
+        assertEquals(requestId, coordinator.cancelPendingRequest(requestId)?.id)
+        assertEquals(null, coordinator.takeRequest(requestId))
+        assertEquals(null, coordinator.cancelPendingRequest(requestId))
+    }
+
+    @Test
     fun submitReplacesPendingRequest() {
         val coordinator = MangaDownloadCoordinator()
 

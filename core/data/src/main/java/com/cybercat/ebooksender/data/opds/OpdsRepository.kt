@@ -3,6 +3,7 @@ package com.cybercat.ebooksender.data.opds
 import android.content.Context
 import com.cybercat.ebooksender.data.database.dao.OpdsSourceDao
 import com.cybercat.ebooksender.data.database.entity.OpdsSourceEntity
+import com.cybercat.ebooksender.data.network.runDisconnectingOnCancellation
 import com.cybercat.ebooksender.domain.bookExtension
 import com.cybercat.ebooksender.util.ExpiringLruCache
 import com.cybercat.ebooksender.util.UrlHostMatcher

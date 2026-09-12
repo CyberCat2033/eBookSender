@@ -1,14 +1,13 @@
 package com.cybercat.ebooksender.data.manga
 
+import com.cybercat.ebooksender.data.network.runDisconnectingOnCancellation
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URLDecoder
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -32,9 +31,9 @@ class ComxArchiveDownloader @Inject constructor(
         outputFile: File,
         onProgress: suspend (bytesRead: Long, totalBytes: Long?) -> Unit
     ): MangaDownloadedArchive? = withContext(Dispatchers.IO) {
-        val originalDownloadUrl =
-            chapter.downloadUrl?.takeIf { it.isNotBlank() } ?: return@withContext null
-        val downloadUrl = requestAuthorizedArchiveUrl(chapter, originalDownloadUrl)
+        val downloadUrl = chapter.resolveComxArchiveUrl { newsId, chapterId ->
+            requestAuthorizedArchiveUrl(chapter.seriesId, newsId, chapterId)
+        } ?: return@withContext null
         val connection = connectionFactory.openConnection(
             url = downloadUrl,
             accept = ARCHIVE_ACCEPT_HEADER,
@@ -42,98 +41,81 @@ class ComxArchiveDownloader @Inject constructor(
             connectTimeout = ARCHIVE_CONNECT_TIMEOUT_MILLIS,
             readTimeout = ARCHIVE_READ_TIMEOUT_MILLIS
         )
-        val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
-            if (cause is CancellationException) {
-                connection.disconnect()
-            }
-        }
         try {
-            connection.setRequestProperty("Sec-Fetch-Dest", "document")
-            connection.setRequestProperty("Sec-Fetch-Mode", "navigate")
-            connection.setRequestProperty("Sec-Fetch-Site", "same-site")
-            connection.setRequestProperty("Sec-Fetch-User", "?1")
-            connection.setRequestProperty("Upgrade-Insecure-Requests", "1")
+            connection.runDisconnectingOnCancellation {
+                connection.setRequestProperty("Sec-Fetch-Dest", "document")
+                connection.setRequestProperty("Sec-Fetch-Mode", "navigate")
+                connection.setRequestProperty("Sec-Fetch-Site", "same-site")
+                connection.setRequestProperty("Sec-Fetch-User", "?1")
+                connection.setRequestProperty("Upgrade-Insecure-Requests", "1")
 
-            val code = connection.responseCode
-            sessionManager.captureCookies(connection, downloadUrl)
-            if (code == HttpURLConnection.HTTP_FORBIDDEN) {
-                throw MangaBrowserSessionRefreshRequiredException(chapter.seriesId)
-            }
-            if (code !in 200..299) {
-                throw IOException(
-                    "Archive HTTP $code${connection.readErrorSnippet().messageSuffix()}"
-                )
-            }
+                val code = connection.responseCode
+                sessionManager.captureCookies(connection, downloadUrl)
+                if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+                    throw MangaBrowserSessionRefreshRequiredException(chapter.seriesId)
+                }
+                if (code !in 200..299) {
+                    throw IOException(
+                        "Archive HTTP $code${connection.readErrorSnippet().messageSuffix()}"
+                    )
+                }
 
-            outputFile.parentFile?.mkdirs()
-            val totalBytes = connection.contentLengthLong
-                .takeIf { length -> length > 0L }
-            connection.inputStream.use { input ->
-                outputFile.outputStream().use { output ->
-                    val buffer = ByteArray(DEFAULT_ARCHIVE_BUFFER_SIZE)
-                    var bytesRead = 0L
-                    var lastReportedBytes = -ARCHIVE_PROGRESS_REPORT_BYTES
-                    onProgress(0L, totalBytes)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        bytesRead += read
-                        if (
-                            bytesRead - lastReportedBytes >= ARCHIVE_PROGRESS_REPORT_BYTES ||
-                            bytesRead == totalBytes
-                        ) {
-                            lastReportedBytes = bytesRead
-                            onProgress(bytesRead, totalBytes)
+                outputFile.parentFile?.mkdirs()
+                val totalBytes = connection.contentLengthLong
+                    .takeIf { length -> length > 0L }
+                connection.inputStream.use { input ->
+                    outputFile.outputStream().use { output ->
+                        val buffer = ByteArray(DEFAULT_ARCHIVE_BUFFER_SIZE)
+                        var bytesRead = 0L
+                        var lastReportedBytes = -ARCHIVE_PROGRESS_REPORT_BYTES
+                        onProgress(0L, totalBytes)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                            bytesRead += read
+                            if (
+                                bytesRead - lastReportedBytes >= ARCHIVE_PROGRESS_REPORT_BYTES ||
+                                bytesRead == totalBytes
+                            ) {
+                                lastReportedBytes = bytesRead
+                                onProgress(bytesRead, totalBytes)
+                            }
                         }
+                        onProgress(bytesRead, totalBytes)
                     }
-                    onProgress(bytesRead, totalBytes)
                 }
-            }
 
-            if (outputFile.length() < MIN_ARCHIVE_BYTES) {
-                throw IOException(
-                    "Archive response is too small${outputFile.readSmallText().messageSuffix()}"
-                )
-            }
-
-            val extension = archiveExtensionFromMagic(outputFile)
-                ?: archiveExtensionFromDisposition(connection.getHeaderField("Content-Disposition"))
-                ?: archiveExtensionFromContentType(connection.contentType)
-                ?: archiveExtensionFromUrl(downloadUrl)
-                ?: archiveExtensionFromUrl(originalDownloadUrl)
-                ?: throw IOException(
-                    "Archive format is unknown${outputFile.readSmallText().messageSuffix()}"
-                )
-
-            MangaDownloadedArchive(fileExtension = extension)
-        } catch (error: Throwable) {
-            if (
-                error !is CancellationException &&
-                currentCoroutineContext()[Job]?.isCancelled == true
-            ) {
-                throw CancellationException(
-                    "Manga archive download canceled"
-                ).also { cancellation ->
-                    cancellation.initCause(error)
+                if (outputFile.length() < MIN_ARCHIVE_BYTES) {
+                    throw IOException(
+                        "Archive response is too small${outputFile.readSmallText().messageSuffix()}"
+                    )
                 }
+
+                val extension = archiveExtensionFromMagic(outputFile)
+                    ?: archiveExtensionFromDisposition(
+                        connection.getHeaderField("Content-Disposition")
+                    )
+                    ?: archiveExtensionFromContentType(connection.contentType)
+                    ?: archiveExtensionFromUrl(downloadUrl)
+                    ?: chapter.downloadUrl?.let(::archiveExtensionFromUrl)
+                    ?: throw IOException(
+                        "Archive format is unknown${outputFile.readSmallText().messageSuffix()}"
+                    )
+
+                MangaDownloadedArchive(fileExtension = extension)
             }
-            throw error
         } finally {
-            cancellationHandle?.dispose()
             connection.disconnect()
         }
     }
 
-    private fun requestAuthorizedArchiveUrl(chapter: MangaChapter, fallbackUrl: String): String {
-        val newsId = chapter.seriesId.extractNewsId()
-            ?: chapter.chapterId.extractReaderNewsId()
-            ?: fallbackUrl.extractDownloadNewsId()
-            ?: return fallbackUrl
-        val chapterId = chapter.chapterId.extractReaderChapterId()
-            ?: fallbackUrl.extractDownloadChapterId()
-            ?: return fallbackUrl
+    private suspend fun requestAuthorizedArchiveUrl(
+        seriesUrl: String,
+        newsId: Long,
+        chapterId: Long
+    ): String {
         val ajaxUrl = ComxMangaAdapter.HOME_URL +
             "engine/ajax/controller.php?mod=api&action=chapters/download"
         val body = listOf(
@@ -145,7 +127,7 @@ class ComxArchiveDownloader @Inject constructor(
         val connection = connectionFactory.openConnection(
             url = ajaxUrl,
             accept = "application/json, text/javascript, */*; q=0.01",
-            referer = chapter.seriesId,
+            referer = seriesUrl,
             connectTimeout = ARCHIVE_AUTH_CONNECT_TIMEOUT_MILLIS,
             readTimeout = ARCHIVE_AUTH_READ_TIMEOUT_MILLIS
         ).apply {
@@ -157,76 +139,54 @@ class ComxArchiveDownloader @Inject constructor(
             setRequestProperty("X-Requested-With", "XMLHttpRequest")
         }
 
-        try {
-            connection.outputStream.use { output ->
-                output.write(body)
-            }
+        return try {
+            connection.runDisconnectingOnCancellation {
+                connection.outputStream.use { output ->
+                    output.write(body)
+                }
 
-            val code = connection.responseCode
-            sessionManager.captureCookies(connection, ajaxUrl)
-            val response = connection.readTextBody()
-            if (
-                sessionManager.isExpiredAuthenticatedSession(
-                    code = code,
-                    url = ajaxUrl,
-                    hadAuthenticatedCookies = hadAuthenticatedCookies,
-                    html = response
-                )
-            ) {
-                sessionManager.clearAuthenticatedCookies()
-                throw MangaAuthenticationExpiredException()
-            }
-            if (code == HttpURLConnection.HTTP_FORBIDDEN) {
-                throw MangaBrowserSessionRefreshRequiredException(chapter.seriesId)
-            }
-            if (code !in 200..299) {
-                throw IOException(
-                    "Archive auth HTTP $code${response.errorSnippet().messageSuffix()}"
-                )
-            }
-
-            val json = runCatching { Json.parseToJsonElement(response).jsonObject }
-                .getOrElse {
+                val code = connection.responseCode
+                sessionManager.captureCookies(connection, ajaxUrl)
+                val response = connection.readTextBody()
+                if (
+                    sessionManager.isExpiredAuthenticatedSession(
+                        code = code,
+                        url = ajaxUrl,
+                        hadAuthenticatedCookies = hadAuthenticatedCookies,
+                        html = response
+                    )
+                ) {
+                    sessionManager.clearAuthenticatedCookies()
+                    throw MangaAuthenticationExpiredException()
+                }
+                if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+                    throw MangaBrowserSessionRefreshRequiredException(seriesUrl)
+                }
+                if (code !in 200..299) {
                     throw IOException(
-                        "Archive auth response is invalid${response.errorSnippet().messageSuffix()}"
+                        "Archive auth HTTP $code${response.errorSnippet().messageSuffix()}"
                     )
                 }
 
-            if (!json.booleanValue("success")) {
-                val message = json.firstString("error", "message")
-                    .ifBlank { "Com-X login is required for archive download" }
-                throw IOException(message)
-            }
+                val json = runCatching { Json.parseToJsonElement(response).jsonObject }
+                    .getOrElse {
+                        throw IOException(
+                            "Archive auth response is invalid${response.errorSnippet().messageSuffix()}"
+                        )
+                    }
 
-            return json.firstString("data", "url", "link")
-                .resolveAgainst(fallbackUrl)
-                .takeIf { it.isNotBlank() }
-                ?: fallbackUrl
+                if (!json.booleanValue("success")) {
+                    val message = json.firstString("error", "message")
+                        .ifBlank { "Com-X login is required for archive download" }
+                    throw IOException(message)
+                }
+
+                json.firstString("data", "url", "link")
+            }
         } finally {
             connection.disconnect()
         }
     }
-
-    private fun String.extractReaderNewsId(): Long? = Regex("""/reader/(\d+)/\d+""").find(this)
-        ?.groupValues
-        ?.getOrNull(1)
-        ?.toLongOrNull()
-
-    private fun String.extractReaderChapterId(): Long? = Regex("""/reader/\d+/(\d+)""").find(this)
-        ?.groupValues
-        ?.getOrNull(1)
-        ?.toLongOrNull()
-
-    private fun String.extractDownloadNewsId(): Long? = Regex("""/download/(\d+)-\d+""").find(this)
-        ?.groupValues
-        ?.getOrNull(1)
-        ?.toLongOrNull()
-
-    private fun String.extractDownloadChapterId(): Long? =
-        Regex("""/download/\d+-(\d+)""").find(this)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toLongOrNull()
 
     private fun JsonObject.firstString(vararg keys: String): String {
         keys.forEach { key ->

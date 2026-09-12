@@ -1,5 +1,6 @@
 package com.cybercat.ebooksender.data.opds
 
+import com.cybercat.ebooksender.data.network.runDisconnectingOnCancellation
 import com.cybercat.ebooksender.util.AppConstants
 import java.io.IOException
 import java.io.InputStream

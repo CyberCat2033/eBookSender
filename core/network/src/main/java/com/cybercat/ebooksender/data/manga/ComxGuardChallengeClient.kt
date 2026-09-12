@@ -1,5 +1,6 @@
 package com.cybercat.ebooksender.data.manga
 
+import com.cybercat.ebooksender.data.network.runDisconnectingOnCancellation
 import java.io.IOException
 import java.net.URI
 import javax.inject.Inject
@@ -10,7 +11,7 @@ class ComxGuardChallengeClient @Inject constructor(
     private val connectionFactory: ComxHttpConnectionFactory,
     private val sessionManager: ComxMangaSessionManager
 ) {
-    fun solveGuardChallenge(html: String, url: String): Boolean {
+    suspend fun solveGuardChallenge(html: String, url: String): Boolean {
         val token = GUARD_TOKEN_REGEX.find(html)?.groupValues?.getOrNull(1)
             ?.takeIf { it.isNotBlank() }
             ?: return false
@@ -49,13 +50,15 @@ class ComxGuardChallengeClient @Inject constructor(
         }
 
         return try {
-            connection.outputStream.use { output ->
-                output.write(body)
+            connection.runDisconnectingOnCancellation {
+                connection.outputStream.use { output ->
+                    output.write(body)
+                }
+                val code = connection.responseCode
+                sessionManager.captureCookies(connection, target)
+                val response = connection.readTextBody()
+                code in 200..299 && response.contains("OK", ignoreCase = true)
             }
-            val code = connection.responseCode
-            sessionManager.captureCookies(connection, target)
-            val response = connection.readTextBody()
-            code in 200..299 && response.contains("OK", ignoreCase = true)
         } catch (_: IOException) {
             false
         } finally {

@@ -29,6 +29,9 @@ class MangaDownloadCoordinator @Inject constructor() {
 
     fun takeRequest(id: String?): MangaDownloadRequest? = requestCoordinator.takeRequest(id)
 
+    fun cancelPendingRequest(id: String?): MangaDownloadRequest? =
+        requestCoordinator.cancelPendingRequest(id)
+
     fun emit(event: MangaDownloadEvent) = requestCoordinator.emit(event)
 }
 

@@ -139,6 +139,7 @@ internal class MangaDownloadController(
 
     fun downloadSubscriptionUpdates() {
         val snapshot = mangaState.value
+        if (snapshot.isDownloading) return
         val selectedKeys = snapshot.selectedSubscriptionUpdateChapterKeys
         val targets = MangaSubscriptionUpdateReducer.selectedTargets(
             updates = snapshot.subscriptionUpdates,
@@ -183,6 +184,7 @@ internal class MangaDownloadController(
 
     fun downloadSelectedMangaChapters() {
         val snapshot = mangaState.value
+        if (snapshot.isDownloading) return
         val series = snapshot.selectedSeries
         if (series == null) {
             mangaState.update {

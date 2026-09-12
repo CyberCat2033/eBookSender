@@ -23,6 +23,7 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -66,6 +67,8 @@ class MangaDownloadForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        if (activeDownloadJob != null) return START_NOT_STICKY
+
         val request = downloadCoordinator.takeRequest(intent?.getStringExtra(EXTRA_REQUEST_ID))
         if (request == null) {
             downloadNotifications.startNothingToDownload()
@@ -77,16 +80,26 @@ class MangaDownloadForegroundService : Service() {
 
         downloadWakeLock.acquire()
         activeRequestId = request.id
-        activeDownloadJob = serviceScope.launch {
+        var downloadStarted = false
+        val job = serviceScope.launch(start = CoroutineStart.LAZY) {
+            downloadStarted = true
+            runDownload(request)
+        }
+        activeDownloadJob = job
+        job.invokeOnCompletion { cause ->
             try {
-                runDownload(request)
+                if (!downloadStarted && cause is CancellationException) {
+                    handleCanceledDownload(request, emptyList())
+                }
             } finally {
                 activeRequestId = null
                 activeDownloadJob = null
                 downloadWakeLock.release()
-                stopSelf(startId)
+                // Cancel intents have a newer startId than the original download request.
+                stopSelf()
             }
         }
+        job.start()
 
         return START_NOT_STICKY
     }
@@ -103,6 +116,9 @@ class MangaDownloadForegroundService : Service() {
         val activeId = activeRequestId
         val activeJob = activeDownloadJob
         if (activeJob == null || activeId == null) {
+            downloadCoordinator.cancelPendingRequest(requestId)?.let { request ->
+                handleCanceledDownload(request, emptyList())
+            }
             stopSelf(startId)
             return
         }

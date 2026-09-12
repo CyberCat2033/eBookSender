@@ -1,13 +1,12 @@
 package com.cybercat.ebooksender.data.manga
 
+import com.cybercat.ebooksender.data.network.runDisconnectingOnCancellation
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -37,43 +36,29 @@ class ComxMangaHttpClient @Inject constructor(
                 connectTimeout = IMAGE_CONNECT_TIMEOUT_MILLIS,
                 readTimeout = IMAGE_READ_TIMEOUT_MILLIS
             )
-            val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
-                if (cause is CancellationException) {
-                    connection.disconnect()
-                }
-            }
             try {
-                val code = connection.responseCode
-                sessionManager.captureCookies(connection, page.imageUrl)
-                if (code == HttpURLConnection.HTTP_FORBIDDEN) {
-                    throw MangaBrowserSessionRefreshRequiredException(
-                        page.refererUrl ?: ComxMangaAdapter.HOME_URL
-                    )
+                connection.runDisconnectingOnCancellation {
+                    val code = connection.responseCode
+                    sessionManager.captureCookies(connection, page.imageUrl)
+                    if (code == HttpURLConnection.HTTP_FORBIDDEN) {
+                        throw MangaBrowserSessionRefreshRequiredException(
+                            page.refererUrl ?: ComxMangaAdapter.HOME_URL
+                        )
+                    }
+                    if (code !in 200..299) {
+                        throw IOException("Image HTTP $code")
+                    }
+                    val extension = page.fileExtension
+                        ?: extensionFromContentType(connection.contentType)
+                        ?: parser.imageExtensionFromUrl(page.imageUrl)
+                        ?: "jpg"
+                    connection.streamImageToFile(outputFile)
+                    MangaDownloadedPage(fileExtension = extension)
                 }
-                if (code !in 200..299) {
-                    throw IOException("Image HTTP $code")
-                }
-                val extension = page.fileExtension
-                    ?: extensionFromContentType(connection.contentType)
-                    ?: parser.imageExtensionFromUrl(page.imageUrl)
-                    ?: "jpg"
-                connection.streamImageToFile(outputFile)
-                MangaDownloadedPage(fileExtension = extension)
             } catch (error: Throwable) {
                 outputFile.delete()
-                if (
-                    error !is CancellationException &&
-                    currentCoroutineContext()[Job]?.isCancelled == true
-                ) {
-                    throw CancellationException(
-                        "Manga page download canceled"
-                    ).also { cancellation ->
-                        cancellation.initCause(error)
-                    }
-                }
                 throw error
             } finally {
-                cancellationHandle?.dispose()
                 connection.disconnect()
             }
         }
@@ -85,7 +70,7 @@ class ComxMangaHttpClient @Inject constructor(
     ): MangaDownloadedArchive? =
         archiveDownloader.downloadChapterArchive(chapter, outputFile, onProgress)
 
-    private fun fetchText(url: String, referer: String, retryGuard: Boolean): String {
+    private suspend fun fetchText(url: String, referer: String, retryGuard: Boolean): String {
         var currentUrl = url
         repeat(MAX_TEXT_REDIRECTS + 1) { redirectIndex ->
             val hadAuthenticatedCookies = sessionManager.hasAuthenticatedCookiesFor(currentUrl)
@@ -96,8 +81,11 @@ class ComxMangaHttpClient @Inject constructor(
                 followRedirects = false
             )
             try {
-                val code = connection.responseCode
-                sessionManager.captureCookies(connection, currentUrl)
+                val (code, body) = connection.runDisconnectingOnCancellation {
+                    val code = connection.responseCode
+                    sessionManager.captureCookies(connection, currentUrl)
+                    code to if (code in HTTP_REDIRECT_CODES) "" else connection.readTextBody()
+                }
 
                 if (code in HTTP_REDIRECT_CODES) {
                     val location = connection.getHeaderField("Location")
@@ -110,7 +98,7 @@ class ComxMangaHttpClient @Inject constructor(
                     return@repeat
                 }
 
-                val html = connection.readTextBody()
+                val html = body
                 // Com-X also serves browser challenges with HTTP 404/403.
                 // Recover the browser session before treating these as content or login failures.
                 if (parser.isGuardChallenge(html) || currentUrl.isComxBrowserChallengeUrl()) {
