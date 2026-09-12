@@ -6,6 +6,7 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ### Fixed
 
+- Updated compatible stable AndroidX, Compose, storage, HTML/RAR parsing, and serialization dependencies, along with Kotlin, KSP, and Android build tooling.
 - Fixed file selection rejecting `.djv`, `.prc`, `.azw`, `.dot`, `.rtx`, `.text`, `.diff`, `.po`, `.log`, `.ini`, and `.conf`. These formats and their named ZIP wrappers now use the shared format list for queue validation and device catalog visibility; PRC/AZW reuse MOBI metadata extraction, and original extensions are preserved.
 - Fixed Com-X chapter downloads falling back to individual pages without first requesting an archive when the series page omits a direct download link.
 - Fixed delayed manga download cancellation, duplicate starts from repeated taps, and foreground-service cleanup after canceling. Blocked HTTP requests now disconnect on cancellation, allowing download progress to close while keeping completed chapters in the queue.
