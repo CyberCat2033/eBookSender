@@ -1,10 +1,57 @@
 package com.cybercat.ebooksender.data.manga
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ComxParserTest {
+    private val parser = ComxHtmlParser(
+        ComxSearchParser(),
+        ComxSeriesPageParser(),
+        ComxReaderPageParser()
+    )
+
+    @Test
+    fun guardTokenPageRequiresBrowserSessionRefresh() {
+        // Minimal, sanitized form of the challenge Com-X serves with HTTP 404.
+        val html = """
+            <html><body><script>
+                var targetUrl = decodeURIComponent("https%3A%2F%2Fcom-x.life%2Fsearch%2Ftest");
+                var p = { token: "test-token", mode: "modern" };
+                var x = new XMLHttpRequest();
+                x.open("POST", "/_v", true);
+            </script></body></html>
+        """.trimIndent()
+
+        assertThrows(MangaBrowserSessionRefreshRequiredException::class.java) {
+            parser.ensureReadableHtml(html)
+        }
+    }
+
+    @Test
+    fun javascriptGateRequiresBrowserSessionRefresh() {
+        val html = """
+            <html><body>
+                <noscript>Для доступа к сайту необходимо включить JavaScript</noscript>
+                <script src="/_v"></script>
+            </body></html>
+        """.trimIndent()
+
+        assertThrows(MangaBrowserSessionRefreshRequiredException::class.java) {
+            parser.ensureReadableHtml(html)
+        }
+    }
+
+    @Test
+    fun ordinaryNotFoundPageIsNotBrowserChallenge() {
+        val html = "<html><body><h1>HTTP 404 — страница не найдена</h1></body></html>"
+
+        assertFalse(parser.isGuardChallenge(html))
+        parser.ensureReadableHtml(html)
+    }
+
     @Test
     fun seriesPageParsesWindowDataFromBracketAssignment() {
         val page = ComxSeriesPageParser().parseSeriesPage(

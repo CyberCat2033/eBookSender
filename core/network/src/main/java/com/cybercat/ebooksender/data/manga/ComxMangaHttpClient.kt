@@ -111,6 +111,15 @@ class ComxMangaHttpClient @Inject constructor(
                 }
 
                 val html = connection.readTextBody()
+                // Com-X also serves browser challenges with HTTP 404/403.
+                // Recover the browser session before treating these as content or login failures.
+                if (parser.isGuardChallenge(html) || currentUrl.isComxBrowserChallengeUrl()) {
+                    if (retryGuard && guardChallengeClient.solveGuardChallenge(html, currentUrl)) {
+                        return fetchText(url, referer, retryGuard = false)
+                    }
+                    throw MangaBrowserSessionRefreshRequiredException(currentUrl)
+                }
+
                 if (
                     sessionManager.isExpiredAuthenticatedSession(
                         code = code,
@@ -128,13 +137,6 @@ class ComxMangaHttpClient @Inject constructor(
                         throw MangaNotFoundException(code, "HTTP $code")
                     }
                     throw IOException("HTTP $code")
-                }
-
-                if (parser.isGuardChallenge(html) || currentUrl.isComxBrowserChallengeUrl()) {
-                    if (retryGuard && guardChallengeClient.solveGuardChallenge(html, currentUrl)) {
-                        return fetchText(url, referer, retryGuard = false)
-                    }
-                    throw MangaBrowserSessionRefreshRequiredException(currentUrl)
                 }
 
                 parser.ensureReadableHtml(html)

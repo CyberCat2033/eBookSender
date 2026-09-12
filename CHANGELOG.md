@@ -4,6 +4,10 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Com-X search and saved series opening when the site returns its browser verification page with HTTP 404 or 403. The app now attempts automatic session recovery before reporting an error or clearing login cookies.
+
 ## [0.11.9] - 2026-07-01
 
 ### Fixed
