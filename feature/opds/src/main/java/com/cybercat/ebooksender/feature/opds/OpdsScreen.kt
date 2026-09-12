@@ -369,6 +369,7 @@ fun OpdsScreen(
                         if (!state.isDownloading) {
                             OpdsPaginationBar(
                                 paging = state.paging,
+                                visible = state.shouldShowPagination,
                                 enabled = !state.isLoading,
                                 enableHaptics = enableHaptics,
                                 onPreviousPage = onPreviousPage,
@@ -502,9 +503,15 @@ private fun OpdsCatalogContent(
             StatusMessageHost(text = state.statusMessage)
         }
 
-        if (state.isLoading) {
+        if (state.isLoading || state.isSearching) {
             item {
-                LoadingCard(strings.opdsStatusOpening)
+                LoadingCard(
+                    if (state.isSearching) {
+                        strings.get("opds_status_searching")
+                    } else {
+                        strings.opdsStatusOpening
+                    }
+                )
             }
         }
 
@@ -535,7 +542,7 @@ private fun OpdsCatalogContent(
                 }
             }
 
-            if (catalog.entries.isEmpty() && !state.isLoading) {
+            if (catalog.entries.isEmpty() && !state.isLoading && !state.isSearching) {
                 item {
                     StatusMessage(
                         text = strings.opdsCatalogEmpty,

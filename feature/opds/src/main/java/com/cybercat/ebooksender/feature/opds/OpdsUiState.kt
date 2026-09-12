@@ -15,6 +15,7 @@ data class OpdsUiState(
     val history: List<OpdsHistoryEntry> = emptyList(),
     val paging: OpdsPagingState = OpdsPagingState(),
     val isLoading: Boolean = false,
+    val isSearching: Boolean = false,
     val isDownloading: Boolean = false,
     val downloadProgress: OpdsDownloadUiProgress? = null,
     val errorMessage: String? = null,
@@ -22,6 +23,8 @@ data class OpdsUiState(
     val authDialog: OpdsAuthDialogState = OpdsAuthDialogState()
 ) {
     val canGoBack: Boolean = history.isNotEmpty()
+    val shouldShowPagination: Boolean =
+        catalog != null && !isLoading && !isSearching && !isDownloading && paging.shouldShow
 }
 
 data class OpdsAuthDialogState(

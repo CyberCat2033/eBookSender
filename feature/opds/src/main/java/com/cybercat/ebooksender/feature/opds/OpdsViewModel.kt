@@ -11,13 +11,16 @@ import com.cybercat.ebooksender.data.opds.OpdsEntry
 import com.cybercat.ebooksender.data.opds.OpdsLink
 import com.cybercat.ebooksender.data.opds.OpdsRepository
 import com.cybercat.ebooksender.data.opds.OpdsSearchCatalogUnavailableException
+import com.cybercat.ebooksender.data.opds.OpdsSearchTimeoutException
 import com.cybercat.ebooksender.data.opds.OpenSearchTemplateNotFoundException
+import com.cybercat.ebooksender.data.opds.SearchOpdsCatalogResult
 import com.cybercat.ebooksender.data.opds.SearchOpdsCatalogUseCase
 import com.cybercat.ebooksender.data.transfer.UploadQueueManager
 import com.cybercat.ebooksender.util.launchTemporaryStatus
 import com.cybercat.ebooksender.util.onFailureRethrowing
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -41,6 +44,7 @@ class OpdsViewModel @Inject constructor(
 
     private val mutableOpdsState = MutableStateFlow(OpdsUiState())
     private var initialCatalogLoadRequested = false
+    private var catalogLoadJob: Job? = null
     private val authController = OpdsAuthController(
         opdsRepository = opdsRepository,
         localizationManager = localizationManager,
@@ -181,6 +185,7 @@ class OpdsViewModel @Inject constructor(
             if (removedSource != null &&
                 mutableOpdsState.value.belongsToSource(removedSource.url)
             ) {
+                catalogLoadJob?.cancel()
                 mutableOpdsState.update { state ->
                     state.copy(
                         urlInput = "",
@@ -190,6 +195,7 @@ class OpdsViewModel @Inject constructor(
                         history = emptyList(),
                         paging = OpdsPagingState(),
                         isLoading = false,
+                        isSearching = false,
                         errorMessage = null,
                         statusMessage = null
                     )
@@ -349,23 +355,21 @@ class OpdsViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        catalogLoadJob?.cancel()
+        catalogLoadJob = viewModelScope.launch {
             mutableOpdsState.update {
                 it.copy(
                     isLoading = true,
+                    isSearching = true,
                     errorMessage = null,
                     statusMessage = null,
-                    catalog = null
+                    catalog = null,
+                    paging = OpdsPagingState()
                 )
             }
 
             val strings = localizationManager.currentStrings.value
-            searchOpdsCatalogUseCase(
-                baseUrl = currentUrl,
-                searchLinks = searchLinks,
-                query = query,
-                mergedCatalogTitle = strings.get("opds_search_results_title", query)
-            ).onSuccess { result ->
+            fun showResult(result: SearchOpdsCatalogResult, finished: Boolean) {
                 mutableOpdsState.update { state ->
                     state.copy(
                         currentUrl = result.currentUrl,
@@ -376,12 +380,30 @@ class OpdsViewModel @Inject constructor(
                             url = currentUrl,
                             paging = snapshot.paging.toSnapshot()
                         ),
-                        paging = OpdsPagingState().withCatalogLinks(result.catalog),
+                        paging = if (finished) {
+                            OpdsPagingState().withCatalogLinks(result.catalog)
+                        } else {
+                            OpdsPagingState()
+                        },
                         isLoading = false,
+                        isSearching = !finished,
                         errorMessage = null,
-                        statusMessage = null
+                        statusMessage = if (finished && result.isPartial) {
+                            strings.get("opds_status_search_incomplete")
+                        } else {
+                            null
+                        }
                     )
                 }
+            }
+            searchOpdsCatalogUseCase(
+                baseUrl = currentUrl,
+                searchLinks = searchLinks,
+                query = query,
+                mergedCatalogTitle = strings.get("opds_search_results_title", query),
+                onPartialResult = { result -> showResult(result, finished = false) }
+            ).onSuccess { result ->
+                showResult(result, finished = true)
             }.onFailureRethrowing { error ->
                 if (error is OpdsAuthenticationRequiredException) {
                     val matchingSource = matchOpdsAuthSource(error)
@@ -389,6 +411,7 @@ class OpdsViewModel @Inject constructor(
                         mutableOpdsState.update { state ->
                             state.copy(
                                 isLoading = false,
+                                isSearching = false,
                                 catalog = snapshot.catalog,
                                 currentUrl = snapshot.currentUrl,
                                 history = snapshot.history,
@@ -399,8 +422,12 @@ class OpdsViewModel @Inject constructor(
                         return@launch
                     }
                 }
-                mutableOpdsState.update { state -> state.copy(isLoading = false) }
+                mutableOpdsState.update { state ->
+                    state.copy(isLoading = false, isSearching = false)
+                }
                 val message = when (error) {
+                    is OpdsSearchTimeoutException -> strings.get("opds_error_search_timeout")
+
                     is OpdsSearchCatalogUnavailableException ->
                         localizationManager.currentStrings.value.opdsErrorCannotOpenSearch
 
@@ -434,14 +461,17 @@ class OpdsViewModel @Inject constructor(
         history: List<OpdsHistoryEntry>,
         paging: OpdsPagingState = OpdsPagingState()
     ) {
-        viewModelScope.launch {
+        catalogLoadJob?.cancel()
+        catalogLoadJob = viewModelScope.launch {
             val snapshotBeforeLoad = mutableOpdsState.value
             mutableOpdsState.update {
                 it.copy(
                     isLoading = true,
+                    isSearching = false,
                     errorMessage = null,
                     statusMessage = null,
-                    catalog = null
+                    catalog = null,
+                    paging = OpdsPagingState()
                 )
             }
 

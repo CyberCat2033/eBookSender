@@ -6,6 +6,8 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ### Fixed
 
+- Improved OPDS search responsiveness: book and author searches run in parallel, available results appear immediately, and stalled requests are canceled within a bounded search period. Incomplete results are identified, and OpenSearch descriptions are cached for repeated searches.
+- Fixed OPDS page controls appearing during a new search or catalog load with stale pagination from the previous results. Single-page results no longer show page controls.
 - Fixed Com-X search and saved series opening when the site returns its browser verification page with HTTP 404 or 403. The app now attempts automatic session recovery before reporting an error or clearing login cookies.
 
 ## [0.11.9] - 2026-07-01

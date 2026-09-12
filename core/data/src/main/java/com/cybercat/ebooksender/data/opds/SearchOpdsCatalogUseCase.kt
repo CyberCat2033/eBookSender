@@ -3,54 +3,75 @@ package com.cybercat.ebooksender.data.opds
 import java.io.IOException
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
-class SearchOpdsCatalogUseCase @Inject constructor(
-    private val opdsRepository: OpdsRepository,
-    private val parser: OpdsParser,
-    private val httpClient: OpdsHttpClient
+class SearchOpdsCatalogUseCase internal constructor(
+    private val loadCatalog: suspend (String) -> OpdsCatalog,
+    private val loadSearchTemplate: suspend (String) -> String,
+    private val searchTimeoutMillis: Long = SEARCH_TIMEOUT_MILLIS
 ) {
+    @Inject
+    constructor(opdsRepository: OpdsRepository) : this(
+        opdsRepository::loadCatalog,
+        opdsRepository::loadSearchTemplate
+    )
+
     suspend operator fun invoke(
         baseUrl: String,
         searchLinks: List<OpdsLink>,
         query: String,
-        mergedCatalogTitle: String
+        mergedCatalogTitle: String,
+        onPartialResult: (SearchOpdsCatalogResult) -> Unit = {}
     ): Result<SearchOpdsCatalogResult> {
+        var latestResult: SearchOpdsCatalogResult? = null
+        var completed = false
         return try {
-            val catalogs = searchLinks
-                .rankOpdsSearchLinks()
-                .firstNotNullOfOrNull { searchLink ->
-                    runCatching {
+            val result = withTimeoutOrNull(searchTimeoutMillis) {
+                val found = searchLinks.rankOpdsSearchLinks().firstNotNullOfOrNull { searchLink ->
+                    val urls = try {
                         buildSearchUrls(baseUrl, searchLink, query)
-                            .mapNotNull { searchUrl -> loadSearchCatalog(searchUrl, query) }
-                            .takeIf { it.isNotEmpty() }
-                    }.getOrElse { error ->
-                        if (error is CancellationException ||
-                            error is OpdsAuthenticationRequiredException
-                        ) {
-                            throw error
-                        }
-                        null
+                    } catch (error: Exception) {
+                        error.rethrowIfSearchInterrupted()
+                        return@firstNotNullOfOrNull null
                     }
-                }
-
-            if (catalogs == null) {
-                return Result.failure(OpdsSearchCatalogUnavailableException())
-            }
-
-            Result.success(
-                SearchOpdsCatalogResult(
-                    currentUrl = catalogs.first().url,
-                    catalog = mergeOpdsSearchCatalogs(
+                    val catalogs = arrayOfNulls<SearchOpdsCatalog>(urls.size)
+                    channelFlow {
+                        urls.forEachIndexed { index, url ->
+                            launch { send(index to loadSearchCatalog(url, query)) }
+                        }
+                    }.collect { (index, catalog) ->
+                        catalogs[index] = catalog
+                        catalogs.filterNotNull().takeIf { it.isNotEmpty() }?.let { loaded ->
+                            val partial = loaded.toSearchResult(
+                                mergedCatalogTitle,
+                                isPartial = true
+                            )
+                            latestResult = partial
+                            if (partial.catalog.entries.isNotEmpty()) {
+                                onPartialResult(partial)
+                            }
+                        }
+                    }
+                    catalogs.filterNotNull().takeIf { it.isNotEmpty() }?.toSearchResult(
                         title = mergedCatalogTitle,
-                        catalogs = catalogs.map(SearchOpdsCatalog::catalog)
+                        isPartial = catalogs.any { it == null }
                     )
-                )
+                }
+                completed = true
+                found
+            } ?: latestResult ?: return Result.failure(
+                if (completed) {
+                    OpdsSearchCatalogUnavailableException()
+                } else {
+                    OpdsSearchTimeoutException()
+                }
             )
+            Result.success(result)
         } catch (error: CancellationException) {
             throw error
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
             Result.failure(error)
         }
     }
@@ -60,34 +81,24 @@ class SearchOpdsCatalogUseCase @Inject constructor(
         searchLink: OpdsLink,
         query: String
     ): List<String> {
-        val bookSearchUrl = buildSearchUrl(baseUrl, searchLink, query)
-        return buildOpdsSearchUrls(bookSearchUrl, query)
-    }
-
-    private suspend fun buildSearchUrl(
-        baseUrl: String,
-        searchLink: OpdsLink,
-        query: String
-    ): String = withContext(Dispatchers.IO) {
         val resolvedLink = resolveOpdsTemplateUrl(baseUrl, searchLink.href)
         val template = if (
             !searchLink.href.contains(OPDS_SEARCH_TERMS_PLACEHOLDER) &&
             searchLink.type.orEmpty().contains("opensearchdescription", ignoreCase = true)
         ) {
-            loadOpenSearchTemplate(
-                descriptionUrl = resolvedLink,
-                sourceBaseUrl = baseUrl
+            normalizeOpdsSearchTemplateOrigin(
+                sourceBaseUrl = baseUrl,
+                templateUrl = resolveOpdsTemplateUrl(resolvedLink, loadSearchTemplate(resolvedLink))
             )
         } else {
             resolvedLink
         }
-
-        expandOpdsSearchTemplate(template, query)
+        return buildOpdsSearchUrls(expandOpdsSearchTemplate(template, query), query)
     }
 
     private suspend fun loadSearchCatalog(searchUrl: String, query: String): SearchOpdsCatalog? {
         return try {
-            val catalog = opdsRepository.loadCatalog(searchUrl)
+            val catalog = loadCatalog(searchUrl)
             if (!searchUrl.contains("/opds/authorsindex/", ignoreCase = true)) {
                 return SearchOpdsCatalog(searchUrl, catalog)
             }
@@ -103,53 +114,41 @@ class SearchOpdsCatalogUseCase @Inject constructor(
 
             SearchOpdsCatalog(
                 url = authorLink.href,
-                catalog = opdsRepository.loadCatalog(authorLink.href)
-                    .filterAuthorSearchEntries(query)
+                catalog = loadCatalog(authorLink.href).filterAuthorSearchEntries(query)
             )
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: OpdsAuthenticationRequiredException) {
-            throw error
-        } catch (error: Throwable) {
+        } catch (error: Exception) {
+            error.rethrowIfSearchInterrupted()
             null
         }
     }
 
-    private suspend fun loadOpenSearchTemplate(
-        descriptionUrl: String,
-        sourceBaseUrl: String
-    ): String {
-        val connection = httpClient.openConnection(
-            url = descriptionUrl,
-            accept = OPENSEARCH_DESCRIPTION_ACCEPT
-        )
-        try {
-            val template = connection.inputStream.use { input ->
-                parser.parseOpenSearch(input).bestTemplate
-            }
-
-            if (template.isNullOrBlank()) {
-                throw OpenSearchTemplateNotFoundException()
-            }
-
-            return normalizeOpdsSearchTemplateOrigin(
-                sourceBaseUrl = sourceBaseUrl,
-                templateUrl = resolveOpdsTemplateUrl(descriptionUrl, template)
-            )
-        } finally {
-            connection.disconnect()
+    private fun Exception.rethrowIfSearchInterrupted() {
+        if (this is CancellationException || this is OpdsAuthenticationRequiredException) {
+            throw this
         }
     }
 
+    private fun List<SearchOpdsCatalog>.toSearchResult(title: String, isPartial: Boolean) =
+        SearchOpdsCatalogResult(
+            currentUrl = first().url,
+            catalog = mergeOpdsSearchCatalogs(title, map(SearchOpdsCatalog::catalog)),
+            isPartial = isPartial
+        )
+
     private companion object {
-        const val OPENSEARCH_DESCRIPTION_ACCEPT =
-            "application/opensearchdescription+xml, application/xml, text/xml, */*"
+        const val SEARCH_TIMEOUT_MILLIS = 30_000L
     }
 }
 
-data class SearchOpdsCatalogResult(val currentUrl: String, val catalog: OpdsCatalog)
+data class SearchOpdsCatalogResult(
+    val currentUrl: String,
+    val catalog: OpdsCatalog,
+    val isPartial: Boolean = false
+)
 
 class OpdsSearchCatalogUnavailableException : Exception()
+
+class OpdsSearchTimeoutException : IOException("OPDS search timed out")
 
 private data class SearchOpdsCatalog(val url: String, val catalog: OpdsCatalog)
 

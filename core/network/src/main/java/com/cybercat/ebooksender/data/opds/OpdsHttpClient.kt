@@ -2,17 +2,56 @@ package com.cybercat.ebooksender.data.opds
 
 import com.cybercat.ebooksender.util.AppConstants
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 @Singleton
-class OpdsHttpClient @Inject constructor(private val credentialsProvider: OpdsCredentialsProvider) {
+class OpdsHttpClient internal constructor(
+    private val credentialsProvider: OpdsCredentialsProvider,
+    private val connectionFactory: (URL) -> HttpURLConnection,
+    private val documentTimeoutMillis: Long = DOCUMENT_TIMEOUT_MILLIS
+) {
+    @Inject
+    constructor(credentialsProvider: OpdsCredentialsProvider) : this(
+        credentialsProvider,
+        { url -> url.openConnection() as HttpURLConnection }
+    )
+
+    suspend fun <T> readDocument(url: String, accept: String, read: (InputStream) -> T): T =
+        withContext(Dispatchers.IO) {
+            try {
+                withTimeout(documentTimeoutMillis) {
+                    val connection = openConnection(url, accept)
+                    try {
+                        connection.runDisconnectingOnCancellation { ensureActive ->
+                            ensureActive()
+                            val result = connection.inputStream.use(read)
+                            ensureActive()
+                            result
+                        }
+                    } finally {
+                        connection.disconnect()
+                    }
+                }
+            } catch (error: TimeoutCancellationException) {
+                currentCoroutineContext().ensureActive()
+                throw SocketTimeoutException("OPDS document request timed out").apply {
+                    initCause(error)
+                }
+            }
+        }
 
     suspend fun openConnection(
         url: String,
@@ -32,7 +71,7 @@ class OpdsHttpClient @Inject constructor(private val credentialsProvider: OpdsCr
             url
         }
 
-        val connection = (URL(cleanedUrl).openConnection() as HttpURLConnection).apply {
+        val connection = connectionFactory(URL(cleanedUrl)).apply {
             instanceFollowRedirects = false
             connectTimeout = CONNECT_TIMEOUT_MILLIS
             readTimeout = READ_TIMEOUT_MILLIS
@@ -54,6 +93,7 @@ class OpdsHttpClient @Inject constructor(private val credentialsProvider: OpdsCr
                 connection.responseCode
             }
         } catch (error: IOException) {
+            connection.disconnect()
             try {
                 currentCoroutineContext().ensureActive()
             } catch (cancellation: CancellationException) {
@@ -109,6 +149,7 @@ class OpdsHttpClient @Inject constructor(private val credentialsProvider: OpdsCr
     }.getOrNull()
 
     private companion object {
+        const val DOCUMENT_TIMEOUT_MILLIS = 20_000L
         const val CONNECT_TIMEOUT_MILLIS = 15_000
         const val READ_TIMEOUT_MILLIS = 45_000
         const val MAX_REDIRECTS = 5

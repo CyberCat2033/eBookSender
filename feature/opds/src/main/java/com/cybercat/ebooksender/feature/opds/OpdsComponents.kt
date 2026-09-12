@@ -292,6 +292,7 @@ internal fun FeedLinksRow(
 @Composable
 internal fun OpdsPaginationBar(
     paging: OpdsPagingState,
+    visible: Boolean,
     enabled: Boolean,
     enableHaptics: Boolean,
     onPreviousPage: () -> Unit,
@@ -305,7 +306,7 @@ internal fun OpdsPaginationBar(
     val canGoNext = enabled && paging.canGoNext
 
     AnimatedVisibility(
-        visible = paging.shouldShow,
+        visible = visible,
         modifier = modifier.widthIn(min = 300.dp, max = 380.dp),
         enter = fadeIn() + slideInVertically { height -> height / 2 },
         exit = fadeOut() + slideOutVertically { height -> height / 2 }

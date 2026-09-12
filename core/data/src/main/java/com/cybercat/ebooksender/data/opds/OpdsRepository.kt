@@ -48,9 +48,14 @@ open class OpdsRepository(
         ttlMillis = CATALOG_CACHE_TTL_MILLIS,
         maxSize = CATALOG_CACHE_MAX_ENTRIES
     )
+    private val searchTemplateCache = ExpiringLruCache<String, String>(
+        ttlMillis = CATALOG_CACHE_TTL_MILLIS,
+        maxSize = CATALOG_CACHE_MAX_ENTRIES
+    )
 
     fun clearCache() {
         catalogCache.clear()
+        searchTemplateCache.clear()
     }
 
     suspend fun hasSavedCredentials(): Boolean = withContext(Dispatchers.IO) {
@@ -129,6 +134,7 @@ open class OpdsRepository(
             username = username,
             password = password
         )
+        clearCache()
     }
 
     suspend fun removeSource(id: String) {
@@ -147,19 +153,30 @@ open class OpdsRepository(
             return@withContext cachedCatalog
         }
 
-        val connection = httpClient.openConnection(
+        val catalog = httpClient.readDocument(
             url = normalizedUrl,
             accept = OPDS_CATALOG_ACCEPT
-        )
-        try {
-            val catalog = connection.inputStream.use { input ->
-                parser.parse(input).resolvedAgainst(normalizedUrl)
-            }
-            catalogCache.put(normalizedUrl, catalog)
-            catalog
-        } finally {
-            connection.disconnect()
+        ) { input ->
+            parser.parse(input).resolvedAgainst(normalizedUrl)
         }
+        catalogCache.put(normalizedUrl, catalog)
+        catalog
+    }
+
+    suspend fun loadSearchTemplate(descriptionUrl: String): String = withContext(Dispatchers.IO) {
+        val normalizedUrl = normalizeOpdsUrl(descriptionUrl)
+        searchTemplateCache.get(normalizedUrl)?.let { return@withContext it }
+
+        val template = httpClient.readDocument(
+            url = normalizedUrl,
+            accept = OPENSEARCH_DESCRIPTION_ACCEPT
+        ) { input ->
+            parser.parseOpenSearch(input).bestTemplate
+                ?.takeIf(String::isNotBlank)
+                ?: throw OpenSearchTemplateNotFoundException()
+        }
+        searchTemplateCache.put(normalizedUrl, template)
+        template
     }
 
     suspend fun downloadPublication(
@@ -302,6 +319,8 @@ open class OpdsRepository(
         const val LEGACY_PROJECT_GUTENBERG_SOURCE_ID = "project-gutenberg"
         const val OPDS_CATALOG_ACCEPT =
             "application/atom+xml;profile=opds-catalog, application/atom+xml, application/xml, text/xml, */*"
+        const val OPENSEARCH_DESCRIPTION_ACCEPT =
+            "application/opensearchdescription+xml, application/xml, text/xml, */*"
 
         val DEFAULT_SOURCES = listOf(
             OpdsSource(
