@@ -4,6 +4,8 @@ All notable user-facing changes to eBookSender are documented in this file.
 
 ## [Unreleased]
 
+## [0.11.10] - 2026-09-12
+
 ### Fixed
 
 - Updated compatible stable AndroidX, Compose, storage, HTML/RAR parsing, and serialization dependencies, along with Kotlin, KSP, and Android build tooling.
